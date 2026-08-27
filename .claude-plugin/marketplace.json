@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "magnus-skills",
+  "description": "Private marketplace for Magnus's agent skills.",
+  "owner": {
+    "name": "Magnus Keinicke",
+    "url": "https://github.com/magnuskeinicke"
+  },
+  "plugins": [
+    {
+      "name": "magnus",
+      "description": "Feature-development flow suite: PRD → issues → slice loop → review → stack babysitting, plus ticket triage and autonomous ticket solving.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

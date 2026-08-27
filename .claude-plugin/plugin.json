@@ -1,0 +1,15 @@
+{
+  "name": "magnus",
+  "version": "0.1.0",
+  "description": "Magnus's feature-development flow suite: PRD → issues → slice loop → review → stack babysitting, plus ticket triage and autonomous ticket solving.",
+  "author": {
+    "name": "Magnus Keinicke",
+    "email": "magnus.parlo@melatech.io",
+    "url": "https://github.com/magnuskeinicke"
+  },
+  "homepage": "https://github.com/magnuskeinicke/agent-plugins",
+  "repository": "https://github.com/magnuskeinicke/agent-plugins",
+  "license": "UNLICENSED",
+  "keywords": ["workflow", "linear", "pull-requests", "code-review", "planning"],
+  "skills": "./skills/"
+}

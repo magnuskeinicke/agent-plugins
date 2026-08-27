@@ -1,0 +1,28 @@
+{
+  "name": "magnus",
+  "version": "0.1.0",
+  "description": "Magnus's feature-development flow suite for Codex.",
+  "author": {
+    "name": "Magnus Keinicke",
+    "email": "magnus.parlo@melatech.io",
+    "url": "https://github.com/magnuskeinicke"
+  },
+  "homepage": "https://github.com/magnuskeinicke/agent-plugins",
+  "repository": "https://github.com/magnuskeinicke/agent-plugins",
+  "license": "UNLICENSED",
+  "keywords": ["workflow", "linear", "pull-requests", "code-review", "planning"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Magnus Skills",
+    "shortDescription": "Feature-dev flow suite: PRD, slices, review, PR stacks.",
+    "longDescription": "Engine-side skills for taking a feature from grilling through PRD and sliced issues to reviewed, CI-green stacked PRs. Repo knowledge comes from the host repo via CONTRACT.md.",
+    "developerName": "Magnus Keinicke",
+    "category": "Productivity",
+    "capabilities": ["Write"],
+    "defaultPrompt": [
+      "Turn this conversation into a PRD.",
+      "Work the next slice of this PRD.",
+      "Babysit the PR stack until it is green."
+    ]
+  }
+}
