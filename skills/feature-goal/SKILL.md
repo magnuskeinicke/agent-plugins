@@ -4,12 +4,12 @@ description: >
   Run the whole feature pipeline end-to-end under the built-in /goal command:
   grilled plan → PRD (/to-prd) → sliced PR stack (/to-issues) → each slice
   implemented red-green-refactor with the bounded review loop (work-slice
-  workflow) → babysit every PR (Copilot review, CI, comment resolution) until
+  workflow) → babysit every PR (bot review, CI, comment resolution) until
   the stack is green and resolved. Use when I say "run the feature pipeline",
-  "take SER-xxxx to a green stack", "start the goal pipeline", "/feature-goal",
+  "take this ticket to a green stack", "start the goal pipeline", "/feature-goal",
   or after a grilling session when I want the feature driven all the way to
   reviewed, green, stacked PRs.
-argument-hint: "[SER-parent-id]"
+argument-hint: "[parent issue id]"
 ---
 
 # Feature Goal
@@ -20,11 +20,31 @@ hook blocks stopping until the condition is met — not an orchestrator. This
 skill supplies the orchestration: a stage machine that is **re-entrant** (every
 /goal iteration re-detects where the pipeline stands from observable state and
 does the next thing), built on the existing suite: `grill-with-docs`,
-`to-prd`, `to-issues`, the work-slice workflow, `create-pr`, `gh-stack`,
-`babysit-stack`.
+`to-prd`, `to-issues`, the work-slice workflow, the repo's PR skill, the
+stack tool, `babysit-stack`.
 
-Read `docs/agents/issue-tracker.md`, `triage-labels.md`, and
-`repo-config.md` first — same conventions as the rest of the suite.
+## Repo contract — resolve this first
+
+Read `docs/agents/repo-config.md` (its `## Config` JSON block) once at entry and
+keep the values to hand; every placeholder below is written in terms of them.
+Missing file or empty key → use the fallback in the right-hand column and say so
+once, in your first message.
+
+| Placeholder | Config key | Absent → |
+| --- | --- | --- |
+| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123` for GitHub Issues) |
+| `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
+| `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
+| `<IN-PROGRESS>` | `tracker.statuses.inProgress` | leave the status untouched |
+| `<NEXT>` | `labels.sliceNext` | no pointer label — the user names the next slice |
+| `<SKIP>` | `labels.managerSkip` | skip the triage opt-out stamp |
+| `<HITL>` | `labels.needsHuman` | read "needs a human decision" from the ticket body |
+| `<TYPE:>` | `labels.typePrefix` | skip the type label |
+| `<BOT>` | `pr.botReviewer` | no bot review round to request or wait on |
+| `<STACK>` | `pr.stackTool` | plain branches; every PR targets `<BASE>` |
+
+Also read the prose docs the config points at when they exist:
+`tracker.docPath`, `labels.docPath`, and `docs/agents/README.md`.
 
 ## Setting the goal — only around the implementation loop
 
@@ -43,8 +63,8 @@ them to set it before the first slice starts (keep it short — the condition ha
 a length cap):
 
 ```
-/goal SER-<parent> feature pipeline done: every slice has an open draft PR,
-all stack PR CI green, Copilot requested, all review threads resolved —
+/goal <ISSUE> feature pipeline done: every slice has an open draft PR,
+all stack PR CI green, <BOT> requested, all review threads resolved —
 /babysit-stack verdict reads GOAL MET (needs-human blockers count as not met)
 ```
 
@@ -61,8 +81,8 @@ those stages' approval gates.
 ## Stage detection — run this at every (re)entry
 
 Detect the stage from observable state, never from conversation memory alone.
-With parent id `SER-<p>` (from the argument or the conversation; if there is
-no parent ticket yet, that's stage 0/1):
+With the parent issue id `<ISSUE>` (from the argument or the conversation; if
+there is no parent ticket yet, that's stage 0/1):
 
 1. **No parent ticket / no `# PRD` comment on it** → stage GRILL / PRD.
 2. **PRD comment exists, no sub-issues** → stage SLICE-SPLIT.
@@ -82,10 +102,10 @@ The grilling session is **human-in-the-loop and cannot run under the goal**:
 - If the current conversation already contains a completed grilling session
   (decision tree traversed, decisions crystallised) → run **`/to-prd`** now: it
   writes the PRD onto the parent ticket (creating it if needed, with
-  `type:*` + `manager:skip` per `triage-labels.md`).
+  `<TYPE:>*` + `<SKIP>` per the labels doc).
 - If not → **stop and tell the user** to run `/grill-with-docs` (or
-  `/grill-me`) first, then re-invoke. Never fabricate a PRD from a bare Linear
-  issue title — the grilling transcript + the Linear issue are the PRD inputs.
+  `/grill-me`) first, then re-invoke. Never fabricate a PRD from a bare tracker
+  issue title — the grilling transcript + the tracker issue are the PRD inputs.
 
 Both this stage and SLICE-SPLIT end on a human approval gate (`/to-prd` checks
 the test seams; `/to-issues` presents the breakdown for sign-off). Stopping
@@ -96,13 +116,13 @@ there is correct — do not set a goal before those gates are cleared.
 Run **`/to-issues`** on the parent. It builds the code-layer map, gathers the
 Figma design context, splits into walking skeleton + behaviour deltas
 (≤1 novel decision each, small reviewable PRs), creates the sub-issues stacked
-via `blockedBy`, and stamps `slice:next` on the skeleton. Nothing to add here —
+via `blockedBy`, and stamps `<NEXT>` on the skeleton. Nothing to add here —
 follow that skill verbatim.
 
 **Persist planning docs before leaving this stage.** Grilling and slicing may
 have written `CONTEXT.md`, `docs/adr/**`, and `docs/agents/repo-config.md` in
 this worktree. Commit them now on the current branch (one commit, e.g.
-`docs: SER-<p> planning docs`) so work-slice's clean-tree preflight passes.
+`docs: <ISSUE> planning docs`) so work-slice's clean-tree preflight passes.
 The first-slice check below tolerates exactly these doc-only commits; they
 ride along in the first slice's PR.
 
@@ -111,10 +131,10 @@ ride along in the first slice's PR.
 This is `/work-slice` run slice-after-slice in one session. Follow work-slice
 **verbatim** — Step 1 (select + claim), Step 3 (the workflow), Step 4 (present,
 QA evidence, consolidation tickets), Step 5 (push → `create-pr` → draft →
-`gh stack link` → convention comment) and Step 6 (skeleton map + advance
-`slice:next`). It is already gh-stack-native; there is no av anywhere in this
-pipeline. Load the `gh-stack` skill before the first `gh stack` command
-(non-interactive rules live there).
+stack linkage → convention comment) and Step 6 (skeleton map + advance
+`<NEXT>`). Load the `<STACK>` skill before the first stack command
+(non-interactive rules live there). With no `pr.stackTool` configured, skip
+every stack-linking step: each PR simply targets `<BASE>`.
 
 **The one deviation is work-slice's Step 2.** Work-slice assumes Conductor
 handed it a fresh worktree per slice, so it *renames* the branch already
@@ -124,31 +144,30 @@ below and keep everything else as written.
 
 For each slice, in stack order, until none remain:
 
-1. **Select + claim** — work-slice Step 1 verbatim: pick the `slice:next`
-   carrier (fallback: earliest unblocked, not-done, not-`needs:human`), fetch
-   slice + parent PRD + Skeleton-map comment, clear `slice:next` (additive
-   label write), set **Dev in progress**. A `needs:human` slice **stops the
+1. **Select + claim** — work-slice Step 1 verbatim: pick the `<NEXT>`
+   carrier (fallback: earliest unblocked, not-done, not-`<HITL>`), fetch
+   slice + parent PRD + Skeleton-map comment, clear `<NEXT>` (additive
+   label write), set status **`<IN-PROGRESS>`**. A `<HITL>` slice **stops the
    loop**: report which decision it needs — that's a human blocker.
 2. **Branch (replaces work-slice Step 2).** Branch name
-   `<project-slug>/<NN>-<ser-id>` (kebab-cased Linear project name, zero-padded
+   `<project-slug>/<NN>-<issue-id>` (kebab-cased project name, zero-padded
    stack-order index, slice id — work-slice's naming). One-time, before the
    first slice: `git config rerere.enabled true`, `git config remote.pushDefault
    origin`.
-   - **First slice, virgin worktree branch** (nothing ahead of `development`
-     — the integration branch from `docs/agents/repo-config.md`, here and in
-     every later mention — beyond the SLICE-SPLIT planning-doc commits: check
-     `git diff development...HEAD --name-only` is empty or lists only
+   - **First slice, virgin worktree branch** (nothing ahead of `<BASE>` beyond
+     the SLICE-SPLIT planning-doc commits: check
+     `git diff <BASE>...HEAD --name-only` is empty or lists only
      `CONTEXT.md` / `docs/adr/**` / `docs/agents/**`, else STOP): rename in
      place, `git branch -m <stack-name>`.
    - **Each later slice**: you are on the predecessor's branch and its tree is
      clean, so branch off it — `git checkout -b <stack-name>`.
-   - **Predecessor already merged** → `git checkout development && git pull`
+   - **Predecessor already merged** → `git checkout <BASE> && git pull`
      first, then `git checkout -b <stack-name>`, and note that this slice starts
      a fresh stack.
 
-   No `gh stack init`/`add` here: those create branches *and* local tracking
-   state, and work-slice's Step 5 links the stack server-side by PR number
-   instead. Keeping the local side plain git is what lets a slice's fixes be
+   Do not use the stack tool's own branch-creation commands: they create
+   branches *and* local tracking state, and work-slice's Step 5 links the stack
+   server-side by PR number instead. Keeping the local side plain git is what lets a slice's fixes be
    rebased later without fighting stale tracking.
 3. **Implement + review loop** — work-slice Step 3's Workflow call, same args
    contract, unchanged:
@@ -166,7 +185,7 @@ For each slice, in stack order, until none remain:
              conventionContract, figma, baseBranch, prdContract, repoConfig }
    })
    ```
-   `baseBranch` = predecessor stack branch (skeleton: `development`). Verify
+   `baseBranch` = predecessor stack branch (skeleton: `<BASE>`). Verify
    `args` actually reached the script (a past run came back "(unknown slice)")
    — if the workflow reports a missing slice id, bake the literals into the
    script rather than re-running blind. The
@@ -175,21 +194,21 @@ For each slice, in stack order, until none remain:
    loop (max 3) on user-facing slices. Do not implement or review in the main
    session. A loop that hits its cap still ships — outstanding findings go
    onto the draft PR (work-slice Step 4 rules).
-4. **Present + Linear bookkeeping** — work-slice Step 4 verbatim: print the
+4. **Present + tracker bookkeeping** — work-slice Step 4 verbatim: print the
    summary, upload QA evidence to the slice ticket, file consolidation
    follow-up tickets.
 5. **Draft PR** — work-slice Step 5 verbatim: scrub untracked review
    scaffolding → clean up the stale pre-rename remote branch and close its PR
    (first slice only; later slices were never pushed under another name) →
-   `git push -u origin <branch>` → **`create-pr`** verbatim → `gh pr ready <n>
-   --undo` → **`gh stack link`** (skeleton: nothing to link; every later slice:
-   re-list the whole stack bottom → top by PR number,
-   `gh stack link --base development <pr-01> … <this-pr>` — idempotent, and the
-   only form that needs no stack-number lookup) → verify `baseRefName` +
+   `git push -u origin <branch>` → the repo's PR skill (`skills.createPr`)
+   verbatim → `gh pr ready <n> --undo` → **link the stack** (skeleton: nothing
+   to link; every later slice: re-list the whole stack bottom → top by PR
+   number, `gh stack link --base <BASE> <pr-01> … <this-pr>` — idempotent, and
+   the only form that needs no stack-number lookup) → verify `baseRefName` +
    `isDraft` → post the `## Convention provenance` (+ consolidations) comment.
 6. **Hand off** — work-slice Step 6 verbatim: skeleton → post/update the
-   "Skeleton map" comment on every delta; advance `slice:next` to the next
-   unblocked AFK slice (exactly one carrier; `needs:human` next → don't stamp,
+   "Skeleton map" comment on every delta; advance `<NEXT>` to the next
+   unblocked AFK slice (exactly one carrier; `<HITL>` next → don't stamp,
    report the blocker).
 
 Then loop to the next slice. After the last slice, fall through to BABYSIT.
@@ -199,13 +218,13 @@ is the point where unattended persistence starts paying off.
 
 ## Stage BABYSIT
 
-Run **`/babysit-stack SER-<p>`** — one pass: ensure Copilot is requested on
+Run **`/babysit-stack <ISSUE>`** — one pass: ensure `<BOT>` is requested on
 every PR, watch/fix CI, address + resolve review threads, restack after fixes.
 It ends with a `VERDICT: GOAL MET | NOT MET` block:
 
 - **NOT MET, actionable items remain** → under /goal the session simply keeps
   going: run another pass (respecting its per-item caps).
-- **NOT MET, only pending CI / awaited Copilot review** → say so and attempt to
+- **NOT MET, only pending CI / an awaited `<BOT>` review** → say so and attempt to
   stop; the /goal hook will bounce it, and the next iteration re-checks —
   babysit-stack's bounded `--watch` paces this instead of hot-looping.
 - **NOT MET, only `needs-human` blockers** → report them clearly and attempt
@@ -224,12 +243,12 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
 - One slice at a time, stack order; all caps respected (5 review rounds, 3
   Playwright rounds, babysit's fix caps). Caps exhausted → escalate on the PR,
   never grind.
-- Stacking is gh-stack + plain git. `av` is decommissioned — never run an `av`
-  command. Do not create extra worktrees: the whole pipeline lives in this one,
-  switching branches as it walks the stack. Never `gh stack submit` (it opens
-  its own auto-titled PRs) and never `gh stack link --open` (it un-drafts).
-- Label writes stay additive (`save_issue.labels` replaces the whole set);
-  `slice:next` has exactly one carrier; never stamp `agent:ready`.
+- Stacking is `<STACK>` + plain git. Do not create extra worktrees: the whole
+  pipeline lives in this one, switching branches as it walks the stack. With
+  `gh-stack`: never `gh stack submit` (it opens its own auto-titled PRs) and
+  never `gh stack link --open` (it un-drafts).
+- Label writes stay additive (Linear's `save_issue.labels` replaces the whole
+  set); `<NEXT>` has exactly one carrier; never stamp `labels.agentReady`.
 - Re-entry safe: every iteration re-runs stage detection; never redo a stage
   whose artifacts exist (PRD comment, sub-issues, open PRs) — repair forward.
 - A human blocker (HITL slice, needs-human thread, cap-exhausted failure)

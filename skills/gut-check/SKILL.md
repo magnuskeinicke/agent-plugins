@@ -1,7 +1,7 @@
 ---
 name: gut-check
 description: 'Rubric-free first read of a diff — one question, answered plainly: does anything jump out as strange, unusual, or unnecessary? No severities, no report template, no fix mandate; "nothing jumps out" is a valid, complete answer. Use when the user says "gut check", "gut check this diff/branch/PR", "does anything jump out", "first read", "quick sanity read", or when a branch feels off but nobody can name why — before a deeper /review-code or /iterate-pr pass. Also runs automatically as the round-1 pre-pass inside the work-slice / iterate-pr review loops.'
-argument-hint: '[--base <branch>] [PR number | nothing = current branch vs origin/development]'
+argument-hint: "[--base <branch>] [PR number | nothing = current branch vs the repo's integration branch]"
 ---
 
 # Gut check
@@ -16,7 +16,7 @@ Division of labour: systematic code quality belongs to `/review-code`, scope-vs-
 
 ## Scope
 
-Resolve the base: an explicit `--base <branch>` wins; a PR number means that PR's base branch; otherwise `origin/development`. `git fetch origin <base>` first. The scope is the committed branch diff (`git diff origin/<base>...HEAD`) plus anything staged, unstaged, or untracked. Empty scope → say so and stop.
+Resolve the base, first match wins: an explicit `--base <branch>`; a PR number's own base branch; `integrationBranch` from `docs/agents/repo-config.md` (`## Config`); the repo default (`git symbolic-ref --short refs/remotes/origin/HEAD`). Name the base you resolved in the closing sentence. `git fetch origin <base>` first. The scope is the committed branch diff (`git diff origin/<base>...HEAD`) plus anything staged, unstaged, or untracked. Empty scope → say so and stop.
 
 ## Read in three tiers
 

@@ -1,6 +1,6 @@
-# Linear issues — the deliverable
+# Tracker issues — the deliverable
 
-The architecture review ships as **Linear issues assigned to the user**, with the HTML report ([HTML-REPORT.md](HTML-REPORT.md)) **attached to the parent** so no bespoke visual is lost. Markdown carries the handoff; Linear renders ` ```mermaid ` code blocks natively, so graph-shaped before/after diagrams survive **inline**. Hand-built CSS/SVG visuals do **not** (Linear strips raw HTML) — they live only in the attached report.
+The architecture review ships as **issues on the project tracker, assigned to the user**, with the HTML report ([HTML-REPORT.md](HTML-REPORT.md)) **attached to the parent** so no bespoke visual is lost. Markdown carries the handoff; Linear (and GitHub) render ` ```mermaid ` code blocks natively, so graph-shaped before/after diagrams survive **inline**. Hand-built CSS/SVG visuals do **not** (raw HTML is stripped) — they live only in the attached report.
 
 ## What renders where
 
@@ -14,21 +14,21 @@ When a candidate's before/after is **graph-shaped**, inline it as a ` ```mermaid
 
 ## Structure (mirrors `to-issues`)
 
-Read [issue-tracker.md](../../../docs/agents/issue-tracker.md) for the mechanics: Seranote team id, `save_issue`, `parentId`, `save_comment`, **real newlines not `\n`**. Resolve assignee `me` and dup-check via `list_issues` (per the `create-issue` skill) before writing.
+Read the host repo's `docs/agents/repo-config.md` (`## Config`) for `tracker` (kind, team, team id) and `labels`, then the prose rules at `tracker.docPath` for the mechanics: creating a child, `parentId`, comments, **real newlines not `\n`**. Resolve assignee `me` and dup-check before writing, via `skills.createIssue` where the repo has one.
 
 **Parent issue — the index / container:**
 - Title: `Architecture review: <area | "deepening opportunities"> (<YYYY-MM-DD>)`
-- Assignee: me. Team: Seranote. Status: `Triage` / `Backlog`.
-- Label: **`manager:skip` only** — it is a container, never a unit of agent work, so keep it out of the daily triage. No `type:*`, no routing, no priority.
-- Body: the **Top recommendation** + the report legend + a checklist linking each child — `- [ ] SER-xxx — <candidate title> (<strength>)`.
+- Assignee: me. Team: `tracker.team`. Status: the tracker's pre-dev triage/backlog state.
+- Label: **`labels.managerSkip` only** — it is a container, never a unit of agent work, so keep it out of the daily triage. No type label, no routing, no priority.
+- Body: the **Top recommendation** + the report legend + a checklist linking each child — `- [ ] <child issue id> — <candidate title> (<strength>)`.
 - **Attach the HTML report** (steps below).
 
 **One child issue per candidate — the unit of work:**
-- `parentId` = the parent. Assignee: me. Team: Seranote.
+- `parentId` = the parent. Assignee: me. Team: `tracker.team`.
 - `blockedBy` **only** when a candidate genuinely depends on another landing first (e.g. the chunk-lifecycle deepening builds on the model seam from the prompt-dispatch one). Otherwise leave them independent — they are not a forced stack.
-- Label: **`type:refactor`** (the Conventional Commit type the work ships as; use `type:test` if a candidate is primarily "add the missing orchestration tests"). **No `risk:*`, no routing (`agent:ready` / `needs:human`), no `manager:skip`** — leave routing to `daily-ticket-manager` so the issue flows into the normal assigned queue once it reaches a dev-active status.
+- Label: **`<typePrefix>refactor`** (the Conventional Commit type the work ships as; `<typePrefix>test` if a candidate is primarily "add the missing orchestration tests"). **No risk label, no routing (`labels.agentReady` / `labels.needsHuman`), no `labels.managerSkip`** — leave routing to `daily-ticket-manager` so the issue flows into the normal assigned queue once it reaches a dev-active status.
 - **Priority ← recommendation strength** (native priority, not a new label): `Strong` → High, `Worth exploring` → Medium, `Speculative` → Low.
-- Status: **`Ready for dev - backlog`** (id `7a4368ec-5dd4-450b-ad94-baf40fdbe8d1`) — the issue enters the normal dev queue at creation, so `daily-ticket-manager` triages and routes it on its next run. Always assigned to me.
+- Status: **`tracker.statuses.readyForDev`** — the issue enters the normal dev queue at creation, so `daily-ticket-manager` triages and routes it on its next run. Always assigned to me.
 - Body: the template below.
 
 ## Child body template
@@ -45,7 +45,7 @@ One sentence — what changes.
 
 ## Before / after
 <inline ```mermaid block when graph-shaped; otherwise a one-line textual before→after
-plus: "full before/after: attached architecture-review.html on SER-<parent>">
+plus: "full before/after: attached architecture-review.html on <parent issue id>">
 
 ## Wins
 - locality: …
@@ -75,5 +75,5 @@ Generate the report exactly as [HTML-REPORT.md](HTML-REPORT.md) describes and wr
 
 Filing issues is an outward-facing write, so it is gated by the skill's mode (see SKILL.md → _Mode: dry run vs apply_):
 
-- **Dry run (default):** write nothing to Linear. Print the file plan — the parent + each child's title, `strength→priority`, labels, status, assignee, `parentId`/`blockedBy`, and a one-line body summary — and end with _"Re-run with `apply` to file these."_ The local HTML report still builds and opens; it is the dry-run preview.
+- **Dry run (default):** write nothing to the tracker. Print the file plan — the parent + each child's title, `strength→priority`, labels, status, assignee, `parentId`/`blockedBy`, and a one-line body summary — and end with _"Re-run with `apply` to file these."_ The local HTML report still builds and opens; it is the dry-run preview.
 - **`apply`:** create the parent + children, upload + attach the report, set labels/priority/status/assignee. The `apply` flag is the authorization — proceed without a second confirmation, but show what's being created as you go.

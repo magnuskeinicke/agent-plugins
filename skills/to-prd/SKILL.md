@@ -5,14 +5,31 @@ description: Turn the current conversation context into a PRD and write it into 
 
 This skill takes the current conversation context and codebase understanding and produces a PRD, then publishes it as a **comment on a single parent ticket** on the issue tracker — extending the ticket, never overwriting its description. Do NOT interview the user — just synthesize what you already know. The detailed implementation tickets are NOT created here; `/to-issues` slices this PRD into sub-tickets next.
 
-Read `docs/agents/issue-tracker.md` for how this repo's tracker works (which tool/CLI to use, how to create vs update a ticket, how parent ↔ child issues relate) and `docs/agents/triage-labels.md` for the label vocabulary. If those files are missing, the checkout is broken (they are committed with this skill — see `docs/agents/README.md`); stop and tell the user.
+## Repo contract — resolve this first
+
+Read `docs/agents/repo-config.md` (its `## Config` JSON block); the placeholders
+below stand for its values. Missing file or empty key → use the fallback and say
+so once. Also read the prose docs it points at (`tracker.docPath`,
+`labels.docPath`) for how this repo's tracker creates/updates tickets and who
+owns which label.
+
+| Placeholder | Config key | Absent → |
+| --- | --- | --- |
+| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123`) |
+| `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
+| `<ISSUE-SKILL>` | `skills.createIssue` | create the issue directly with `<TRACKER>` |
+| `<TYPE:>` | `labels.typePrefix` | skip the type label |
+| `<SKIP>` | `labels.managerSkip` | skip the triage opt-out stamp (say so — the daily triage may then pick the ticket up) |
+| `<NEXT>` | `labels.sliceNext` | no work pointer — tell the user which slice is up |
+| `<HITL>` | `labels.needsHuman` | write "needs a human decision" into the slice body instead |
+| `<AGENT-READY>` | `labels.agentReady` | there is no autonomous-loop trigger to avoid |
 
 ## The parent ticket
 
 The PRD lives in one ticket — the **parent** that every slice will hang off. The PRD is published as a **comment** on that ticket; the ticket's existing description is **never overwritten**. The PRD extends what's already there, and must not duplicate content the description already covers.
 
-- **If this session was seeded from an existing ticket** (a `/grill-with-docs` started from a `SER-1234` / issue id, or the user named one): that ticket IS the parent. **Add the PRD as a comment** — leave the existing description untouched. Do not create a second ticket.
-- **If there is no seed ticket**: create one for the PRD (follow the create path in `docs/agents/issue-tracker.md` — for Linear that's the `create-issue` flow: resolve team + assignee, dup-check, then `save_issue`). Give it a short one-line description if it has none, then add the PRD as a comment. Report the new id; it becomes the parent.
+- **If this session was seeded from an existing ticket** (a `/grill-with-docs` started from an `<ISSUE>` id, or the user named one): that ticket IS the parent. **Add the PRD as a comment** — leave the existing description untouched. Do not create a second ticket.
+- **If there is no seed ticket**: create one for the PRD (follow the create path in `tracker.docPath` — via `<ISSUE-SKILL>` where the repo has one: resolve team + assignee, dup-check, then write). Give it a short one-line description if it has none, then add the PRD as a comment. Report the new id; it becomes the parent.
 
 Either way you end with exactly one parent ticket id carrying the PRD in a comment. Surface it clearly — `/to-issues` needs it.
 
@@ -28,9 +45,9 @@ Check with the user that these seams match their expectations.
 
 4. Publish it to the parent ticket (see "The parent ticket" above):
    - Add the PRD as a **comment** (`save_comment`) under a `# PRD` heading. Do NOT touch the ticket's description — the PRD is additive, never a rewrite, and must not duplicate what the description already says.
-   - Apply a `type:*` label **and** the `manager:skip` label, per `docs/agents/triage-labels.md`. Preserve existing labels — add, don't replace. Create `manager:skip` first if the team lacks it (`list_issue_labels` → `create_issue_label`, muted grey e.g. `#6b7280`).
-   - `manager:skip` is the triage opt-out: it tells `daily-ticket-manager` to leave this ticket alone. Stamp it now — before any slice exists — because a sub-issue-less PRD parent otherwise looks standalone to the daily triage and could be wrongly routed `agent:ready`.
-   - Do NOT apply any routing label. The parent is a container, never a unit of agent work, so it must never carry `agent:ready` (the autonomous-loop trigger) or the `slice:next` work pointer. `/to-issues` puts the work pointer on the first slice instead.
+   - Apply a `<TYPE:>*` label **and** `<SKIP>`, per `labels.docPath`. Preserve existing labels — add, don't replace. Create `<SKIP>` first if the team lacks it (muted grey e.g. `#6b7280`).
+   - `<SKIP>` is the triage opt-out: it tells `daily-ticket-manager` to leave this ticket alone. Stamp it now — before any slice exists — because a sub-issue-less PRD parent otherwise looks standalone to the daily triage and could be wrongly routed `<AGENT-READY>`.
+   - Do NOT apply any routing label. The parent is a container, never a unit of agent work, so it must never carry `<AGENT-READY>` (the autonomous-loop trigger) or the `<NEXT>` work pointer. `/to-issues` puts the work pointer on the first slice instead.
    - Do NOT create sub-issues, change status, or reassign. That's the next step's job.
 
 5. Report the parent ticket id + URL and tell the user to run `/to-issues` to slice it.

@@ -11,7 +11,31 @@ The split optimises for what an agent one-shots reliably: the **skeleton** slice
 
 Each sub-issue must be rich enough that a *fresh* agent can pick it up via `/work-slice` and implement it with `/tdd` — no extra human context needed. That means: end-to-end behaviour, verbatim acceptance criteria, the code-layer pointers to mirror, the exact Figma nodes for any UI, and its place in the stack.
 
-Read `docs/agents/issue-tracker.md` for how this repo's tracker creates child issues and links blockers, `docs/agents/triage-labels.md` for labels, and `docs/agents/repo-config.md` for `goldenPaths` (layer → canonical exemplar file) and `libMap` (lib → purpose). If the first two are missing, the checkout is broken (they are committed with this skill — see `docs/agents/README.md`); stop and tell the user. Missing `goldenPaths`/`libMap` keys just mean you discover exemplars yourself (step 1) and should write them back.
+## Repo contract — resolve this first
+
+Read `docs/agents/repo-config.md` (its `## Config` JSON block); the placeholders
+below stand for its values. Missing file or empty key → use the fallback and say
+so once. Also read the prose docs it points at (`tracker.docPath`,
+`labels.docPath`) for how this repo's tracker creates/updates tickets and who
+owns which label.
+
+| Placeholder | Config key | Absent → |
+| --- | --- | --- |
+| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123`) |
+| `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
+| `<ISSUE-SKILL>` | `skills.createIssue` | create the issue directly with `<TRACKER>` |
+| `<TYPE:>` | `labels.typePrefix` | skip the type label |
+| `<SKIP>` | `labels.managerSkip` | skip the triage opt-out stamp (say so — the daily triage may then pick the ticket up) |
+| `<NEXT>` | `labels.sliceNext` | no work pointer — tell the user which slice is up |
+| `<HITL>` | `labels.needsHuman` | write "needs a human decision" into the slice body instead |
+| `<AGENT-READY>` | `labels.agentReady` | there is no autonomous-loop trigger to avoid |
+| `<BASE>` | `integrationBranch` | the repo's default branch |
+| `<SRC>` | `sourceDirs` | the whole source tree |
+| `<CONVENTIONS>` | `conventionsFile` | `CLAUDE.md` |
+
+`goldenPaths` (layer → canonical exemplar file) and `libMap` (lib → purpose) come
+from the same block. Missing keys just mean you discover exemplars yourself
+(step 1) and should write them back.
 
 ## Input: the parent PRD ticket
 
@@ -23,7 +47,7 @@ Work from the parent ticket that `/to-prd` produced. Take its id from the conver
 
 The highest-leverage prep. Start from `repoConfig.goldenPaths` — the blessed exemplar per layer. Where it has an entry, that exemplar is **the** mirror target; don't re-decide. Where it doesn't, find 1–2 existing features of the same kind and **trace them end to end**, recording every layer the new feature touches as a `file:line → what changes / what to mirror` row. Delegate the breadth to an `Explore` subagent if useful. Slices draw their "where to look" and "Convention contract" sections from this map, so the implementing agent starts from pointers instead of re-discovering the architecture.
 
-Repos drift — when two siblings disagree on a convention, pick **one** canonical exemplar deliberately (the one CLAUDE.md blesses, else the newest) and record why. **Write the choice back**: add/update the layer's entry in `goldenPaths` in `docs/agents/repo-config.md` so the next PRD inherits it instead of re-deciding.
+Repos drift — when two siblings disagree on a convention, pick **one** canonical exemplar deliberately (the one `<CONVENTIONS>` blesses, else the newest) and record why. **Write the choice back**: add/update the layer's entry in `goldenPaths` in `docs/agents/repo-config.md` so the next PRD inherits it instead of re-deciding.
 
 Pointers and "mirror X", not edits.
 
@@ -52,18 +76,18 @@ Break the PRD into **one walking-skeleton slice + N behaviour-delta slices**. Ne
 - **Skeleton first, always.** The rest fan out from it.
 </slice-rules>
 
-Mark each slice **AFK** (an agent can implement and open a PR unattended) or **HITL** (needs a human decision/design review first). Prefer AFK for deltas — they carry ≤1 decision by construction. The **skeleton** leans HITL (or at least a flagged, careful review): it makes every decision the rest of the stack inherits, so a wrong skeleton is N wrong slices. HITL slices get the `needs:human` label. AFK slices carry **no routing label of their own** — the `slice:next` work pointer (step 6) marks only the one slice that is up next. **No slice ever gets `agent:ready`**: that label is the autonomous-loop trigger, reserved for `daily-ticket-manager` on standalone tickets, and must stay off the PRD pipeline (see `docs/agents/triage-labels.md`).
+Mark each slice **AFK** (an agent can implement and open a PR unattended) or **HITL** (needs a human decision/design review first). Prefer AFK for deltas — they carry ≤1 decision by construction. The **skeleton** leans HITL (or at least a flagged, careful review): it makes every decision the rest of the stack inherits, so a wrong skeleton is N wrong slices. HITL slices get the `<HITL>` label. AFK slices carry **no routing label of their own** — the `<NEXT>` work pointer (step 6) marks only the one slice that is up next. **No slice ever gets `<AGENT-READY>`**: that label is the autonomous-loop trigger, reserved for `daily-ticket-manager` on standalone tickets, and must stay off the PRD pipeline (see `labels.docPath`).
 
 ### 4. Define the stack (delivery topology)
 
 Order the slices into a **stack** so PRs stay small and review-friendly — and keep it **shallow** where the deltas allow:
 
-- The **skeleton slice** bases its branch off the repo's default integration branch.
+- The **skeleton slice** bases its branch off `<BASE>`.
 - **Deltas that are file-disjoint from each other stack directly on the skeleton** (fan-out, depth 2) — decidable now from the code-layer map. Disjoint deltas can be worked in parallel worktrees and rebase independently; a deep serial chain costs O(N) restacks and serial wall-clock for no reason.
 - **Deltas that collide on files** (or consume a symbol another delta introduces) form a serial chain — each bases its branch off the **previous slice's branch**, so its PR diff shows only that slice's change.
 - Express each dependency as a **blocked-by** relation on the tracker (blocker = the slice it stacks on — the skeleton for fanned-out deltas, the predecessor for chained ones). `/work-slice` reads this to pick the next unblocked slice and to choose its branch base.
 
-Record, per slice, **"Stacked on: <predecessor ticket>"** (or "base = default branch" for the skeleton). Branch names aren't known yet — reference the predecessor *ticket*; `/work-slice` resolves the actual branch.
+Record, per slice, **"Stacked on: <predecessor ticket>"** (or "base = `<BASE>`" for the skeleton). Branch names aren't known yet — reference the predecessor *ticket*; `/work-slice` resolves the actual branch.
 
 **Cap the stack at 4–5 PRs.** Above that, apply the escape hatches in order: (1) merge adjacent slices, (2) carve the tail into a second stack behind the first, (3) promote file-disjoint deltas out of the serial chain into the fan (the depth-2 topology above already supports this), (4) question the scope with the user. Only then accept a long stack.
 
@@ -83,17 +107,17 @@ Iterate until the user approves.
 
 ### 6. Publish the sub-issues
 
-Publish in **stack order** (skeleton first) so you can reference real ids in the "Stacked on" / blocked-by fields. For each approved slice create a sub-issue of the parent (`parentId` = PRD ticket) using the body template below. Reuse the repo's create flow (`docs/agents/issue-tracker.md` — for Linear, the `create-issue` plumbing: team + assignee). Set the blocked-by relation to the predecessor.
+Publish in **stack order** (skeleton first) so you can reference real ids in the "Stacked on" / blocked-by fields. For each approved slice create a sub-issue of the parent (`parentId` = PRD ticket) using the body template below. Reuse the repo's create flow (`tracker.docPath`, via `<ISSUE-SKILL>` where one exists: team + assignee). Set the blocked-by relation to the predecessor.
 
-Labels per `docs/agents/triage-labels.md` — a `type:*` **and** `manager:skip` on every slice, plus:
+Labels per `labels.docPath` — a `<TYPE:>*` **and** `<SKIP>` on every slice, plus:
 
-- **Every slice** → `manager:skip` — the triage opt-out telling `daily-ticket-manager` this ticket is PRD-pipeline-owned and must not be classified or routed by the daily triage. Routing here belongs to `slice:next` + `/work-slice`. Create the label first if the team lacks it (`list_issue_labels` → `create_issue_label`, muted grey e.g. `#6b7280`).
-- **HITL slice** → `needs:human`.
-- **The skeleton slice, if AFK** → `slice:next` — the work pointer telling `/work-slice` this is the one to pick up. Create the `slice:next` label first if the team lacks it (`list_issue_labels` for the team → `create_issue_label`). Exactly **one** slice carries `slice:next` at a time; `/work-slice` advances it down the stack as each slice reaches PR (with fan-out, sibling deltas become unblocked together — the pointer still marks just the one that is up next; the user may hand siblings to parallel worktrees manually).
-- **Downstream AFK slices** → no routing label yet; they receive `slice:next` from `/work-slice` when their turn comes.
-- **Never `agent:ready`** on any slice or on the parent — it is the autonomous-loop trigger and stays off the PRD pipeline.
+- **Every slice** → `<SKIP>` — the triage opt-out telling `daily-ticket-manager` this ticket is PRD-pipeline-owned and must not be classified or routed by the daily triage. Routing here belongs to `<NEXT>` + `/work-slice`. Create the label first if the team lacks it (muted grey e.g. `#6b7280`).
+- **HITL slice** → `<HITL>`.
+- **The skeleton slice, if AFK** → `<NEXT>` — the work pointer telling `/work-slice` this is the one to pick up. Create the label first if the team lacks it. Exactly **one** slice carries `<NEXT>` at a time; `/work-slice` advances it down the stack as each slice reaches PR (with fan-out, sibling deltas become unblocked together — the pointer still marks just the one that is up next; the user may hand siblings to parallel worktrees manually).
+- **Downstream AFK slices** → no routing label yet; they receive `<NEXT>` from `/work-slice` when their turn comes.
+- **Never `<AGENT-READY>`** on any slice or on the parent — it is the autonomous-loop trigger and stays off the PRD pipeline.
 
-If the skeleton slice is HITL, no slice starts with `slice:next` — tell the user the first slice needs a human before any agent can start.
+If the skeleton slice is HITL, no slice starts with `<NEXT>` — tell the user the first slice needs a human before any agent can start.
 
 Do NOT modify the parent ticket's body, status, or assignee.
 
@@ -130,8 +154,8 @@ The rows of the code-layer map relevant to this slice + what to mirror. `file:li
 ## Convention contract (BINDING)
 
 - Exemplar per layer: <layer> → `<goldenPaths entry or the canonical sibling chosen in step 1>` — mirror it; deviations must be declared in the PR's provenance table with a reason.
-- Must-use libs/utilities: <e.g. `createBaseRepo`, design-system tokens/components — from `libMap`>.
-- No new helper/util/hook/component without first searching `libs/**` for an existing equivalent.
+- Must-use libs/utilities: <the repo helpers and design-system tokens/components this slice must reuse — from `libMap`>.
+- No new helper/util/hook/component without first searching `<SRC>` for an existing equivalent.
 
 ## Design (UI slices only)
 
@@ -142,7 +166,7 @@ The rows of the code-layer map relevant to this slice + what to mirror. `file:li
 
 ## Stacked on
 
-<predecessor ticket id> — base this slice's branch off that slice's PR branch. For a fanned-out delta this is the skeleton's ticket. (Skeleton: "base = default integration branch.") This is also set as the **blocked-by relation** on the tracker; the relation, not this line, is what `/work-slice` reads.
+<predecessor ticket id> — base this slice's branch off that slice's PR branch. For a fanned-out delta this is the skeleton's ticket. (Skeleton: "base = `<BASE>`.") This is also set as the **blocked-by relation** on the tracker; the relation, not this line, is what `/work-slice` reads.
 
 </subissue-template>
 
@@ -150,7 +174,7 @@ Avoid specific code snippets — they go stale. Exception: a prototype snippet t
 
 ## Done when
 
-Exactly one slice is the walking skeleton and every delta names its novel decision (or "none — pure mirror"). Every slice is a sub-issue of the PRD parent, carries acceptance criteria + code-layer pointers + a Convention contract (+ for UI: Figma nodes + tokens), names what it stacks on via a blocked-by relation, and is labelled `type:*` + `manager:skip` (plus `needs:human` for HITL); the skeleton AFK slice also carries `slice:next`. No slice carries `agent:ready`. Any newly-pinned exemplars are written back to `goldenPaths` in `repo-config.md`. Tell the user to run `/work-slice` to start the skeleton slice.
+Exactly one slice is the walking skeleton and every delta names its novel decision (or "none — pure mirror"). Every slice is a sub-issue of the PRD parent, carries acceptance criteria + code-layer pointers + a Convention contract (+ for UI: Figma nodes + tokens), names what it stacks on via a blocked-by relation, and is labelled `<TYPE:>*` + `<SKIP>` (plus `<HITL>` for HITL); the skeleton AFK slice also carries `<NEXT>`. No slice carries `<AGENT-READY>`. Any newly-pinned exemplars are written back to `goldenPaths` in `repo-config.md`. Tell the user to run `/work-slice` to start the skeleton slice.
 
 ---
 

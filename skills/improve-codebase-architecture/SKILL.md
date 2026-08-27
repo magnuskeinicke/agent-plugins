@@ -75,10 +75,10 @@ Do NOT propose interfaces yet — that is what the grilling loop is for. **Filin
 
 Once the user picks a candidate (now an existing child issue), drop into a grilling conversation. Walk the design tree with them — constraints, dependencies, the shape of the deepened module, what sits behind the seam, what tests survive.
 
-The candidate's child issue is the live document — keep it in sync as the design sharpens. (Grilling presumes the issues exist, so it follows an `apply` run. In a dry run, hold the conversation but describe the Linear/doc writes rather than making them.)
+The candidate's child issue is the live document — keep it in sync as the design sharpens. (Grilling presumes the issues exist, so it follows an `apply` run. In a dry run, hold the conversation but describe the tracker/doc writes rather than making them.)
 
-- **Refining the candidate?** Update the child issue body (`save_issue` with its `id`) as the deepened-module shape, the seam, and the surviving tests crystallize. The issue should always reflect the current best understanding.
-- **Candidate too large for a single PR?** The children already sit in `Ready for dev - backlog`; for one that needs slicing, hand it to `/grill-with-docs` → `/to-prd` → `/to-issues` (which re-parents the slices and stamps `manager:skip`).
+- **Refining the candidate?** Update the child issue body in place as the deepened-module shape, the seam, and the surviving tests crystallize. The issue should always reflect the current best understanding.
+- **Candidate too large for a single PR?** The children already sit in `tracker.statuses.readyForDev`; for one that needs slicing, hand it to `/grill-with-docs` → `/to-prd` → `/to-issues` (which re-parents the slices and stamps `labels.managerSkip`).
 - **Naming a deepened module after a concept not in `CONTEXT.md`?** Add the term to `CONTEXT.md` — same discipline as `/grill-with-docs` (see [CONTEXT-FORMAT.md](../grill-with-docs/CONTEXT-FORMAT.md)). Create the file lazily if it doesn't exist.
 - **Sharpening a fuzzy term during the conversation?** Update `CONTEXT.md` right there.
 - **User rejects the candidate with a load-bearing reason?** Set the child issue's status to `Cancelled` (the `wontfix` equivalent — there is no label), and offer an ADR, framed as: _"Want me to record this as an ADR so future architecture reviews don't re-suggest it?"_ Only offer when the reason would actually be needed by a future explorer to avoid re-suggesting the same thing — skip ephemeral reasons ("not worth it right now") and self-evident ones. See [ADR-FORMAT.md](../grill-with-docs/ADR-FORMAT.md).

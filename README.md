@@ -5,16 +5,19 @@ Magnus's personal agent skills, packaged once and consumed by both **Claude Code
 symlinked skills).
 
 The plugin is the **engine** — loops, gates, review algorithms, issue-tracker mechanics. Repo-specific
-knowledge (conventions, ADRs, reviewer registry, gate commands) stays in the **host repo** and is read
-through the contract in [`CONTRACT.md`](./CONTRACT.md).
+knowledge (integration branch, gate commands, tracker + labels, reviewer lenses, exemplars) stays in the
+**host repo**, in a single file: `docs/agents/repo-config.md`. Every key has a generic fallback here, so a
+repo that supplies nothing still works — just blunter. Full key reference: [`CONTRACT.md`](./CONTRACT.md).
+Scaffold a fresh repo's half with `/magnus:init-repo`.
 
 ## Layout
 
 ```
 skills/<name>/SKILL.md      # one dir per skill (+ assets, workflow .js where kept)
-shared/                     # engine bits shared by skills: loop-schemas.js,
-                            # gen-repo-config-defaults.mjs, sync.sh,
-                            # repo-config-defaults.js (generated)
+shared/                     # plugin-owned engine copied into the workflow scripts:
+                            # repo-config-defaults.js (generic fallbacks),
+                            # reviewer-engine.js (lanes/ledger/validator),
+                            # loop-schemas.js, sync.sh
 .claude-plugin/             # Claude Code: plugin.json + marketplace.json
 .codex-plugin/plugin.json   # Codex: plugin manifest (plugin root = repo root)
 .agents/plugins/marketplace.json   # Codex: marketplace manifest
@@ -65,15 +68,14 @@ safe. Start a new thread after either route.
 Four skills ship a `Workflow` script (`work-slice`, `review-code`, `iterate-pr`,
 `solve-ready-tickets`). The runtime cannot import files, so those scripts must be
 self-contained: shared code is copied verbatim between `// >>> shared:<name>` /
-`// <<< shared:<name>` markers. Two sources are engine (`shared/loop-schemas.js`,
-`shared/repo-config-defaults.js`), one is host knowledge
-(`<host>/.claude/skills/_shared/reviewer-registry.js`), and
-`shared/repo-config-defaults.js` is itself generated from
-`<host>/docs/agents/repo-config.md`.
+`// <<< shared:<name>` markers. **All three sources are plugin-owned and
+host-agnostic** — `repo-config-defaults.js`, `reviewer-engine.js`,
+`loop-schemas.js`. Host knowledge is never baked in; it arrives at runtime as
+`repoConfig` in the workflow args.
 
 ```bash
-shared/sync.sh --host /path/to/host-repo            # copy into every workflow script
-shared/sync.sh --host /path/to/host-repo --check    # exit 1 on drift
+shared/sync.sh            # copy into every workflow script
+shared/sync.sh --check    # exit 1 on drift
 ```
 
 Run it in this working copy, never against an installed plugin cache dir. Commit the
@@ -83,4 +85,6 @@ result, bump the plugin version, then reinstall in each agent.
 
 Migration is tracked in the host repo at `.context/agent-plugins-migration-plan.md`
 (voice-to-text). P1 scaffolded the manifests, P2 landed the 16 skills, P3 cut the host
-repo over: the skills are gone from `voice-to-text`, this plugin is their only home.
+repo over, and P4 made the suite repo-agnostic: no host literal survives in any skill,
+the reviewer registry's machinery moved here as `shared/reviewer-engine.js`, and
+`/magnus:init-repo` scaffolds a new host's contract. 17 skills.

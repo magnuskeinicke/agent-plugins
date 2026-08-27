@@ -25,16 +25,16 @@ Before claiming any status — or expressing satisfaction ("Great!", "Done!", "s
 
 Skip any step and the claim remains unverified. If no command can prove the claim — nothing testable exists, or it cannot run here — say so explicitly: name what changed and what you could not verify. "Cannot verify X here" is an honest status; "X passes" without evidence is not.
 
-## Proving commands in this repo
+## Proving commands
 
-The claim decides the command — the repo's definition of done is the ceiling:
+The claim decides the command — the repo's definition of done is the ceiling. Read it from `docs/agents/repo-config.md` (`## Config`):
 
-```bash
-CI=true pnpm nx affected -t lint test build --base=origin/development --no-tui
-pnpm nx format:check --base=origin/development
-```
+- `gates.all` — the full definition of done (lint + test + build).
+- `gates.format` — the formatting check.
+- `gates.test` — the narrow per-project form; narrower claims use narrower commands.
+- `gates.traps` — the repo's known ways these commands lie. **Read this list before trusting an exit code.**
 
-Narrower claims use narrower commands (`CI=true pnpm nx test <project> --no-tui` for one project's tests). Two repo traps: never pipe an nx command through `| tail`/`| grep` when its exit code matters (the pipe masks failures), and run unit tests with `CI=true` or they go interactive.
+No config file, or the keys are empty → discover the commands from the repo itself (package manifest scripts, CI workflow, the conventions file), run those, and **name which command you used** in the claim. Never invent a command and never claim a gate you could not identify.
 
 ## Claim → required evidence
 
