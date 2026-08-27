@@ -7,7 +7,7 @@ description: Fan out the shared feature-dev reviewer lanes (baseline + web/serve
 
 Run the **same review agents** the feature-dev workflows (`/work-slice`, `/solve-ready-tickets`) use — baseline + diff-matched **web/server lanes** + the **reuse reviewer** + the **scope-fidelity reviewer** (when context provides acceptance criteria and the diff is sizeable) + the **CodeRabbit reviewer** (a wrapper around the CodeRabbit CLI) — on **any** code, standalone. One parallel read-only round; a **relevance validator** then classifies every raw finding (diff-caused? confidence 0–100?) before it reaches the report, so the human sees blocking (≥80 confidence, diff-caused), advisory (60–79 or pre-existing), and unverified (<60) findings separately, each under a stable `CR-NNN` id. No implementer, no fix loop, no Playwright, no ticket: the human decides what to do with the findings.
 
-The reviewer definitions live once in `.claude/skills/_shared/reviewer-registry.js` (synced into the workflow script via `.claude/skills/_shared/sync.sh`), so this skill always reviews with the current registry — tune the registry, and this skill picks it up.
+The reviewer definitions live once in the host repo's `.claude/skills/_shared/reviewer-registry.js` (synced into the workflow script by the plugin's `shared/sync.sh --host <repo>`), so this skill always reviews with the current registry — tune the registry, re-sync, and this skill picks it up.
 
 Read `docs/agents/repo-config.md` if present (the repo-specific values — integration branch, area→path map, `libMap` — passed to the workflow as `repoConfig`). If it's missing, the workflow falls back to its built-in Seranote defaults.
 
@@ -37,9 +37,16 @@ Build `coderabbitCmd` — the exact CodeRabbit CLI invocation matching the revie
 
 This step runs as a **single `Workflow` call** — invoking it here is the sanctioned opt-in. The workflow selects the reviewer set from the changed paths (baseline always; at most 2 lanes; reuse when the diff adds or modifies files; scope-fidelity when `hasAcceptanceCriteria` is set and the diff is sizeable; CodeRabbit when `coderabbitCmd` is given), spawns them **in parallel**, and returns the aggregated findings.
 
+`scriptPath` must be an **absolute** path into this plugin's install root — the
+script ships with the plugin, not with the host repo, so a repo-relative path
+resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/review-code/review-code.workflow.js`
+when that variable is set, otherwise
+`ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/review-code/review-code.workflow.js | sort -V | tail -1`.
+Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
+
 ```
 Workflow({
-  scriptPath: ".claude/skills/review-code/review-code.workflow.js",
+  scriptPath: "<PLUGIN_ROOT>/skills/review-code/review-code.workflow.js",
   args: {
     inspect,        // the command reviewers run to see the code (Step 1)
     context,        // optional: what the change is / what to judge it against
@@ -77,7 +84,7 @@ Then **stop** — findings are the deliverable. Do not fix anything unless the u
 - **Read-only, always.** No edits, no commits, no branch changes, no tickets. The only side effect is the report.
 - One round. No fix ⇄ review loop, no convergence cap — that machinery belongs to `/work-slice` / `/solve-ready-tickets`.
 - No Playwright — user-story verification needs acceptance criteria and a runnable slice; out of scope here.
-- Reviewer definitions come from the shared registry — to change focus/lanes/paths, edit `.claude/skills/_shared/reviewer-registry.js` in THIS repo and run `.claude/skills/_shared/sync.sh`; never fork them inline here.
+- Reviewer definitions come from the shared registry — to change focus/lanes/paths, edit `.claude/skills/_shared/reviewer-registry.js` in the HOST repo and run the plugin's `shared/sync.sh --host <repo>`; never fork them inline here.
 - Model roles are fixed, models are aliases: reviewers and the relevance validator are **Sonnet**. Never pin exact model ids or effort levels.
 - The relevance validator classifies findings — it never adds its own; a dead validator means findings pass through unclassified (reported as blocking), never silently dropped.
 - The reuse reviewer runs without a provenance table here (ad-hoc code has none) — it hunts lib duplicates and consolidation candidates only.

@@ -22,9 +22,9 @@ export const meta = {
 //   maxRounds, commitPrefix, hasAcceptanceCriteria, diffStat, repoConfig }
 // Normalised via the shared parseWorkflowArgs (hoisted from the registry block below).
 const A = parseWorkflowArgs(args);
-// >>> shared:repo-config-defaults — generated from docs/agents/repo-config.md via .claude/skills/_shared/sync.sh; edit the md, then run sync.sh
-// GENERATED from docs/agents/repo-config.md's ## Config block — edit the md,
-// then run .claude/skills/_shared/sync.sh. Do not edit by hand.
+// >>> shared:repo-config-defaults — generated from the host repo's docs/agents/repo-config.md via shared/sync.sh; edit the md, then re-run sync.sh --host <repo>
+// GENERATED from the host repo's docs/agents/repo-config.md ## Config block —
+// edit the md, then run the plugin's shared/sync.sh. Do not edit by hand.
 const REPO_CONFIG_DEFAULTS = {
   integrationBranch: 'development',
   devServerCommand:
@@ -361,13 +361,17 @@ const LIB_MAP = buildLibMap(CFG);
 // never past the work-slice cap of 5.
 const MAX_ROUNDS = Math.min(5, Math.max(1, Number(A.maxRounds) || 3));
 
-// >>> shared:reviewer-registry — generated from .claude/skills/_shared/reviewer-registry.js; edit there and run .claude/skills/_shared/sync.sh
-// Shared reviewer registry for the feature-dev workflow scripts. Workflow
-// scripts must be self-contained — they cannot import this file — so
-// `.claude/skills/_shared/sync.sh` copies it verbatim into each target between
-// the `// >>> shared:reviewer-registry` / `// <<< shared:reviewer-registry`
-// markers (`sync.sh --check` fails on drift; wired into the pre-push hook).
-// Edit HERE, never in the generated blocks. In-repo targets: work-slice-loop,
+// >>> shared:reviewer-registry — generated from the host repo's .claude/skills/_shared/reviewer-registry.js; edit there and run shared/sync.sh --host <repo>
+// Shared reviewer registry for the feature-dev workflow scripts. Those scripts
+// ship in the private `magnus` plugin (magnuskeinicke/agent-plugins), not here;
+// this file is the repo-specific input they consume, because the lanes name
+// THIS repo's domain skills and paths.
+//
+// Workflow scripts must be self-contained — they cannot import this file — so
+// the plugin's `shared/sync.sh --host <this repo>` copies it verbatim into each
+// target between the `// >>> shared:reviewer-registry` /
+// `// <<< shared:reviewer-registry` markers (`--check` fails on drift). Edit
+// HERE, never in the generated blocks. Plugin-side targets: work-slice-loop,
 // review-code, iterate-pr, solve-ready-loop.
 // Assumes the `shared:repo-config-defaults` block (REPO_CONFIG_DEFAULTS,
 // generated from docs/agents/repo-config.md) appears ABOVE this block in
@@ -727,7 +731,7 @@ function ledgerProgress(prev, ledger, gateCleared) {
 }
 
 // Verdict language used everywhere the loop result is reported (workflow
-// return, PR comment, babysit-stack input): `converged`, or an explicit
+// return, PR comment, magnus:babysit-stack input): `converged`, or an explicit
 // stalled verdict naming what shipped unresolved — never a silently
 // exhausted cap.
 function ledgerVerdict(ledger, converged) {
@@ -1007,11 +1011,10 @@ Set "area" to "scope". Do not invent problems to look productive — an empty bl
 }
 // <<< shared:reviewer-registry
 
-// >>> shared:loop-schemas — generated from .claude/skills/_shared/loop-schemas.js; edit there and run .claude/skills/_shared/sync.sh
+// >>> shared:loop-schemas — generated from the plugin's shared/loop-schemas.js; edit there and run shared/sync.sh --host <repo>
 // Shared implement/fix-loop schemas — used only by loop-shaped workflows
-// (work-slice-loop + iterate-pr in-repo; the personal-config solve-ready-loop
-// syncs by hand).
-// Synced by `.claude/skills/_shared/sync.sh` between the
+// (work-slice-loop + iterate-pr; solve-ready-loop does not carry this block).
+// Synced by the plugin's `shared/sync.sh` between the
 // `// >>> shared:loop-schemas` / `// <<< shared:loop-schemas` markers; edit
 // HERE, never in the generated blocks. Depends on the reviewer-registry block
 // (KNOWN_AREAS, FINDING, findingFingerprint) being synced above it in the target.

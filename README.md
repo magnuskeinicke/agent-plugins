@@ -13,7 +13,8 @@ through the contract in [`CONTRACT.md`](./CONTRACT.md).
 ```
 skills/<name>/SKILL.md      # one dir per skill (+ assets, workflow .js where kept)
 shared/                     # engine bits shared by skills: loop-schemas.js,
-                            # gen-repo-config-defaults.mjs, sync.sh
+                            # gen-repo-config-defaults.mjs, sync.sh,
+                            # repo-config-defaults.js (generated)
 .claude-plugin/             # Claude Code: plugin.json + marketplace.json
 .codex-plugin/plugin.json   # Codex: plugin manifest (plugin root = repo root)
 .agents/plugins/marketplace.json   # Codex: marketplace manifest
@@ -59,7 +60,27 @@ codex/install.sh --uninstall
 The fallback refuses to clobber an existing real directory, so a vendored skill of the same name is
 safe. Start a new thread after either route.
 
+## Syncing shared blocks into the workflow scripts
+
+Four skills ship a `Workflow` script (`work-slice`, `review-code`, `iterate-pr`,
+`solve-ready-tickets`). The runtime cannot import files, so those scripts must be
+self-contained: shared code is copied verbatim between `// >>> shared:<name>` /
+`// <<< shared:<name>` markers. Two sources are engine (`shared/loop-schemas.js`,
+`shared/repo-config-defaults.js`), one is host knowledge
+(`<host>/.claude/skills/_shared/reviewer-registry.js`), and
+`shared/repo-config-defaults.js` is itself generated from
+`<host>/docs/agents/repo-config.md`.
+
+```bash
+shared/sync.sh --host /path/to/host-repo            # copy into every workflow script
+shared/sync.sh --host /path/to/host-repo --check    # exit 1 on drift
+```
+
+Run it in this working copy, never against an installed plugin cache dir. Commit the
+result, bump the plugin version, then reinstall in each agent.
+
 ## Status
 
 Migration is tracked in the host repo at `.context/agent-plugins-migration-plan.md`
-(voice-to-text). This repo is the P1 scaffold: manifests + adapters, skills land in P2.
+(voice-to-text). P1 scaffolded the manifests, P2 landed the 16 skills, P3 cut the host
+repo over: the skills are gone from `voice-to-text`, this plugin is their only home.

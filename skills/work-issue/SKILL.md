@@ -58,9 +58,16 @@ GOAL MET (needs-human blockers count as not met)
 
 One **`Workflow` call** — the sanctioned opt-in. **Do not implement or review in the main session** — the workflow owns implement (Opus, TDD per criterion), the bounded review ⇄ fix loop (max 5 rounds; baseline + web/server lanes + reuse, Sonnet), and the Playwright user-story loop (max 3) on user-facing changes:
 
+`scriptPath` must be an **absolute** path into this plugin's install root — the
+script ships with the plugin, not with the host repo, so a repo-relative path
+resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/work-slice/work-slice-loop.workflow.js`
+when that variable is set, otherwise
+`ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/work-slice/work-slice-loop.workflow.js | sort -V | tail -1`.
+Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
+
 ```
 Workflow({
-  scriptPath: ".claude/skills/work-slice/work-slice-loop.workflow.js",
+  scriptPath: "<PLUGIN_ROOT>/skills/work-slice/work-slice-loop.workflow.js",
   args: {
     sliceId,             // the SER id
     sliceKind: "delta",  // no skeleton here — mirror existing sibling features

@@ -131,11 +131,18 @@ Each ticket's implement→review→fix runs as a **single `Workflow` call** — 
 the sanctioned opt-in. The workflow owns implementation and review; the
 orchestrator does **not** write or review code. The workflow's first phase
 **triages the ticket's difficulty** and scales every later phase to it (see the
-workflow file). Invoke it by path, from the ticket's worktree:
+workflow file). Invoke it from the ticket's worktree:
+
+`scriptPath` must be an **absolute** path into this plugin's install root — the
+script ships with the plugin, not with the host repo, so a repo-relative path
+resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/solve-ready-tickets/solve-ready-loop.workflow.js`
+when that variable is set, otherwise
+`ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/solve-ready-tickets/solve-ready-loop.workflow.js | sort -V | tail -1`.
+Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
 
 ```
 Workflow({
-  scriptPath: ".claude/skills/solve-ready-tickets/solve-ready-loop.workflow.js",
+  scriptPath: "<PLUGIN_ROOT>/skills/solve-ready-tickets/solve-ready-loop.workflow.js",
   args: {
     issueId,             // "SER-1234"
     title,               // issue title

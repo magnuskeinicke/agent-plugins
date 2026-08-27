@@ -152,9 +152,16 @@ For each slice, in stack order, until none remain:
    rebased later without fighting stale tracking.
 3. **Implement + review loop** — work-slice Step 3's Workflow call, same args
    contract, unchanged:
+   `scriptPath` must be an **absolute** path into this plugin's install root — the
+   script ships with the plugin, not with the host repo, so a repo-relative path
+   resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/work-slice/work-slice-loop.workflow.js`
+   when that variable is set, otherwise
+   `ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/work-slice/work-slice-loop.workflow.js | sort -V | tail -1`.
+   Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
+
    ```
    Workflow({
-     scriptPath: ".claude/skills/work-slice/work-slice-loop.workflow.js",
+     scriptPath: "<PLUGIN_ROOT>/skills/work-slice/work-slice-loop.workflow.js",
      args: { sliceId, sliceKind, acceptanceCriteria, whereToLook,
              conventionContract, figma, baseBranch, prdContract, repoConfig }
    })

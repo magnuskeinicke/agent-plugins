@@ -1,7 +1,6 @@
 // Shared implement/fix-loop schemas — used only by loop-shaped workflows
-// (work-slice-loop + iterate-pr in-repo; the personal-config solve-ready-loop
-// syncs by hand).
-// Synced by `.claude/skills/_shared/sync.sh` between the
+// (work-slice-loop + iterate-pr; solve-ready-loop does not carry this block).
+// Synced by the plugin's `shared/sync.sh` between the
 // `// >>> shared:loop-schemas` / `// <<< shared:loop-schemas` markers; edit
 // HERE, never in the generated blocks. Depends on the reviewer-registry block
 // (KNOWN_AREAS, FINDING, findingFingerprint) being synced above it in the target.

@@ -73,9 +73,16 @@ PR <n> reads GOAL MET (needs-human blockers count as not met)
 
 This step runs as a **single `Workflow` call** — invoking it here is the sanctioned opt-in. **Do not review or fix in the main session** — the workflow owns the loop.
 
+`scriptPath` must be an **absolute** path into this plugin's install root — the
+script ships with the plugin, not with the host repo, so a repo-relative path
+resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/iterate-pr/iterate-pr.workflow.js`
+when that variable is set, otherwise
+`ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/iterate-pr/iterate-pr.workflow.js | sort -V | tail -1`.
+Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
+
 ```
 Workflow({
-  scriptPath: ".claude/skills/iterate-pr/iterate-pr.workflow.js",
+  scriptPath: "<PLUGIN_ROOT>/skills/iterate-pr/iterate-pr.workflow.js",
   args: {
     prNumber,       // e.g. 2580
     baseBranch,     // "origin/<baseRefName>" from Step 1
@@ -135,7 +142,7 @@ No goal set → Step 5 is still worth **one** pass (so the report ends on live C
 - `/goal` is user-typed, never self-set; the skill works identically without it. A `needs-human` blocker is reported as the stop reason, not worked around.
 - Fixes stay inside the PR's existing scope; consolidations become proposals, not code.
 - Model roles fixed, aliases only: reviewers + the relevance validator **Sonnet**, fixers + the closeout adjudicator **Opus** — never pin exact ids or effort.
-- Reviewer definitions come from `.claude/skills/_shared/reviewer-registry.js` (synced via `sync.sh`) — tune there, never fork inline.
+- Reviewer definitions come from the host repo's `.claude/skills/_shared/reviewer-registry.js`, synced into this workflow script by the plugin's `shared/sync.sh --host <repo>` — tune there, never fork inline.
 - No Playwright loop — that needs acceptance criteria + a runnable slice and belongs to `/work-slice` / `/work-issue`.
 - Never check out a branch held by another worktree; never force-push.
 - Works on other people's PRs too — but say so in the report and don't push to a fork you don't have rights on (stop and tell the user instead).
