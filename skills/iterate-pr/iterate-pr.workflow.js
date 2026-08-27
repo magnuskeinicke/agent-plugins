@@ -889,7 +889,7 @@ Set "area" to "scope". Do not invent problems to look productive — an empty bl
 // (work-slice-loop + iterate-pr; solve-ready-loop does not carry this block).
 // Synced by the plugin's `shared/sync.sh` between the
 // `// >>> shared:loop-schemas` / `// <<< shared:loop-schemas` markers; edit
-// HERE, never in the generated blocks. Depends on the reviewer-registry block
+// HERE, never in the generated blocks. Depends on the reviewer-engine block
 // (KNOWN_AREAS, FINDING, findingFingerprint) being synced above it in the target.
 
 // Injected by the tests gate: reviewers never see red code — a red round is
@@ -1238,7 +1238,7 @@ Report ONLY:
 Set "area" to "reuse". Do not invent problems to look productive — empty arrays are the correct result for clean code.`;
 }
 
-// fmtFeedback comes from the shared reviewer-registry block.
+// fmtFeedback comes from the shared reviewer-engine block.
 
 // ── run: review ⇄ fix loop on the PR branch ─────────────────────────────────
 let changedFiles = A.changedFiles || [];
