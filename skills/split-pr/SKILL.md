@@ -92,12 +92,7 @@ gh stack link --base <BASE> <pr-01> <pr-02> … <pr-top>
 
 Report: the layer table (PR number, branch, purpose, diff stat), the empty-diff verification line, and per-layer validation results.
 
-Same finish as the rest of the suite: under `/goal`, run **`/babysit-stack <pr-01> … <pr-top>`** passes until the verdict reads GOAL MET (CI green, `<BOT>` requested, threads resolved), handling verdicts exactly like `/feature-goal`'s BABYSIT stage. If no goal is active, print the template and ask the user to set it before the babysit passes:
-
-```
-/goal <ISSUE> split stack in order: all stack PR CI green, <BOT> requested,
-all review threads resolved — /babysit-stack verdict reads GOAL MET
-```
+Same finish as the rest of the suite: run **`/babysit-stack <pr-01> … <pr-top>`** passes until the verdict reads GOAL MET (CI green, `<BOT>` requested, threads resolved), handling verdicts exactly like `/feature-goal`'s BABYSIT stage — actionable items → another pass now; only pending CI / an awaited `<BOT>` review → end the invocation naming what's pending (re-invoking `/babysit-stack <pr-01> … <pr-top>` resumes; `/loop` or a scheduler paces unattended re-checks); `needs-human` blockers → report them as the stop reason.
 
 ## Boundaries
 

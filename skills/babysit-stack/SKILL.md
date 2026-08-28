@@ -4,8 +4,8 @@ description: >
   Drive a PR stack to "done": ensure the repo's review bot is requested on every
   stack PR, watch CI, fix failures, address + resolve every review thread, and
   report a machine-checkable verdict (GOAL MET / NOT MET). One idempotent pass
-  per invocation — the loop comes from outside (the built-in /goal stop-hook,
-  /loop, or re-running it by hand). Use when I say "babysit the stack", "watch
+  per invocation — the loop comes from outside (a calling skill's next pass,
+  /loop, a scheduler, or re-running it by hand). Use when I say "babysit the stack", "watch
   the PRs", "resolve the review comments", "get the stack green", "add copilot
   and watch", or as the finish stage of /feature-goal.
 argument-hint: "[parent issue id | PR numbers…]"
@@ -21,9 +21,9 @@ draft PR.
 
 **One pass per invocation.** Each run inspects the live state, does every
 currently-possible action once, and ends with a verdict block. It never spins
-waiting for CI or the review bot beyond a bounded watch — external loops (the built-in
-`/goal` stop-hook, `/loop`, or the user) re-invoke it. Every action is
-idempotent, so re-running is always safe.
+waiting for CI or the review bot beyond a bounded watch — external loops (a
+calling skill's next pass, `/loop`, a scheduler, or the user) re-invoke it.
+Every action is idempotent, so re-running is always safe.
 
 ## Repo contract — resolve this first
 
@@ -213,8 +213,8 @@ is `pending`, not done; `n/a` when no bot is configured), and **zero unresolved 
 Unresolved `needs-human` threads therefore always mean NOT MET, with
 `needs-human` named as the reason so the human knows the loop is waiting on
 them (they are reported honestly, never resolved by this skill). Merged slices
-count as done and impose no requirements. The `/goal` stop-hook (or the user)
-reads this verdict verbatim.
+count as done and impose no requirements. The calling skill's next pass (or
+the user) reads this verdict verbatim.
 
 ## Boundaries
 
