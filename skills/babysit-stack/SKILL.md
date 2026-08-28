@@ -68,11 +68,12 @@ only a closed, unmerged one) are reported as `missing` — that alone makes the
 verdict NOT MET (the slice loop isn't finished); don't implement them here,
 that's `/feature-goal` / `/work-slice`'s job.
 
-Keep cross-pass state in `.context/babysit-<parent>.json` (attempt counters per
-check/thread — see caps below). Missing file = first pass. Before writing it,
-make sure `.context/` is listed in `.git/info/exclude` (append the line if not) —
-the file must never show up untracked, or a work-slice fix agent's `git add -A`
-in the same worktree sweeps it into a slice commit.
+Keep cross-pass state in `.context/babysit-<parent>.json` (per-check attempt
+counters + failure signatures + first-seen-pending timestamps, per-thread
+attempt counters, `botRequested` flags — see caps below). Missing file = first
+pass. Before writing it, make sure `.context/` is listed in `.git/info/exclude`
+(append the line if not) — the file must never show up untracked, so no blanket
+staging by any other agent sharing the worktree can sweep it into a commit.
 
 ## Step 1 — Bot review requested (once per PR)
 
@@ -109,26 +110,74 @@ every later pass on it.
 
 ## Step 2 — CI per PR (bottom → top)
 
-`gh pr checks <n>` for each PR:
+Read check state as JSON and classify by the `bucket` field — never eyeball the
+human-readable table:
 
-- **All green** → done for this PR.
-- **Pending** → not a failure. If *everything else* in the pass is already done
-  and CI is the only thing outstanding, do one bounded wait on the
-  bottom-most pending PR — `timeout 600 gh pr checks <n> --watch --fail-fast`
-  (`--watch` alone has no time bound; timeout expiry = still `pending`, not a
-  failure) — then re-read. Otherwise just record `pending` and move on; the
-  next pass picks it up. Never busy-loop.
-- **Failing** → diagnose from the failing run's log (`gh run view <id>
-  --log-failed`; a repo CI-monitor skill, where one exists, may also surface
-  self-healing fixes). Fix it **on that PR's branch** test-first, commit, push
-  (see branch-switching rules below). Known trap: CI can go green on a stale
-  remote build cache — trust the logs, not vibes.
+```bash
+gh pr checks <n> --json name,state,bucket,link,workflow
+```
 
-**Fix caps:** track per-check attempt counts in the state file. The same check
-still failing after **3 fix attempts across passes** → stop fixing it, flag it
-in the verdict as `needs-human`, and leave it. Never grind past the cap.
+`bucket` is one of `pass` / `fail` / `pending` / `skipping` / `cancel`:
+
+- **All `pass`/`skipping`** → done for this PR.
+- **`cancel`** → never turns green on its own (superseded push, runner kill).
+  Re-run once (`gh run rerun <run-id>`); still cancelled or now failing → treat
+  as `fail` below.
+- **`pending`** → not a failure. If *everything else* in the pass is already
+  done and CI is the only thing outstanding, do one bounded wait on the
+  bottom-most pending PR — `timeout 1800 gh pr checks <n> --watch --interval 30
+  --fail-fast` (`--watch` alone has no time bound; `--interval 30` keeps API
+  churn down; timeout expiry = still `pending`, not a failure) — then re-read.
+  Otherwise just record `pending` and move on; the next pass picks it up. Never
+  busy-loop.
+  **Stuck-check rule:** the state file records when a check was first seen
+  `pending`; one still `pending` >30 min later with no run in progress
+  (`gh run list --branch <headRefName>` shows nothing running for it) is likely
+  stuck — runner outage, lost webhook, an external service that never reported
+  back. Name it, flag it `needs-human`, stop waiting on it.
+- **`fail`** → diagnose from the logs, never from the check name alone:
+  ```bash
+  gh run list --branch <headRefName> --limit 5 --json databaseId,name,status,conclusion
+  gh run view <run-id> --log-failed
+  ```
+  Read the actual failing step's output (a repo CI-monitor skill, where one
+  exists, may also surface self-healing fixes). **Flaky-retry rule:** a
+  suspected-flaky check gets one retry (`gh run rerun <run-id> --failed`); a
+  second identical failure is real until the logs name a concrete
+  infrastructure cause. "Unrelated to this PR" needs log evidence (blame the
+  failing assertion, check `<BASE>`'s CI history), not assumption. Then fix it
+  **on that PR's branch** test-first, commit, push (see branch-switching rules
+  below). Known trap: CI can go green on a stale remote build cache — trust
+  the logs, not vibes.
+
+**Gate discipline:** a failing gate signals a real problem until proven
+otherwise — fix the gate, never silence it. `--no-verify`, `eslint-disable` /
+`# noqa` / `@ts-ignore`, skipping or deleting the failing test, and lowering a
+threshold (coverage, complexity, bundle size) are not fixes. When disablement
+looks genuinely warranted (confirmed false positive, test asserting behavior
+the PR intentionally changes), that is a `needs-human` decision — reply with
+the rationale and leave it; never commit the disablement yourself.
+
+**Fix caps / same-failure escalation:** the state file tracks per-check attempt
+counts **and the failure signature** (failing step + first real error line).
+The same signature still failing after **3 fix attempts across passes** → you
+are guessing, not reading — stop, flag it `needs-human` in the verdict with the
+log line, and leave it. A different signature on the same check is a new
+failure (fresh cap), but note the churn. Never grind past the cap.
 
 ## Step 3 — Review threads per PR
+
+**Bot-wait rule first:** post-hoc review-commenting bots are services that post
+PR comments only *after* their check completes — error trackers, coverage
+reporters, AI review bots, hosted linter/code-analysis services (e.g. Sentry,
+Codecov, Cursor Bugbot, Seer). Key on the category — does this check belong to
+a service that comments after completion? — not on any specific bot name. If
+such a check is still `pending` on a PR (per the Step 2 JSON), skip this step
+for that PR this pass and record `bot-wait` in its verdict Notes: resolving
+threads before those comments land means duplicate work next pass. (The
+stuck-check rule still applies — a bot check stuck >30 min stops gating thread
+work and goes `needs-human`.) Same reason `<BOT>` requested-but-not-delivered
+keeps the verdict NOT MET in Step 1.
 
 Fetch unresolved threads:
 
@@ -179,7 +228,19 @@ Fix commits must land on the *owning* PR's branch:
   worktree; if one is, flag that PR's fixes `needs-human` (or do them in that
   worktree only if the user said so).
 - In this worktree: commit/stash nothing-lost, `git checkout <branch>` (or
-  `gh stack checkout <branch>`), fix, `git add -A && git commit -m "<ISSUE> <what>"`.
+  `gh stack checkout <branch>`), then snapshot `git status --porcelain` as the
+  **pre-existing dirty state** — anything already modified or untracked there
+  was not produced by this fix and must never ride into a fix commit.
+- Fix, then stage **only the files the fix actually edited, by name** — never
+  `git add -A` or `git add .`, which would sweep pre-existing uncommitted work
+  (including untracked `.env`-style files) into a pushed commit:
+  ```bash
+  git add <file1> <file2> ...
+  git commit -m "<ISSUE> <what>"
+  ```
+  After committing, compare `git status --porcelain` against the snapshot:
+  pre-existing entries stay uncommitted; if any exist, say so once in the pass
+  report.
 - After committing to a **lower** branch, restack everything above it before
   pushing. The stack may be **link-only** (created with `gh stack link`, no local
   tracking) — `gh stack view --json` tells you which: if it succeeds, use
@@ -225,8 +286,14 @@ the user) reads this verdict verbatim.
   single bounded `--watch` when CI is the sole remaining item.
 - Fixes are test-first and minimal — address the finding, no scope creep. Same
   dispute rule as the review loop: disagree only with evidence.
-- Respect the caps (3 CI fix attempts per check, 2 per bouncing thread, **1
-  bot review request per PR, ever**), then `needs-human` — never grind.
+- Respect the caps (3 fix attempts per CI failure signature, 2 per bouncing
+  thread, **1 bot review request per PR, ever**), then `needs-human` — never
+  grind.
+- Never silence a gate to go green — no `--no-verify`, suppression comments,
+  skipped/deleted tests, or lowered thresholds; warranted disablement is a
+  `needs-human` decision.
+- Stage fix commits by explicit file name only — `git add -A`/`git add .` are
+  banned in this skill.
 - Never resolve a thread you didn't address (fix, evidence, or outdated-note).
   Never resolve a `needs-human` thread — that's the human's click.
 - Never touch branches held by other worktrees.

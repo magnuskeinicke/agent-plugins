@@ -1,0 +1,21 @@
+sources:
+  - id: kramme-pr-fix-ci
+    url: https://github.com/Abildtoft/kramme-cc-workflow/tree/main/kramme-cc-workflow/skills/kramme%3Apr%3Afix-ci
+    title: "kramme-cc-workflow — kramme:pr:fix-ci"
+    rationale: >
+      Step 2's CI mechanics and the fix-commit staging discipline are adapted
+      from kramme:pr:fix-ci (MIT, Copyright (c) 2026 Abildtoft): bucket-based
+      check classification via `gh pr checks --json`, the `--watch --interval
+      30` wait and the stuck-check (>30 min pending) rule, log-first diagnosis
+      with the flaky-retry rule, the post-hoc review-commenting-bot wait keyed
+      on category not name, gate-silencing discipline, the 3-same-failure
+      "guessing, not reading" escalation, and the never-`git add -A` rule with
+      the pre-existing dirty-state snapshot. Adapted to babysit-stack's
+      one-bounded-pass model: the in-skill fix loop becomes cross-pass state in
+      `.context/babysit-<parent>.json`, and escalation surfaces as
+      `needs-human` verdict entries instead of inline markers.
+    usage: adapted
+    reference_ref: 56c49f34ce70a8a9be10f08bd91ea6d4e732a384
+    reference_version: "0.77.0"
+    license: MIT
+    last_reviewed_at: 2026-08-28
