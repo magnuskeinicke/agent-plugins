@@ -348,7 +348,7 @@ Run the CodeRabbit CLI review via Bash (long-running — use a generous timeout,
 
 Then translate its output into the structured report:
 - VERIFY each CodeRabbit finding against the actual code (open the cited file/line) before reporting it — drop anything that does not hold up.
-- blockingFindings: verified correctness bugs, security vulnerabilities, data-loss/race/resource-leak risks, or broken error handling. Each with title, file, line, detail, and a concrete suggestedFix.
+- blockingFindings: verified correctness bugs, security vulnerabilities, data-loss/race/resource-leak risks, or broken error handling. Each with title, file, line, detail, a concrete suggestedFix, and rootCause (a short stable slug of the underlying cause — reuse the exact slug when re-raising a prior finding).
 - notes: style/naming/docs/nit-level suggestions worth a human glance — never blocking.
 - If the CLI is missing, unauthenticated, rate-limited, or errors out: return an empty blockingFindings array plus a single note "CodeRabbit CLI unavailable: <reason>". Do NOT fall back to reviewing the code yourself — the other reviewer lanes cover that.
 Set "area" to "coderabbit". Do not pad findings to look productive — empty arrays are the correct result for a clean run.`;
@@ -434,7 +434,7 @@ const FINDING = {
         'Short slug naming the underlying cause (what is wrong, not where) — powers the cross-round finding identity, so keep it stable across re-raises.',
     },
   },
-  required: ['title', 'detail'],
+  required: ['title', 'detail', 'rootCause'],
 };
 
 const FINDINGS_SCHEMA = {
