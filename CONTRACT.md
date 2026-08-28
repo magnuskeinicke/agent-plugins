@@ -141,6 +141,17 @@ init → plan → (run pre-pass + reviewers) → collect → (run validator)
      → decide → [fix → apply-fix → plan …] → adjudicate? → report
 ```
 
+`init` takes three loop-shaping options: `--review-only` (one classified
+round, no fix pass — `decide` ends the run with a `clean` / `N blocking
+finding(s)` verdict; magnus:review-code), `--max-rounds <1..5>` (a
+user-supplied cap under the hard cap; magnus:iterate-pr), and
+`--inspect '<cmd>'` (the diff command every prompt cites when the target is
+not a committed branch diff — `git diff HEAD` for uncommitted work,
+`gh pr diff <n>` for a PR reviewed without a checkout). `plan` accepts
+`--coderabbit-cmd '<cmd>'` / `--no-coderabbit` to match the CLI-reviewer
+invocation to the target, and `collect` lists reviewers whose output file is
+`missing` (re-run once, re-collect, or state degraded coverage).
+
 Run state lives in the host repo's gitignored `.context/<slice-id>/`:
 `ledger.json` (the ledger + loop state), `contract.md` (the run contract),
 `round-N/prompts/` (emitted task prompts), `round-N/findings/` (the findings

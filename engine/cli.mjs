@@ -155,6 +155,26 @@ function loadCfg(args) {
   return resolveRepoConfig(raw);
 }
 
+// The commands every prompt uses to see the change. Default is the committed
+// branch diff; `init --inspect` overrides it for other targets (uncommitted
+// work: `git diff HEAD`; a PR reviewed without a checkout: `gh pr diff <n>`).
+// The manifest forms feed the gut-check pre-pass; non-git inspect commands get
+// a `--name-only` manifest and no numstat.
+function inspectCmds(state) {
+  const diffCmd = state.inspect || `git diff ${state.base}...HEAD`;
+  if (diffCmd.startsWith('git diff'))
+    return {
+      diffCmd,
+      nameStatusCmd: diffCmd.replace('git diff', 'git diff --name-status --find-renames'),
+      numstatCmd: diffCmd.replace('git diff', 'git diff --numstat --find-renames'),
+    };
+  return { diffCmd, nameStatusCmd: `${diffCmd} --name-only`, numstatCmd: '' };
+}
+
+function maxRounds(state) {
+  return state.maxRounds || LEDGER_HARD_CAP;
+}
+
 function agentBody(id) {
   const p = join(PLUGIN_ROOT, 'agents', `${id}.md`);
   const text = readFileSync(p, 'utf8');
@@ -184,11 +204,19 @@ function cmdInit(args) {
     return;
   }
   if (!args.base) die('--base <ref> is required');
+  const cap = args['max-rounds'] === undefined ? null : Number(args['max-rounds']);
+  if (cap !== null && (!Number.isInteger(cap) || cap < 1 || cap > LEDGER_HARD_CAP))
+    die(`--max-rounds must be an integer 1..${LEDGER_HARD_CAP}`);
   mkdirSync(dir, { recursive: true });
   if (args['contract-file']) copyFileSync(args['contract-file'], join(dir, 'contract.md'));
   const state = {
     slice: args.slice,
     base: args.base,
+    // Review-only: one classified reviewer round, no fix pass — findings are
+    // the deliverable (magnus:review-code). `decide` ends the run either way.
+    reviewOnly: bool(args['review-only']),
+    maxRounds: cap,
+    inspect: typeof args.inspect === 'string' ? args.inspect : '',
     round: 1,
     phase: 'plan',
     ledger: createLedger(),
@@ -220,7 +248,7 @@ function cmdPlan(args) {
     ...(state.gates.committed === false ? [UNCOMMITTED_FINDING] : []),
   ];
   if (gateFindings.length) {
-    if (state.round >= LEDGER_HARD_CAP) {
+    if (state.round >= maxRounds(state)) {
       state.phase = 'done';
       state.verdict = ledgerVerdict(state.ledger, false);
       saveState(args, state);
@@ -233,7 +261,7 @@ function cmdPlan(args) {
     const promptFile = join(roundDir, 'fix.md');
     writeFileSync(
       promptFile,
-      prompts.fixPrompt(contractText(args, state), gateFindings, state.base, args['commit-rule'] || '', outputFile),
+      prompts.fixPrompt(contractText(args, state), gateFindings, inspectCmds(state).diffCmd, args['commit-rule'] || '', outputFile),
     );
     state.phase = 'fix';
     state.fixTargets = gateFindings.map((f) => f.id);
@@ -282,6 +310,7 @@ function cmdPlan(args) {
 
   const contract = contractText(args, state);
   const overlays = focusOverlay(cfg, areas);
+  const inspect = inspectCmds(state);
   const hh = state.headHistory;
   const fixRange =
     args['fix-range'] ||
@@ -297,7 +326,7 @@ function cmdPlan(args) {
       reviewerId: r.id,
       mode: r.mode,
       contractText: contract,
-      base: state.base,
+      diffCmd: inspect.diffCmd,
       fixRange,
       overlays: overlayFor(r.id, areas, overlays),
       ledger: state.round > 1 ? state.ledger : null,
@@ -318,17 +347,22 @@ function cmdPlan(args) {
 
   // Round-1 one-shots: the gut-check pre-pass (must run BEFORE the reviewers —
   // a `block` stops the run before any lane spend) and the CodeRabbit wrapper.
+  // `--coderabbit-cmd` overrides the config value with a target-matched
+  // invocation (uncommitted vs committed flags); `--no-coderabbit` skips the
+  // lane when the CLI cannot run against this target (e.g. no checkout).
   let prePass = null;
   let coderabbit = null;
   if (state.round === 1) {
     const gutOut = join(findingsDir, 'gut-check.json');
     const gutPrompt = join(promptsDir, 'gut-check.md');
-    writeFileSync(gutPrompt, prompts.gutCheckPrompt(contract, state.base, gutOut));
+    writeFileSync(gutPrompt, prompts.gutCheckPrompt(contract, inspect, gutOut));
     prePass = { id: 'gut-check', promptFile: gutPrompt, outputFile: gutOut };
-    if (cfg.pr.cliReviewer) {
+    const crCmd =
+      typeof args['coderabbit-cmd'] === 'string' ? args['coderabbit-cmd'] : cfg.pr.cliReviewer;
+    if (crCmd && !args['no-coderabbit']) {
       const crOut = join(findingsDir, 'coderabbit.json');
       const crPrompt = join(promptsDir, 'coderabbit.md');
-      writeFileSync(crPrompt, prompts.coderabbitPrompt(contract, cfg.pr.cliReviewer, crOut));
+      writeFileSync(crPrompt, prompts.coderabbitPrompt(contract, crCmd, crOut));
       coderabbit = { id: 'coderabbit', promptFile: crPrompt, outputFile: crOut };
     }
   }
@@ -350,10 +384,29 @@ function cmdPlan(args) {
 
 function cmdCollect(args) {
   const state = loadState(args);
-  if (state.phase !== 'collect') die(`phase is "${state.phase}", expected "collect"`);
+  // Re-runnable until `decide` consumes the round: a dead reviewer gets one
+  // re-run, then collect runs again over the same findings dir (decide moves
+  // the phase past "decide", so a consumed round can never be re-collected).
+  if (state.phase !== 'collect' && state.phase !== 'decide')
+    die(`phase is "${state.phase}", expected "collect"`);
   const dir = runDir(args);
   const roundDir = join(dir, `round-${state.round}`);
   const findingsDir = join(roundDir, 'findings');
+
+  // A reviewer that never wrote its outputFile is a dead reviewer — surfaced
+  // here mechanically (emitted prompt with no findings file), never inferred.
+  const promptsDir = join(roundDir, 'prompts');
+  const emitted = existsSync(promptsDir)
+    ? readdirSync(promptsDir)
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => f.replace(/\.md$/, ''))
+    : [];
+  const present = new Set(
+    (existsSync(findingsDir) ? readdirSync(findingsDir) : [])
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => f.replace(/\.json$/, '')),
+  );
+  const missing = emitted.filter((id) => !present.has(id)).sort();
 
   const raw = [];
   const reports = [];
@@ -398,6 +451,7 @@ function cmdCollect(args) {
         action: 'hard-stop',
         reason: 'gut-check block: work outside the ticket requirements — the human decides',
         blocks: blocks.map(ledgerEntryFinding),
+        missing,
         invalid,
       });
       return;
@@ -424,7 +478,7 @@ function cmdCollect(args) {
     const promptFile = join(validateDir, 'validator-prompt.md');
     writeFileSync(
       promptFile,
-      prompts.validatorPrompt(contractText(args, state), fmtFeedback(kept), state.base, outputFile),
+      prompts.validatorPrompt(contractText(args, state), fmtFeedback(kept), inspectCmds(state).diffCmd, outputFile),
     );
     validator = {
       id: 'pr-relevance-validator',
@@ -440,10 +494,12 @@ function cmdCollect(args) {
     round: state.round,
     findingCount: kept.length,
     suppressed: suppressed.map((f) => f.title),
+    missing,
     invalid,
-    missingReports: invalid.length
-      ? 'invalid reports listed above are EXCLUDED — re-run those reviewers or accept degraded coverage explicitly'
-      : '',
+    missingReports:
+      missing.length || invalid.length
+        ? 'missing/invalid reports listed above are EXCLUDED — re-run those reviewers once, or accept degraded coverage explicitly (zero findings only counts as clean when every reviewer reported)'
+        : '',
     validator,
     next: kept.length
       ? 'run the validator, then `decide --verdicts <outputFile>`'
@@ -477,6 +533,25 @@ function cmdDecide(args) {
   ledgerIngest(state.ledger, state.round, validated);
   state.pendingFindings = [];
 
+  // Review-only run: the classified findings ARE the result — no fix pass, no
+  // adjudication (disputes only exist after a fix pass), verdict in report
+  // language rather than loop language.
+  if (state.reviewOnly) {
+    const open = ledgerOpenBlocking(state.ledger);
+    state.phase = 'done';
+    state.verdict = open.length
+      ? `${open.length} blocking finding(s) (${open.map((e) => e.id).join(', ')})`
+      : 'clean';
+    saveState(args, state);
+    out({
+      action: 'report',
+      verdict: state.verdict,
+      open: open.map(ledgerEntryFinding),
+      next: 'run `report` — review-only: findings are the deliverable, nothing gets fixed here',
+    });
+    return;
+  }
+
   const prev = state.snapshots[state.snapshots.length - 1];
   const { progressed, snapshot } = ledgerProgress(prev, state.ledger, gateCleared);
   state.snapshots.push(snapshot);
@@ -488,7 +563,7 @@ function cmdDecide(args) {
 
   let action;
   if (!targets.length) action = 'converged';
-  else if (state.round >= LEDGER_HARD_CAP) action = 'stalled';
+  else if (state.round >= maxRounds(state)) action = 'stalled';
   else if (state.stalledRounds >= LEDGER_STALL_LIMIT) action = 'stalled';
   else action = 'fix';
 
@@ -500,7 +575,7 @@ function cmdDecide(args) {
       prompts.fixPrompt(
         contractText(args, state),
         targets,
-        state.base,
+        inspectCmds(state).diffCmd,
         args['commit-rule'] || '',
         outputFile,
       ),
@@ -577,7 +652,7 @@ function cmdAdjudicate(args) {
   const promptFile = join(dir, 'prompt.md');
   writeFileSync(
     promptFile,
-    prompts.adjudicatorPrompt(contractText(args, state), disputed, state.base, outputFile),
+    prompts.adjudicatorPrompt(contractText(args, state), disputed, inspectCmds(state).diffCmd, outputFile),
   );
   saveState(args, state);
   out({
@@ -603,16 +678,27 @@ function cmdApplyAdjudication(args) {
 
 function cmdReport(args) {
   const state = loadState(args);
-  const advisory = state.ledger.entries.filter(
-    (e) => e.status === 'open' && e.severity === 'advisory',
-  );
+  // Classified view (confidence + diffCaused ride along) so a report consumer
+  // can present blocking / advisory / unverified without re-deriving thresholds.
+  const classified = (e) => ({
+    ...ledgerEntryFinding(e),
+    confidence: e.confidence ?? null,
+    diffCaused: e.diffCaused ?? null,
+  });
+  const entries = state.ledger.entries;
   out({
     slice: state.slice,
     round: state.round,
     phase: state.phase,
     verdict: state.verdict ?? '(loop still running)',
     report: ledgerReport(state.ledger),
-    advisoryNotes: advisory.map(ledgerEntryFinding),
+    blocking: entries
+      .filter((e) => e.status === 'open' && e.severity === 'blocking')
+      .map(classified),
+    advisoryNotes: entries
+      .filter((e) => e.status === 'open' && e.severity === 'advisory')
+      .map(classified),
+    unverified: entries.filter((e) => e.status === 'dropped').map(classified),
   });
 }
 

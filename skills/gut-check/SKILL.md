@@ -1,6 +1,6 @@
 ---
 name: gut-check
-description: 'Rubric-free first read of a diff — one question, answered plainly: does anything jump out as strange, unusual, or unnecessary? No severities, no report template, no fix mandate; "nothing jumps out" is a valid, complete answer. Use when the user says "gut check", "gut check this diff/branch/PR", "does anything jump out", "first read", "quick sanity read", or when a branch feels off but nobody can name why — before a deeper /review-code or /iterate-pr pass. Also runs automatically as the round-1 pre-pass inside the work-slice / iterate-pr review loops.'
+description: 'Rubric-free first read of a diff — one question, answered plainly: does anything jump out as strange, unusual, or unnecessary? No severities, no report template, no fix mandate; "nothing jumps out" is a valid, complete answer. Use when the user says "gut check", "gut check this diff/branch/PR", "does anything jump out", "first read", "quick sanity read", or when a branch feels off but nobody can name why — before a deeper /review-code or /iterate-pr pass. Also runs automatically as the round-1 pre-pass inside the work-slice / iterate-pr / review-code engine rounds.'
 argument-hint: "[--base <branch>] [PR number | nothing = current branch vs the repo's integration branch]"
 ---
 
@@ -64,7 +64,7 @@ Inline, in chat — no report file, nothing written or fixed. Per item, most sur
 
 - Read-only: never edit files, create reports, or open issues.
 - Never pad, never escalate severity, never re-dress a checklist finding as surprise.
-- In the workflow loops (work-slice / iterate-pr) this runs **once per run, round 1 only, before the reviewer lanes** — a `block` stops the run before any reviewer spend.
+- In the engine-driven rounds (work-slice / iterate-pr / review-code) this runs **once per run, round 1 only, before the reviewer lanes** — a `block` stops the run before any reviewer spend.
 
 ---
 

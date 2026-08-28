@@ -1,12 +1,12 @@
 ---
 name: iterate-pr
-description: Run bounded review ⇄ fix rounds on an EXISTING pull request — fan out the shared reviewer lanes on the PR diff, fix every blocking finding test-first, commit and push back to the PR branch. Standalone: no PRD, no slice tickets, no stack bookkeeping. Use when the user says "iterate on PR <n>", "run review rounds on this PR", "polish PR <n>", "review and fix this PR", or wants the work-slice review-fix loop applied to a PR outside the big pipeline.
+description: Run bounded review ⇄ fix rounds on an EXISTING pull request — the engine CLI drives the shared reviewer roster on the PR diff, fixes land test-first, commits push back to the PR branch. Standalone: no PRD, no slice tickets, no stack bookkeeping. Use when the user says "iterate on PR <n>", "run review rounds on this PR", "polish PR <n>", "review and fix this PR", or wants the work-slice review-fix loop applied to a PR outside the big pipeline.
 argument-hint: "[PR number | issue id | nothing = current branch's PR]"
 ---
 
 # Iterate PR
 
-Take an **existing PR** and run the same bounded **review ⇄ fix loop** the feature-dev workflows use — baseline + diff-matched web/server lanes + reuse + scope-fidelity reviewers + the review-CLI wrapper in round 1 only (Sonnet), findings gated by a relevance validator and tracked in a finding ledger, fixes test-first (Opus) — without any of the pipeline around it. No PRD, no slice claim, no Playwright. The loop converges (or hits its cap), the fixes are pushed to the PR branch, and — under `/goal` — a `/babysit-stack` finish stage drives the PR the rest of the way to "in order" (CI green, threads resolved).
+Take an **existing PR** and run the same bounded **review ⇄ fix loop** `/work-slice` uses — the plugin's **engine CLI** drives gut-check, the roster reviewers, the relevance validator, the finding ledger (stable `CR-NNN` ids), test-first fix passes, and the stop conditions — without any of the pipeline around it. No PRD, no slice claim, no Playwright. The loop converges (or stalls), the fixes are pushed to the PR branch, and — under `/goal` — a `/babysit-stack` finish stage drives the PR the rest of the way to "in order" (CI green, threads resolved).
 
 Division of labour with the siblings:
 
@@ -16,10 +16,10 @@ Division of labour with the siblings:
 
 ## Repo contract — resolve this first
 
-Read `docs/agents/repo-config.md` (its `## Config` JSON block). Pass it to the
-workflow verbatim as `repoConfig`; the placeholders below stand for its values
-in the prose. Missing file or empty key → the workflow's generic defaults apply
-and you say so once.
+The engine CLI reads `docs/agents/repo-config.md` itself (`--config`, defaulting
+to that path in the host repo root). The placeholders below stand for its values
+where this skill acts directly. Missing file or empty key → the generic
+defaults apply and you say so once.
 
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
@@ -27,7 +27,11 @@ and you say so once.
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
 | `<BOT>` | `pr.botReviewer` | no bot review round to request or wait on |
 | `<CLI-REVIEWER>` | `pr.cliReviewer` | that reviewer lane is skipped |
+| `<CONVENTIONS>` | `conventionsFile` | `CLAUDE.md` |
 | `<STACK>` | `pr.stackTool` | plain branches; nothing to restack |
+
+Which reviewers exist and when they trigger: `../work-slice/references/reviewer-roster.md`
+(documentation; `engine/lib/roster.mjs` is the source of truth).
 
 ## Step 1 — Resolve the PR and its branch
 
@@ -49,26 +53,25 @@ The PR must be **open**. Merged/closed → stop and tell the user.
 ```bash
 changedFiles: git diff --name-only origin/<base>...HEAD
 addedFiles:   git diff --name-only --diff-filter=A origin/<base>...HEAD
-diffStat:     git diff --shortstat origin/<base>...HEAD   # gates the scope-fidelity lane
+deletedFiles: git diff --name-only --diff-filter=D origin/<base>...HEAD
+insertions:   git diff --shortstat origin/<base>...HEAD   # the inserted-line count
 ```
 
 If the diff is empty, stop — nothing to iterate.
 
-Also capture, for the workflow args:
+Also capture:
 
 - `head`: `git rev-parse HEAD` — seeds the focused re-review delta.
-- `testsGreen`: from `gh pr checks <n>` — `true` only when the head's checks
-  are green; failing or still-pending checks → `false`, which spends round 1
-  on a fix pass instead of reviewers (an existing commit is no evidence its
-  tests pass).
+- `testsGreen`: from `gh pr checks <n>` — `true` only when the head's checks are green; failing or still-pending checks → `false`, which makes the CLI spend round 1 on a gate-fix pass instead of reviewers (an existing commit is no evidence its tests pass).
 
 ## Step 2 — Gather context
 
 - PR title + body (trim the stack tool's navigation section, if any).
-- If the title carries an `<ISSUE>` id → fetch that issue from `<TRACKER>` and include its **acceptance criteria** (and `## Test plan` if present) — that's what reviewers judge "missed AC" against. Set `hasAcceptanceCriteria: true` only when real AC actually made it into the context (title/body alone doesn't count — it gates the scope-fidelity lane, which must judge necessity against a frozen AC, never the diff).
+- If the title carries an `<ISSUE>` id → fetch that issue from `<TRACKER>` and include its **acceptance criteria** (and `## Test plan` if present) — that's what reviewers judge "missed AC" against.
 - `commitPrefix` = the issue id when present, else `PR-<n>`.
-- Optionally set `declaredAreas` (from `frontend|backend|database|i18n|security|performance`) when the change touches an area its paths don't reveal.
-- Optionally take a round cap from the user ("one round", "up to 5 rounds") → `maxRounds` (default 3, hard max 5).
+- Optionally note `declaredAreas` (from `frontend|backend|database|i18n|security|performance`) when the change touches an area its paths don't reveal.
+- `userFacing` — biases **true**; false only for clearly internal-only changes.
+- Optionally take a round cap from the user ("one round", "up to 5 rounds") → `--max-rounds` (1–5; omitted = the engine's own stop conditions govern, hard cap 5).
 
 ## Setting the goal — before the loop starts
 
@@ -80,67 +83,80 @@ pushed, CI green, all review threads resolved — /babysit-stack verdict on
 PR <n> reads GOAL MET (needs-human blockers count as not met)
 ```
 
-**Re-entry (every /goal iteration) is stage detection, not memory:** the review workflow already ran and finished with its fixes pushed (branch not ahead of `origin/<headRefName>`, summary in the transcript or a `## Review ledger` comment posted) → skip to Step 5's babysit pass. Otherwise resume at the step whose artifact is missing. Never re-run the review workflow after it converged or stalled — one workflow invocation per /iterate-pr run; everything after is babysit passes.
+**Re-entry (every /goal iteration) is stage detection, not memory:** `node <ENGINE> status --slice pr-<n>` names the loop's phase. Phase `done` with fixes pushed (branch not ahead of `origin/<headRefName>`) → skip to Step 5's babysit pass; phase `done` with unpushed commits → Step 4; any other phase → resume the loop at the pending step. Never re-`init` a finished run — one engine run per PR per /iterate-pr invocation; everything after `done` is babysit passes.
 
-## Step 3 — Run the loop (Workflow)
+## Step 3 — Run the loop (engine CLI)
 
-This step runs as a **single `Workflow` call** — invoking it here is the sanctioned opt-in. **Do not review or fix in the main session** — the workflow owns the loop.
+The loop machinery is the plugin's **engine CLI** — a dependency-free Node CLI. **Loop control is deterministic CLI output, never prose discipline:** run each command from the host repo root, read the JSON it prints, and do exactly what its `action` / `next` field says. Never re-derive reviewer selection, finding suppression, classification thresholds, or stop conditions yourself — the CLI owns them, and its run state lives in the host repo's gitignored `.context/pr-<n>/`. **Do not review or fix in the main session** — emitted tasks own that.
 
-`scriptPath` must be an **absolute** path into this plugin's install root — the
-script ships with the plugin, not with the host repo, so a repo-relative path
-resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/iterate-pr/iterate-pr.workflow.js`
-when that variable is set, otherwise
-`ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/iterate-pr/iterate-pr.workflow.js | sort -V | tail -1`.
-Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
+Resolve `<ENGINE>` once — it lives in the **plugin install root**, not the host repo:
 
-```
-Workflow({
-  scriptPath: "<PLUGIN_ROOT>/skills/iterate-pr/iterate-pr.workflow.js",
-  args: {
-    prNumber,       // e.g. 2580
-    baseBranch,     // "origin/<baseRefName>" from Step 1
-    head,           // PR head sha (Step 1) — seeds the focused re-review delta
-    testsGreen,     // from `gh pr checks` (Step 1) — false = round 1 is a fix pass
-    context,        // PR title/body + linked-ticket AC/test plan (Step 2)
-    changedFiles,   // Step 1 — with addedFiles, gates the reuse reviewer
-    addedFiles,     // Step 1
-    diffStat,       // Step 1 — gates the scope-fidelity lane on round 1
-    hasAcceptanceCriteria, // Step 2 — true only when context carries the ticket's AC; gates the scope-fidelity lane
-    declaredAreas,  // optional area hints
-    maxRounds,      // optional, default 3 (hard max 5)
-    commitPrefix,   // the issue id or "PR-<n>" — commit-message prefix
-    repoConfig      // the JSON block from docs/agents/repo-config.md, if present
-  }
-})
+```bash
+engine="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/engine/cli.mjs}"
+[ -n "$engine" ] && [ -f "$engine" ] || engine="$(realpath "<this-skill-dir>/../..")/engine/cli.mjs"  # symlinked install
+[ -f "$engine" ] || engine="$(ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/engine/cli.mjs 2>/dev/null | sort -V | tail -1)"
 ```
 
-The workflow: a **gut-check pre-pass** opens the first reviewer round (once per run, before the lanes — the `gut-check` skill's rubric-free first read; `route`d observations enter the ledger like any reviewer finding, a `block` — work outside the PR's stated scope — hard-stops for the human) → reviewers in parallel per round (baseline always; at most 2 lanes; reuse when the diff adds or modifies files; scope-fidelity when `hasAcceptanceCriteria` is set AND the diff adds new files or >~150 inserted lines; the `<CLI-REVIEWER>` wrapper joins the first reviewer round only — once per run, never on fix rounds; skipped entirely when `pr.cliReviewer` is empty) → findings enter a **ledger** (stable `CR-NNN` ids, fingerprint = lane + file + root cause, statuses `open|addressed|deferred|disputed|dropped`; disputed/deferred re-raises auto-suppressed) → a **relevance validator** classifies each finding before any fix (≥80 confidence + diff-caused = fixable; 60–79 or pre-existing = advisory note/consolidation, never fixed here; <60 = dropped as UNVERIFIED) → zero open blocking findings with every lane reporting = **converged**; otherwise one Opus fix pass (test-first, commit, never push; `addressed` records the fix commit hash) → re-review focused on the fix delta. The loop stops on the first of: converged / two consecutive rounds without material progress (debt score drop ≥1, a blocking finding dying, or a gate clearing) / per-finding deferral after 2 failed fix attempts / the hard cap — a safety boundary, not a target. Disputed findings get a **closeout adjudication** by an independent Opus agent on evidence only (upheld = reopened into the stalled verdict, deadlock = reported for the human). Same tests/commit gates and dead-reviewer rule as work-slice. Verify `args` reached the script (a returned "(unknown PR)" means they didn't — bake literals and re-run).
+**Write the run contract.** `mkdir -p .context/pr-<n>` and write `.context/pr-<n>/contract.md` — the text every prompt in the loop (reviewers, validator, fixer, adjudicator) receives: the PR number + title + body (trimmed), the linked ticket's acceptance criteria / test plan verbatim when Step 2 found them (say so when it didn't — reviewers then judge against the diff and conventions alone), and the commit rule: message starts with `<commitPrefix>`; **never `git push`** (the skill pushes once, in Step 4).
 
-## Codex fallback — no `Workflow` tool
+**Start the loop:**
 
-Codex has no `Workflow` tool. Run the loop by hand with the same contract: the
-gut-check pre-pass, then the selected reviewers one at a time, then the
-relevance validator, then one fix pass over the eligible findings — repeating
-until a stop condition fires (converged / two rounds without material progress /
-a fingerprint deferred after 2 fix attempts / the round cap). Keep the ledger
-yourself as a scratch table of `CR-NNN` id, fingerprint, status. Every rule in
-Step 3 holds; only the parallelism is lost.
+```bash
+node "$engine" init --slice pr-<n> --base origin/<baseRefName> \
+  --tests-green <bool> --committed true [--max-rounds <n>]
+```
+
+`resumed: true` means a prior run's state exists — run `status` and continue at the phase it names instead of restarting.
+
+**Obey the CLI** (`status` re-prints the pending step any time):
+
+```bash
+node "$engine" plan --slice pr-<n> --changed-files <csv> --added-files <csv> --deleted-files <csv> \
+  --insertions <n> --user-facing <bool> [--declared-areas <csv>] --head <head> \
+  --commit-rule '<commitPrefix> …; never push' \
+  [--coderabbit-cmd 'coderabbit review --agent --committed --base-commit "$(git merge-base origin/<base> HEAD)" -c <CONVENTIONS>']
+# → gate-fix (red CI: run ONE fix implementer with the emitted prompt, then apply-fix), or
+# → the round's task manifest: prePass (round 1), coderabbit (round 1, when configured), reviewers[]
+node "$engine" collect --slice pr-<n>
+# → validator task when findings survived suppression; run it, then
+node "$engine" decide --slice pr-<n> --verdicts <verdicts.json> --commit-rule '<commitPrefix> …; never push'
+# action=fix        → run ONE fresh fix implementer with fix.promptFile → apply-fix --result <fix-result.json>
+#                     → plan again with the fix range's files (git diff --name-only <prevHead>..<newHead>, etc.)
+# action=adjudicate → adjudicate → run ONE fresh agent with the emitted prompt (never the fix implementer)
+#                     → apply-adjudication --rulings <rulings.json>
+# action=converged|stalled|hard-stop → the loop is over:
+node "$engine" report --slice pr-<n>
+```
+
+**Running an emitted task.** Every task names an `agentFile` (the roster file — its body is the agent's system prompt), a `promptFile` (the task), an `outputFile` (the JSON the agent must write), and a `model` when the roster file pins one. Mechanism is runtime-dependent; **subagents are an optional accelerator, the loop is sequential-first**: Claude spawns each reviewer as a subagent from its agent definition (read-only, so run a round's reviewers **in parallel**); Codex runs background `codex exec` children with the agent-file body prepended to the task prompt; with neither, run each reviewer yourself, one at a time, adopting the roster persona fresh per reviewer — and disclose the fallback once. Sequential costs wall-clock only; it is **never a licence to drop a reviewer**.
+
+Ground rules, regardless of mechanism:
+
+- **Gut-check runs first** (round 1). If its JSON contains any `"disposition": "block"` observation — work outside the PR's stated scope — skip the reviewers and run `collect` immediately: it hard-stops for the human before any reviewer spend.
+- **Every emitted reviewer must report before `collect` settles.** `collect` lists `missing` and `invalid` reports: re-run each dead reviewer once, then run `collect` again; still dead → proceed, but state the degraded coverage explicitly (it rides into the Step 4 report as such) — zero findings only counts when every reviewer actually reported.
+- **Reviewers are read-only** — only fix agents edit code. Fix and adjudicator agents are always **fresh**.
+- **Model roles:** fix passes and the adjudicator get the strongest model; reporters (reviewers, gut-check, CodeRabbit wrapper, validator) run leaner. Aliases only, never exact model ids; honor a task's `model` field when present.
+- `--head` on the **first** `plan` only; `apply-fix` records each fix head itself. After each `apply-fix`, recompute the next `plan`'s file flags from the **fix range** (`<prevHead>..<newHead>`).
+- Fix commits stay local — the commit rule forbids pushing; Step 4 pushes once.
+- Never hand-edit `.context/pr-<n>/ledger.json` or a findings file — findings enter through reviewer output files, decisions exit through the CLI.
+
+The stop conditions live in the CLI (convergence, two-round stall, per-fingerprint deferral, the round cap — a safety boundary, not a target). A non-converged stop reports `stalled — shipped with N open findings (CR-…)`, never a silently exhausted cap. A `hard-stop` (gut-check block) goes straight to the user — no push.
 
 ## Step 4 — Push and report
 
-If the workflow landed fix commits (`fixCommitsLanded`):
+If the loop landed fix commits (`git rev-list --count origin/<headRefName>..HEAD` > 0):
 
 1. `git push` the branch (plain push — commits were appended, no history rewrite).
 2. **Stack awareness:** if other open PRs base on this branch (`gh pr list --state open --json number,baseRefName` filtered on `headRefName`), tell the user the upstack branches need restacking — the mechanics live in `babysit-stack` ("Branch switching & restacking"); don't restack other worktrees' branches unasked.
-3. If the loop **stalled** (or died reviewers blocked convergence), post the leftovers on the PR: `gh pr comment <n> --body` with the verdict line verbatim (`stalled — shipped with N open findings (CR-…)`), a `## Review ledger` section from the returned `ledgerText` (open/deferred/disputed entries with their `CR-NNN` ids, dispute evidence, and adjudication rulings), plus any `[advisory:…]` / `[disputed:…]` notes.
+3. If the loop **stalled** (or dead reviewers blocked convergence), post the leftovers on the PR: `gh pr comment <n> --body` with the verdict line verbatim, then a `## Review ledger` section from `report`'s `report` text (open/deferred/disputed entries with their `CR-NNN` ids, dispute evidence, and adjudication rulings), plus advisory notes worth a human glance.
 
-Then print, from the returned summary:
+Then print, from `report`'s output plus the findings/fix files:
 
-- The **verdict verbatim**: `converged` in N rounds, or `stalled — shipped with N open findings (CR-…)` — plus why it stopped (no material progress vs hard cap).
-- Reviewers per round; flag dead reviewers; findings the relevance gate demoted (advisory) or dropped (unverified).
+- The **verdict verbatim**: `converged` in N rounds, or `stalled — shipped with N open findings (CR-…)` — plus why it stopped (no material progress vs the cap).
+- Reviewers per round; dead reviewers; findings the relevance gate demoted (`advisoryNotes`) or dropped (`unverified`).
 - What the fix passes changed (diff stat) and the pushed head.
-- Judgement-call notes + disputed findings with their adjudication rulings (a deadlock is the human's to settle on the PR).
-- Consolidation candidates (offer to file them on `<TRACKER>` with the chore type label + the triage opt-out label from `labels`, per `tracker.docPath` — file only if the user says yes; this skill has no slice machinery that auto-files them).
+- Judgement-call notes and disputed findings with their adjudication rulings (a deadlock is the human's to settle on the PR).
+- Consolidation candidates from `.context/pr-<n>/round-*/findings/*.json` (offer to file them on `<TRACKER>` with the chore type label + the triage opt-out label from `labels`, per `tracker.docPath` — file only if the user says yes; this skill has no slice machinery that auto-files them).
 
 If round 1 was already clean, say so and push nothing.
 
@@ -161,11 +177,13 @@ No goal set → Step 5 is still worth **one** pass (so the report ends on live C
 
 - **Never merge, approve, mark ready, or close** — a draft stays a draft; state changes are the human's.
 - The review loop never touches existing review threads (reply/resolve) — thread work happens only inside the Step 5 `/babysit-stack` passes, under that skill's rules and caps.
-- One `Workflow` invocation per run — including across /goal re-entries. The loop terminates on its stop conditions (converged / two rounds without material progress / per-finding deferral / the hard cap, default 3, max 5 — a safety boundary, not a target); a stalled verdict's ledger goes onto the PR as a comment, never into more rounds. Persistence after the loop is babysit passes, not more review rounds.
+- **The CLI owns the loop.** Reviewer selection, suppression, the relevance gate's thresholds, gate injection, stall/cap stops, dispute adjudication flow, and the verdict all come from `<ENGINE>`'s JSON output — never re-derive them in prose, never hand-edit `.context/pr-<n>/ledger.json` or a findings file, and never skip a command because you "know" what it will say.
+- **One engine run per PR per invocation — including across /goal re-entries.** A finished run (`status` phase `done`) is never re-`init`ed into more rounds; a stalled verdict's ledger goes onto the PR as a comment. Persistence after the loop is babysit passes, not more review rounds.
+- **Fan-out is mechanism-agnostic; subagents are an optional accelerator.** Parallel subagents, `codex exec` children, or inline-sequential all satisfy the same contract: every emitted task's `outputFile` written before `collect` settles. A dead reviewer (missing/invalid output after one re-run) means degraded coverage stated explicitly, never silent convergence.
 - `/goal` is user-typed, never self-set; the skill works identically without it. A `needs-human` blocker is reported as the stop reason, not worked around.
-- Fixes stay inside the PR's existing scope; consolidations become proposals, not code.
-- Model roles fixed, aliases only: reviewers + the relevance validator **Sonnet**, fixers + the closeout adjudicator **Opus** — never pin exact ids or effort.
-- Reviewer definitions come from the host repo's `repoConfig.reviewers` (docs/agents/repo-config.md), merged over the plugin's generic lanes at runtime — tune there, never fork inline.
+- Fixes stay inside the PR's existing scope; consolidations become proposals, not code. TDD discipline is carried in the fix prompts (red-green where behaviour changes).
+- Model roles fixed, aliases only: reporters leaner, fixers + the closeout adjudicator the strongest — never pin exact ids or effort.
+- The roster in `agents/` is the lane source; the host's `reviewers.*` config is an additive focus overlay the CLI applies. Tune `docs/agents/repo-config.md`, never fork lanes inline.
 - No Playwright loop — that needs acceptance criteria + a runnable slice and belongs to `/work-slice` / `/work-issue`.
 - Never check out a branch held by another worktree; never force-push.
 - Works on other people's PRs too — but say so in the report and don't push to a fork you don't have rights on (stop and tell the user instead).
