@@ -6,7 +6,7 @@ commands, conventions, reviewer lenses, exemplars, domain language.
 
 Skills read well-known paths in the host repo and degrade gracefully when a file
 or key is absent. Nothing host-shaped is ever baked into the plugin: the
-built-in fallbacks in `shared/repo-config-defaults.js` are deliberately generic,
+built-in fallbacks in `engine/lib/defaults.mjs` are deliberately generic,
 so a missing key costs you sharpness, never correctness-in-another-repo's-terms.
 
 Scaffold a fresh repo's half of this contract with **`/magnus:init-repo`**.
@@ -23,14 +23,14 @@ Scaffold a fresh repo's half of this contract with **`/magnus:init-repo`**.
 | the file named by `conventionsFile` | the repo's written conventions, cited by every reviewer | reviewers fall back to the diff's own idiom |
 
 `docs/agents/repo-config.md` must contain a fenced ```json block under a
-`## Config` heading. Skills read that block and pass it verbatim as `repoConfig`
-in the Workflow args, or apply the values directly when running without a
-workflow.
+`## Config` heading. The engine CLI reads that file itself (`--config`,
+defaulting to `docs/agents/repo-config.md` in the working directory); skills
+apply the same values directly wherever they act without the CLI.
 
 ## Config keys
 
-Every key is optional. The **Default** column is what `shared/repo-config-defaults.js`
-supplies; `resolveRepoConfig()` in `shared/reviewer-engine.js` merges the host's
+Every key is optional. The **Default** column is what `engine/lib/defaults.mjs`
+supplies; `resolveRepoConfig()` in `engine/lib/config.mjs` merges the host's
 values over it two levels deep, so partial objects are fine (set
 `reviewers.database` and the other five lanes keep the generic lens).
 
@@ -102,8 +102,18 @@ the run says so rather than inventing a start command.
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `areaPaths` | area → (regex source \| `{re, flags}`)[] | language-generic patterns | which area reviewers a diff triggers |
-| `reviewers` | area → `{skills, focus}` | generic lens per area, naming no framework/path/skill | what each lane applies and looks for |
+| `areaPaths` | area → (regex source \| `{re, flags}`)[] | language-generic patterns | which risk areas a diff triggers (feeds reviewer selection + the overlay) |
+| `reviewers` | area → `{skills, focus}` | generic lens per area, naming no framework/path/skill | an **additive focus overlay** appended to the prompts of the roster reviewers covering that area |
+
+**The reviewer roster in `agents/` is the lane source, not this key.** The
+engine (`engine/lib/roster.mjs`) selects reviewers from the vendored
+kramme-cc-workflow roster — an always-on tier (code-reviewer,
+silent-failure-hunter, deslop-reviewer), a round-1 tier (lean-reviewer,
+code-simplifier, codebase-pattern-reviewer in diff reuse audit mode), and
+mechanically-triggered conditionals (tests, types, removals, conventions,
+overengineering, performance, the four-agent security bundle, a11y/copy).
+Whatever a host writes under `reviewers.<area>` sharpens the prompts of the
+reviewers covering that area; it never adds, removes, or replaces a lane.
 
 Areas: `frontend`, `backend`, `database`, `i18n`, `security`, `performance`.
 `performance` has no path triggers (it is force-added whenever `frontend`
@@ -116,29 +126,32 @@ triggers); `security` is force-added whenever `backend` triggers.
 | `goldenPaths` | layer → file | `{}` | canonical "mirror this" exemplar per layer; **binding** for implementers, deviations declared in the PR provenance table. `magnus:to-issues` writes back entries it pins. |
 | `libMap` | lib path → one-line purpose | `{}` | the reuse reviewer's search index; empty means it searches `sourceDirs` blind |
 
-## Plugin-side shared files
+## The engine CLI
 
-Workflow scripts must be self-contained — the `Workflow` runtime cannot import
-files — so `shared/sync.sh` copies these verbatim into each script between
-`// >>> shared:<name>` / `// <<< shared:<name>` markers. All three are
-plugin-owned; **no host file is ever synced in.**
+The review machinery is a dependency-free Node CLI at `engine/cli.mjs`
+(config resolution, area mapping, roster selection, finding schemas, the
+finding ledger, prompt emission, classification thresholds, stall/cap stop
+conditions, the closeout adjudicator). **Loop control is deterministic CLI
+output, never prose discipline**: the orchestrating agent runs
+`node <plugin-root>/engine/cli.mjs <command>` from the host repo root and obeys
+the JSON it prints.
 
-| File | Block | Contents |
-| --- | --- | --- |
-| `shared/repo-config-defaults.js` | `repo-config-defaults` | `REPO_CONFIG_DEFAULTS` — the generic fallback for every key above |
-| `shared/reviewer-engine.js` | `reviewer-engine` | config resolution, lane composition, finding schemas, the finding ledger, the relevance validator, the closeout adjudicator, the scope-fidelity lane |
-| `shared/loop-schemas.js` | `loop-schemas` | structured-output schemas for the implement/fix loops |
-
-```bash
-shared/sync.sh            # copy into every workflow script
-shared/sync.sh --check    # exit 1 if any target drifted
+```
+init → plan → (run pre-pass + reviewers) → collect → (run validator)
+     → decide → [fix → apply-fix → plan …] → adjudicate? → report
 ```
 
-Run it against the plugin **working copy**, never an installed plugin cache dir.
+Run state lives in the host repo's gitignored `.context/<slice-id>/`:
+`ledger.json` (the ledger + loop state), `contract.md` (the run contract),
+`round-N/prompts/` (emitted task prompts), `round-N/findings/` (the findings
+inbox reviewers write JSON into), fix/validator/adjudication artifacts beside
+them. `node --test '<plugin-root>/engine/test/*.test.mjs'` covers the loop.
 
-## Codex note
-
-Codex has no `Workflow` tool. The four workflow-carrying skills
-(`work-slice`, `iterate-pr`, `review-code`, `solve-ready-tickets`) each document
-a sequential fallback: run the same phases one agent at a time, in the order the
-script would have. The contract above is identical either way.
+**Fan-out is mechanism-agnostic.** `plan` emits one task prompt per selected
+reviewer plus the matching roster file in `agents/`; the host runs them however
+its runtime allows — Claude spawns subagents (in parallel) from the agent
+definitions, Codex spawns background `codex exec` children with the agent-file
+body as the system prompt, and inline-sequential is the disclosed fallback.
+Either way every reviewer writes its findings JSON to the `outputFile` the
+manifest names, and `collect` ingests them identically. Losing parallelism is
+never a licence to drop a reviewer.

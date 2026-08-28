@@ -55,7 +55,7 @@ generic default, which is always better than a wrong guess.
 | `skills.*` | `ls .claude/skills/` (and `.codex/skills/`) — map each role to a skill that actually exists; leave empty otherwise |
 | `devServerCommand` / `e2eDir` / `browserGuidePath` | the dev script in the package manifest; a Playwright/Cypress project dir; any existing browser-testing guide |
 | `areaPaths` | the repo's real layout — replace the generic patterns wholesale rather than appending to them |
-| `reviewers` | for each area, name the repo skills that own it (`skills.*` and anything else under `.claude/skills/`) and write a focus line in the repo's own vocabulary. Leave an area empty to keep the plugin's generic lens |
+| `reviewers` | an **additive focus overlay**, not a lane list — the plugin's vendored roster is the lane source. For each area, name the repo skills that own it (`skills.*` and anything else under `.claude/skills/`) and write a focus line in the repo's own vocabulary; the engine appends it to the prompts of the roster reviewers covering that area. Leave an area empty to keep the generic lens |
 | `goldenPaths` | leave **empty** on a first run and say so — pinning an exemplar is a deliberate choice `/magnus:to-issues` makes and writes back. Guessing here is worse than leaving it blank |
 | `libMap` | one line per lib/package: its import name and one-sentence purpose. On a large repo, do the top level first and note that it is partial |
 

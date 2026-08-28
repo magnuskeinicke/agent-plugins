@@ -1,12 +1,12 @@
 // Generic, host-agnostic fallbacks for every `repoConfig` key. A host repo
 // overrides any subset from its docs/agents/repo-config.md `## Config` block;
-// resolveRepoConfig() in shared/reviewer-engine.js merges the two, two levels
-// deep. Nothing here may name a framework, path, package, or skill that only
-// one repo has — that is what the host file is for. See CONTRACT.md.
+// resolveRepoConfig() in config.mjs merges the two, two levels deep. Nothing
+// here may name a framework, path, package, or skill that only one repo has —
+// that is what the host file is for. See CONTRACT.md.
 //
 // Empty string / empty object means "not knowable generically": the skill or
-// workflow degrades gracefully and says so rather than guessing.
-const REPO_CONFIG_DEFAULTS = {
+// engine degrades gracefully and says so rather than guessing.
+export const REPO_CONFIG_DEFAULTS = {
   // '' → resolve at runtime from the repo's default branch
   // (`git symbolic-ref --short refs/remotes/origin/HEAD`).
   integrationBranch: '',
@@ -79,11 +79,13 @@ const REPO_CONFIG_DEFAULTS = {
   },
   // layer → canonical exemplar file. {} → implementers discover exemplars.
   goldenPaths: {},
-  // lib path → one-line purpose; the reuse reviewer's search index.
-  // {} → the reuse reviewer searches sourceDirs blind (slower, still strict).
+  // lib path → one-line purpose; the reuse audit's search index.
+  // {} → the reuse audit searches sourceDirs blind (slower, still strict).
   libMap: {},
-  // Per-area reviewer lens. Generic by design: no framework, path or skill
-  // names. A host repo sharpens any subset via `repoConfig.reviewers`.
+  // Per-area reviewer FOCUS OVERLAY. Additive: the roster in roster.mjs is the
+  // lane source; whatever a host writes here is appended to the prompts of the
+  // reviewers covering that area, never a replacement for them. Generic by
+  // design: no framework, path or skill names.
   reviewers: {
     frontend: {
       skills: '',
