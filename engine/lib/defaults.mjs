@@ -61,6 +61,21 @@ export const REPO_CONFIG_DEFAULTS = {
   devServerCommand: '',
   e2eDir: '',
   browserGuidePath: '',
+  // Design-fidelity extension point. fidelityCheck names a REPO-LOCAL skill or
+  // command (the repo owns the mechanics — Figma access is never assumed);
+  // '' → the fidelity step doesn't exist. See CONTRACT.md for the I/O shape.
+  design: {
+    fidelityCheck: '',
+  },
+  // Slice agent routing (e.g. frontend slices reserved for a stronger-at-UI
+  // agent). labelPrefix '' → routing disabled everywhere. delegate maps an
+  // agent name to a headless command template; {} → mismatched slices are
+  // reported/skipped, never delegated.
+  routing: {
+    labelPrefix: '',
+    frontendAgent: '',
+    delegate: {},
+  },
   // area → path patterns (regex sources; object form `{re, flags}` carries
   // flags). Language-generic on purpose — a host repo replaces these wholesale.
   areaPaths: {

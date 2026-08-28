@@ -44,6 +44,7 @@ once, in your first message.
 | `<TYPE:>` | `labels.typePrefix` | skip the type label |
 | `<BOT>` | `pr.botReviewer` | no bot review round to request or wait on |
 | `<STACK>` | `pr.stackTool` | plain branches; every PR targets `<BASE>` |
+| `<AGENT:>` | `routing.labelPrefix` (with `routing.delegate`) | no agent routing — this runtime works every slice |
 
 Also read the prose docs the config points at when they exist:
 `tracker.docPath`, `labels.docPath`, and `docs/agents/README.md`.
@@ -54,7 +55,8 @@ One invocation advances the pipeline as far as live state allows, then ends
 with a report. A run ends at exactly three kinds of boundary:
 
 - **A human gate** — grilling, the `/to-prd` and `/to-issues` approval gates, a
-  `<HITL>` slice, a `needs-human` babysit blocker, an exhausted cap. Name the
+  `<HITL>` slice, a `needs-human` babysit blocker, an exhausted cap, or a slice
+  reserved for another agent with no `routing.delegate` configured. Name the
   gate and what the human must decide; the human acts, then re-invokes.
 - **Waiting on external state** — CI running, an awaited `<BOT>` review.
   Report what's pending; a re-invocation re-checks. For unattended pacing the
@@ -156,6 +158,23 @@ For each slice, in stack order, until none remain:
    label write), set status **`<IN-PROGRESS>`**. A `<HITL>` slice **stops the
    loop**: report which decision it needs — that's a human gate ending the
    invocation.
+
+   **Slice reserved for another agent** (`<AGENT:><name>` label, `<name>` ≠
+   this runtime — work-slice's routing gate):
+   - `routing.delegate.<name>` configured → **delegate**: run that command
+     template as a child process with the prompt `/work-slice <slice-id>`,
+     wait for it to exit, then verify the slice's **durable markers** (its
+     `.context/<slice-id>/workflow-state.md` checkpoint, engine `status`,
+     branch, PR state) exactly as a re-entry would. Markers show the slice
+     reached PR → continue the loop at the next slice. Child died or markers
+     show a mid-stage stop → report where it stopped; a re-invocation resumes
+     (the delegated slice is re-entrant like any other). Never re-implement a
+     delegated slice in this runtime, and never delegate anything below slice
+     granularity.
+   - No delegate configured → **end the invocation** naming the slice and the
+     agent it waits on ("open it in a `<name>` workspace — e.g. via
+     Conductor — then re-invoke here"); this is a routing boundary, same
+     reporting shape as a human gate.
 2. **Branch (replaces work-slice Step 2).** Branch name
    `<project-slug>/<NN>-<issue-id>` (kebab-cased project name, zero-padded
    stack-order index, slice id — work-slice's naming). One-time, before the
@@ -234,6 +253,11 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
 - One slice at a time, stack order; all caps respected (5 review rounds, 3
   Playwright rounds, babysit's fix caps). Caps exhausted → escalate on the PR,
   never grind.
+- **Routing is honoured, never overridden:** a slice labelled `<AGENT:><name>`
+  for another runtime is delegated (when `routing.delegate.<name>` exists) or
+  reported — never implemented here because delegation is inconvenient. A
+  delegated slice's work is verified from durable markers, not the child's
+  exit code alone.
 - Stacking is `<STACK>` + plain git. Do not create extra worktrees: the whole
   pipeline lives in this one, switching branches as it walks the stack. With
   `gh-stack`: never `gh stack submit` (it opens its own auto-titled PRs) and
