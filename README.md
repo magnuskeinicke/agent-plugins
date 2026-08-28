@@ -78,10 +78,11 @@ node engine/cli.mjs status --slice PROJ-1234   # example invocation
 node --test 'engine/test/*.test.mjs'           # the loop's test suite
 ```
 
-The four `*.workflow.js` scripts still shipped inside some skills are frozen
-Claude-only remnants (their embedded shared blocks no longer have a sync
-source) and are being replaced skill by skill with CLI-driven sequential
-loops that run on both agents.
+The three `*.workflow.js` scripts still shipped inside some skills
+(review-code, iterate-pr, solve-ready-tickets) are frozen Claude-only remnants
+(their embedded shared blocks no longer have a sync source) and are being
+replaced skill by skill with CLI-driven sequential loops that run on both
+agents — `work-slice` already runs CLI-driven.
 
 ## Status
 
@@ -89,4 +90,7 @@ Migration is tracked in the host repo at `.context/agent-plugins-migration-plan.
 (voice-to-text). P1 scaffolded the manifests, P2 landed the 16 skills, P3 cut the host
 repo over, P4 made the suite repo-agnostic, and the Codex-first rework (PR stack,
 2026-08-28) started with PR1: the shared engine became the `engine/` CLI and the
-kramme reviewer roster was vendored into `agents/`. 17 skills, 25 roster agents.
+kramme reviewer roster was vendored into `agents/`. PR2 rewrote `work-slice` onto
+the CLI: sequential-first loop (subagents an optional accelerator), a
+`## Workflow State` resume checkpoint, and no workflow script. 17 skills,
+25 roster agents.

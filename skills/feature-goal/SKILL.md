@@ -4,7 +4,7 @@ description: >
   Run the whole feature pipeline end-to-end under the built-in /goal command:
   grilled plan → PRD (/to-prd) → sliced PR stack (/to-issues) → each slice
   implemented red-green-refactor with the bounded review loop (work-slice
-  workflow) → babysit every PR (bot review, CI, comment resolution) until
+  engine-CLI loop) → babysit every PR (bot review, CI, comment resolution) until
   the stack is green and resolved. Use when I say "run the feature pipeline",
   "take this ticket to a green stack", "start the goal pipeline", "/feature-goal",
   or after a grilling session when I want the feature driven all the way to
@@ -20,8 +20,8 @@ hook blocks stopping until the condition is met — not an orchestrator. This
 skill supplies the orchestration: a stage machine that is **re-entrant** (every
 /goal iteration re-detects where the pipeline stands from observable state and
 does the next thing), built on the existing suite: `grill-with-docs`,
-`to-prd`, `to-issues`, the work-slice workflow, the repo's PR skill, the
-stack tool, `babysit-stack`.
+`to-prd`, `to-issues`, the work-slice engine-CLI loop, the repo's PR skill,
+the stack tool, `babysit-stack`.
 
 ## Repo contract — resolve this first
 
@@ -129,7 +129,7 @@ ride along in the first slice's PR.
 ## Stage SLICE-LOOP — sequential slices in THIS worktree
 
 This is `/work-slice` run slice-after-slice in one session. Follow work-slice
-**verbatim** — Step 1 (select + claim), Step 3 (the workflow), Step 4 (present,
+**verbatim** — Step 1 (select + claim), Step 3 (the engine-CLI loop), Step 4 (present,
 QA evidence, consolidation tickets), Step 5 (push → `create-pr` → draft →
 stack linkage → convention comment) and Step 6 (skeleton map + advance
 `<NEXT>`). Load the `<STACK>` skill before the first stack command
@@ -169,31 +169,15 @@ For each slice, in stack order, until none remain:
    branches *and* local tracking state, and work-slice's Step 5 links the stack
    server-side by PR number instead. Keeping the local side plain git is what lets a slice's fixes be
    rebased later without fighting stale tracking.
-3. **Implement + review loop** — work-slice Step 3's Workflow call, same args
-   contract, unchanged:
-   `scriptPath` must be an **absolute** path into this plugin's install root — the
-   script ships with the plugin, not with the host repo, so a repo-relative path
-   resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/work-slice/work-slice-loop.workflow.js`
-   when that variable is set, otherwise
-   `ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/work-slice/work-slice-loop.workflow.js | sort -V | tail -1`.
-   Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
-
-   ```
-   Workflow({
-     scriptPath: "<PLUGIN_ROOT>/skills/work-slice/work-slice-loop.workflow.js",
-     args: { sliceId, sliceKind, acceptanceCriteria, whereToLook,
-             conventionContract, figma, baseBranch, prdContract, repoConfig }
-   })
-   ```
-   `baseBranch` = predecessor stack branch (skeleton: `<BASE>`). Verify
-   `args` actually reached the script (a past run came back "(unknown slice)")
-   — if the workflow reports a missing slice id, bake the literals into the
-   script rather than re-running blind. The
-   workflow owns implement (Opus, TDD) → up to 5 review rounds (baseline +
-   web/server lanes + reuse, Sonnet) → fix rounds → the Playwright user-story
-   loop (max 3) on user-facing slices. Do not implement or review in the main
-   session. A loop that hits its cap still ships — outstanding findings go
-   onto the draft PR (work-slice Step 4 rules).
+3. **Implement + review loop** — work-slice Step 3 verbatim: write the run
+   contract to `.context/<slice-id>/contract.md` (Kind guidance, AC,
+   where-to-look, convention contract, Figma, PRD contract), run the
+   implement pass, then drive the **engine CLI** (`engine/cli.mjs` in the
+   plugin install root) through `init → plan → collect → decide → apply-fix →
+   adjudicate → report`, obeying its JSON output, then the Playwright
+   user-story loop (max 3) on user-facing slices. `--base` = predecessor
+   stack branch (skeleton: `<BASE>`). A loop that stalls still ships —
+   outstanding findings go onto the draft PR (work-slice Step 4 rules).
 4. **Present + tracker bookkeeping** — work-slice Step 4 verbatim: print the
    summary, upload QA evidence to the slice ticket, file consolidation
    follow-up tickets.
