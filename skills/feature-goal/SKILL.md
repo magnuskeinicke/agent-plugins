@@ -1,27 +1,29 @@
 ---
 name: feature-goal
 description: >
-  Run the whole feature pipeline end-to-end under the built-in /goal command:
+  Run the whole feature pipeline end-to-end as a re-entrant stage machine:
   grilled plan → PRD (/to-prd) → sliced PR stack (/to-issues) → each slice
   implemented red-green-refactor with the bounded review loop (work-slice
   engine-CLI loop) → babysit every PR (bot review, CI, comment resolution) until
-  the stack is green and resolved. Use when I say "run the feature pipeline",
-  "take this ticket to a green stack", "start the goal pipeline", "/feature-goal",
-  or after a grilling session when I want the feature driven all the way to
-  reviewed, green, stacked PRs.
+  the stack is green and resolved. Every invocation re-detects where the
+  pipeline stands from durable markers and advances it — run it again to
+  resume. Use when I say "run the feature pipeline", "take this ticket to a
+  green stack", "resume the feature pipeline", "/feature-goal", or after a
+  grilling session when I want the feature driven all the way to reviewed,
+  green, stacked PRs.
 argument-hint: "[parent issue id]"
 ---
 
 # Feature Goal
 
-The orchestrator that makes the built-in **`/goal`** command useful for
-feature development. `/goal <condition>` is a persistence mechanism — a Stop
-hook blocks stopping until the condition is met — not an orchestrator. This
-skill supplies the orchestration: a stage machine that is **re-entrant** (every
-/goal iteration re-detects where the pipeline stands from observable state and
-does the next thing), built on the existing suite: `grill-with-docs`,
-`to-prd`, `to-issues`, the work-slice engine-CLI loop, the repo's PR skill,
-the stack tool, `babysit-stack`.
+The feature-pipeline orchestrator: a **re-entrant stage machine** built on the
+existing suite — `grill-with-docs`, `to-prd`, `to-issues`, the work-slice
+engine-CLI loop, the repo's PR skill, the stack tool, `babysit-stack`. Every
+invocation re-detects where the pipeline stands from **durable markers**
+(tracker comments, sub-issues, branches, PR state — never conversation memory
+alone) and does the next thing. There is no stop-hook and no self-set goal:
+**persistence is re-invocation** — when a run ends, its report says exactly
+where the pipeline stands and that `/feature-goal <ISSUE>` resumes it.
 
 ## Repo contract — resolve this first
 
@@ -46,37 +48,39 @@ once, in your first message.
 Also read the prose docs the config points at when they exist:
 `tracker.docPath`, `labels.docPath`, and `docs/agents/README.md`.
 
-## Setting the goal — only around the implementation loop
+## Persistence — run again to resume
 
-`/goal` is a **stop-blocker**: its Stop hook refuses to let the session end
-until the condition reads met. That is exactly wrong for the first three
-stages, which are human-in-the-loop — grilling *needs* to stop and wait for the
-user, and both `/to-prd` and `/to-issues` end on an approval gate. A goal set
-there would bounce every one of those pauses.
+One invocation advances the pipeline as far as live state allows, then ends
+with a report. A run ends at exactly three kinds of boundary:
 
-So the boundary is: **GRILL, PRD and SLICE-SPLIT run with no goal set.
-SLICE-LOOP and BABYSIT run under one.**
+- **A human gate** — grilling, the `/to-prd` and `/to-issues` approval gates, a
+  `<HITL>` slice, a `needs-human` babysit blocker, an exhausted cap. Name the
+  gate and what the human must decide; the human acts, then re-invokes.
+- **Waiting on external state** — CI running, an awaited `<BOT>` review.
+  Report what's pending; a re-invocation re-checks. For unattended pacing the
+  user can wrap the re-invocation in whatever cadence the runtime offers
+  (`/loop 15m "/feature-goal <ISSUE>"`, a scheduler, or re-running by hand) —
+  never hot-loop passes back-to-back inside one invocation when only external
+  state is pending.
+- **Done** — the last babysit verdict reads GOAL MET.
 
-The user types `/goal` themselves (it's a user command). When this skill
-reaches the top of SLICE-LOOP and no goal is active, print the template and ask
-them to set it before the first slice starts (keep it short — the condition has
-a length cap):
+Every report ends with the resume line: the current stage, the blocking reason
+if any, and the exact command (`/feature-goal <ISSUE>`) that continues it.
 
+**Checkpoint.** Keep `.context/<ISSUE>/pipeline-state.md` in the host repo
+(gitignored) — a single overwritten `## Workflow State` block:
+
+```markdown
+## Workflow State
+- Stage: GRILL/PRD | SLICE-SPLIT | SLICE-LOOP | BABYSIT | DONE
+- Parent: PROJ-1200
+- Slice cursor: PROJ-1234 (03 of 05) | (none)
+- Last babysit verdict: (none | GOAL MET | NOT MET — <reason>)
 ```
-/goal <ISSUE> feature pipeline done: every slice has an open draft PR,
-all stack PR CI green, <BOT> requested, all review threads resolved —
-/babysit-stack verdict reads GOAL MET (needs-human blockers count as not met)
-```
 
-If the user declines or is away, carry on anyway — the skill works identically
-without a goal set, it just won't auto-resume when the session tries to stop.
-`/goal clear` stops early. If a stage below reports a **human blocker**, say so
-plainly in the attempted stop message — the user decides whether to intervene
-or `/goal clear`.
-
-**If a goal is already active when the skill is invoked at stage GRILL / PRD /
-SLICE-SPLIT**, tell the user to `/goal clear` first — a live goal will fight
-those stages' approval gates.
+Rewrite it at every stage boundary and after every babysit pass. It is a
+cache, not the truth: **stage detection below always wins** — the checkpoint
+just saves a cold re-entry from re-deriving context it can state up front.
 
 ## Stage detection — run this at every (re)entry
 
@@ -92,12 +96,11 @@ there is no parent ticket yet, that's stage 0/1):
    slice loop.
 4. **Every slice has an open or merged PR** → stage BABYSIT (merged slices
    impose no babysit work).
-5. **Last `/babysit-stack` verdict = GOAL MET** → done; the goal condition is
-   met, report and stop.
+5. **Last `/babysit-stack` verdict = GOAL MET** → done; report and stop.
 
 ## Stage GRILL / PRD — human first
 
-The grilling session is **human-in-the-loop and cannot run under the goal**:
+The grilling session is **human-in-the-loop** and always ends the invocation:
 
 - If the current conversation already contains a completed grilling session
   (decision tree traversed, decisions crystallised) → run **`/to-prd`** now: it
@@ -108,8 +111,8 @@ The grilling session is **human-in-the-loop and cannot run under the goal**:
   issue title — the grilling transcript + the tracker issue are the PRD inputs.
 
 Both this stage and SLICE-SPLIT end on a human approval gate (`/to-prd` checks
-the test seams; `/to-issues` presents the breakdown for sign-off). Stopping
-there is correct — do not set a goal before those gates are cleared.
+the test seams; `/to-issues` presents the breakdown for sign-off). Ending the
+invocation there is correct — report the gate and the resume command.
 
 ## Stage SLICE-SPLIT
 
@@ -132,9 +135,12 @@ This is `/work-slice` run slice-after-slice in one session. Follow work-slice
 **verbatim** — Step 1 (select + claim), Step 3 (the engine-CLI loop), Step 4 (present,
 QA evidence, consolidation tickets), Step 5 (push → `create-pr` → draft →
 stack linkage → convention comment) and Step 6 (skeleton map + advance
-`<NEXT>`). Load the `<STACK>` skill before the first stack command
-(non-interactive rules live there). With no `pr.stackTool` configured, skip
-every stack-linking step: each PR simply targets `<BASE>`.
+`<NEXT>`). Work-slice keeps its own per-slice `## Workflow State` checkpoint in
+`.context/<slice-id>/workflow-state.md` — a re-entry mid-slice resumes from
+that (and from the engine CLI's `status`), so an interrupted slice is picked
+up where it stopped, never restarted. Load the `<STACK>` skill before the
+first stack command (non-interactive rules live there). With no `pr.stackTool`
+configured, skip every stack-linking step: each PR simply targets `<BASE>`.
 
 **The one deviation is work-slice's Step 2.** Work-slice assumes Conductor
 handed it a fresh worktree per slice, so it *renames* the branch already
@@ -148,7 +154,8 @@ For each slice, in stack order, until none remain:
    carrier (fallback: earliest unblocked, not-done, not-`<HITL>`), fetch
    slice + parent PRD + Skeleton-map comment, clear `<NEXT>` (additive
    label write), set status **`<IN-PROGRESS>`**. A `<HITL>` slice **stops the
-   loop**: report which decision it needs — that's a human blocker.
+   loop**: report which decision it needs — that's a human gate ending the
+   invocation.
 2. **Branch (replaces work-slice Step 2).** Branch name
    `<project-slug>/<NN>-<issue-id>` (kebab-cased project name, zero-padded
    stack-order index, slice id — work-slice's naming). One-time, before the
@@ -195,10 +202,8 @@ For each slice, in stack order, until none remain:
    unblocked AFK slice (exactly one carrier; `<HITL>` next → don't stamp,
    report the blocker).
 
-Then loop to the next slice. After the last slice, fall through to BABYSIT.
-
-Before the first slice, make sure a goal is set (see "Setting the goal") — this
-is the point where unattended persistence starts paying off.
+Then update the pipeline checkpoint (slice cursor) and loop to the next slice.
+After the last slice, fall through to BABYSIT.
 
 ## Stage BABYSIT
 
@@ -206,15 +211,17 @@ Run **`/babysit-stack <ISSUE>`** — one pass: ensure `<BOT>` is requested on
 every PR, watch/fix CI, address + resolve review threads, restack after fixes.
 It ends with a `VERDICT: GOAL MET | NOT MET` block:
 
-- **NOT MET, actionable items remain** → under /goal the session simply keeps
-  going: run another pass (respecting its per-item caps).
-- **NOT MET, only pending CI / an awaited `<BOT>` review** → say so and attempt to
-  stop; the /goal hook will bounce it, and the next iteration re-checks —
-  babysit-stack's bounded `--watch` paces this instead of hot-looping.
-- **NOT MET, only `needs-human` blockers** → report them clearly and attempt
-  to stop with that as the reason; the human unblocks or `/goal clear`s.
-- **GOAL MET** → the pipeline is done. Report the stack (PRs, verdict table)
-  and stop — the goal condition is satisfied.
+- **NOT MET, actionable items remain** → run another pass now (respecting its
+  per-item caps).
+- **NOT MET, only pending CI / an awaited `<BOT>` review** → nothing to do but
+  wait: record the verdict in the checkpoint and **end the invocation**,
+  naming what's pending — babysit-stack's bounded `--watch` is the only
+  in-pass wait; beyond it, the re-invocation cadence (re-run, `/loop`, a
+  scheduler) paces the re-check.
+- **NOT MET, only `needs-human` blockers** → report them clearly as the stop
+  reason and end the invocation; the human unblocks, then re-invokes.
+- **GOAL MET** → the pipeline is done. Report the stack (PRs, verdict table),
+  set the checkpoint stage to DONE, and stop.
 
 ## Boundaries
 
@@ -233,7 +240,12 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
   never `gh stack link --open` (it un-drafts).
 - Label writes stay additive (Linear's `save_issue.labels` replaces the whole
   set); `<NEXT>` has exactly one carrier; never stamp `labels.agentReady`.
-- Re-entry safe: every iteration re-runs stage detection; never redo a stage
+- Re-entry safe: every invocation re-runs stage detection; never redo a stage
   whose artifacts exist (PRD comment, sub-issues, open PRs) — repair forward.
+  Durable markers always win over the pipeline checkpoint file.
+- **Persistence is re-invocation, never a stop-hook.** A run ends only at a
+  human gate, a waiting-on-external boundary, or DONE — always with the
+  resume line. Never spin passes back-to-back when only external state is
+  pending.
 - A human blocker (HITL slice, needs-human thread, cap-exhausted failure)
   is reported as the stop reason, not worked around.

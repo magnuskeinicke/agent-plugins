@@ -78,10 +78,10 @@ node engine/cli.mjs status --slice PROJ-1234   # example invocation
 node --test 'engine/test/*.test.mjs'           # the loop's test suite
 ```
 
-One `*.workflow.js` script remains (solve-ready-tickets) — a frozen Claude-only
-remnant (its embedded shared blocks no longer have a sync source) awaiting the
-same CLI-driven rewrite `work-slice`, `review-code` and `iterate-pr` already
-run on.
+No `*.workflow.js` scripts remain — every loop-running skill drives the engine
+CLI, and persistence is re-invocation from durable state markers (`## Workflow
+State` checkpoints, `.context/` run state), never a stop-hook or the `Workflow`
+tool.
 
 ## Status
 
@@ -94,4 +94,8 @@ the CLI: sequential-first loop (subagents an optional accelerator), a
 `## Workflow State` resume checkpoint, and no workflow script. PR3 gave
 `review-code` (CLI review-only mode, `--inspect` targets) and `iterate-pr`
 (full loop on an existing PR, `--max-rounds`) the same treatment and deleted
-their workflow scripts. 17 skills, 25 roster agents.
+their workflow scripts. PR4 killed the `/goal` stop-hook dependency —
+`feature-goal`, `work-issue` and `solve-ready-tickets` are re-entrant stage
+machines on durable markers ("run again to resume"), and `solve-ready-tickets`
+drives the engine CLI (last workflow script deleted). 17 skills, 25 roster
+agents.

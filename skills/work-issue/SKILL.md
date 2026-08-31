@@ -1,12 +1,12 @@
 ---
 name: work-issue
-description: The LEAN development loop — take a single tracker issue straight to a reviewed draft PR, skipping grilling/PRD/slicing. Runs the same implement + bounded review-fix + Playwright workflow as /work-slice, then drives the PR to green under /goal via /babysit-stack. For lean tickets only — as judged by the ticket manager's agent-ready label or the user. Use when the user says "work this ticket directly", "run the lean loop on it", "just implement this ticket", "take this issue straight to a PR", or "this doesn't need the full pipeline".
+description: The LEAN development loop — take a single tracker issue straight to a reviewed draft PR, skipping grilling/PRD/slicing. Runs the same implement + bounded review-fix + Playwright workflow as /work-slice, then drives the PR to green via bounded /babysit-stack passes. Re-entrant — run it again to resume from durable markers. For lean tickets only — as judged by the ticket manager's agent-ready label or the user. Use when the user says "work this ticket directly", "run the lean loop on it", "just implement this ticket", "take this issue straight to a PR", or "this doesn't need the full pipeline".
 argument-hint: "[issue id]"
 ---
 
 # Work Issue — the lean loop
 
-Drive **one standalone tracker issue** to a **draft PR**, with the same quality machinery as the big pipeline but none of its planning stages: no grilling, no PRD, no slice split, no stack. The ticket itself is the contract. Implementation runs inside the **work-slice engine-CLI loop** (implement TDD → up to 5 review rounds → Playwright loop max 3), and under `/goal` a `/babysit-stack` finish stage drives the PR to CI-green with resolved threads.
+Drive **one standalone tracker issue** to a **draft PR**, with the same quality machinery as the big pipeline but none of its planning stages: no grilling, no PRD, no slice split, no stack. The ticket itself is the contract. Implementation runs inside the **work-slice engine-CLI loop** (implement TDD → up to 5 review rounds → Playwright loop max 3), and a `/babysit-stack` finish stage drives the PR to CI-green with resolved threads — one bounded pass at a time; **run the skill again to resume**.
 
 When to use which:
 
@@ -55,17 +55,11 @@ Fetch the issue from `<TRACKER>`. Hard gates, in order:
 
 **Acceptance criteria:** take the ticket's `- [ ]` checkboxes verbatim. If it has none, distill them from the description and post them back as a `## Acceptance criteria` comment (idempotent — update an existing one) so QA evidence has rows to reference. Also collect "where to look" pointers and any Figma links from the body.
 
-## Setting the goal — before the loop starts
+## Resume — run again to continue
 
-Same pattern as `/feature-goal`: `/goal` is the built-in stop-blocker the **user types** (a skill cannot set it). Steps 1–2 are the only interactive gates, so set it here, once they're cleared. If no goal is active, print the template and ask (carry on identically if the user declines or is away — the skill just won't auto-resume):
+There is no stop-hook: **persistence is re-invocation.** One invocation advances as far as live state allows, then ends with a report naming where the ticket stands, what (if anything) it is waiting on, and that `/work-issue <ISSUE>` resumes it. For unattended pacing, wrap the re-invocation in whatever cadence the runtime offers (`/loop 15m "/work-issue <ISSUE>"`, a scheduler, or re-running by hand).
 
-```
-/goal <ISSUE> lean loop done: draft PR open, CI green, <BOT> requested,
-all review threads resolved — /babysit-stack verdict on the PR reads
-GOAL MET (needs-human blockers count as not met)
-```
-
-**Re-entry (every /goal iteration) is stage detection from observable state, never memory:**
+**Re-entry is stage detection from durable markers, never memory** (mid-Step-3 resume belongs to work-slice's own `## Workflow State` checkpoint in `.context/<issue-id>/workflow-state.md` and the engine CLI's `status`):
 
 1. No committed diff vs `<BASE>` → Step 3 (implement).
 2. Committed diff, no open/merged PR for the branch (`gh pr list --state all --head <branch>`) → Step 5 (draft PR). Never re-run the review loop after its verdict — converged or stalled, the result stands; leftovers ride on the PR.
@@ -99,9 +93,9 @@ No stack, so this is the short form of work-slice Step 5:
 
 Run **`/babysit-stack <PR number>`** — one pass: `<BOT>` requested (once, ever), CI watched/fixed, review threads addressed + resolved, verdict block at the end. Handle the verdict exactly like `/feature-goal`'s BABYSIT stage:
 
-- **NOT MET, actionable** → run another pass (babysit's per-item caps apply).
-- **NOT MET, only pending CI / an awaited `<BOT>` review** → attempt to stop; the /goal hook bounces and the next iteration re-checks.
-- **NOT MET, only `needs-human`** → report the blockers as the stop reason; the human unblocks or `/goal clear`s.
+- **NOT MET, actionable** → run another pass now (babysit's per-item caps apply).
+- **NOT MET, only pending CI / an awaited `<BOT>` review** → nothing to do but wait: end the invocation, naming what's pending — babysit's bounded `--watch` is the only in-pass wait; a re-invocation re-checks.
+- **NOT MET, only `needs-human`** → report the blockers as the stop reason and end the invocation; the human unblocks, then re-invokes.
 - **GOAL MET** → done. Report the PR + verdict table and stop. The ticket stays **`<IN-PROGRESS>`** — the draft PR is the human review gate; never mark it done.
 
 ## Boundaries
@@ -111,7 +105,7 @@ Run **`/babysit-stack <PR number>`** — one pass: `<BOT>` requested (once, ever
 - Never on pipeline tickets (`<SKIP>`) — redirect to `/work-slice` / `/feature-goal`; never on `<HITL>` unattended.
 - Never create a worktree or branch; never rename the Conductor branch; no stack commands (nothing to stack).
 - All constituent caps respected (5 review rounds, 3 Playwright, babysit's fix/thread caps, one bot review request per PR ever) — caps exhausted → escalate on the PR, never grind.
-- The review loop runs **once** per ticket, including across /goal re-entries — persistence after it is babysit passes, not more review rounds.
+- The review loop runs **once** per ticket, including across re-invocations — persistence after it is babysit passes, not more review rounds.
 - Label writes stay additive; never stamp `<AGENT-READY>` or `labels.sliceNext` on anything; consolidation follow-ups are new tickets, never scope creep.
-- `/goal` is user-typed, never self-set; the skill works identically without it.
+- **Persistence is re-invocation, never a stop-hook.** End the invocation with the resume report instead of spinning on external state; a `needs-human` blocker is the stop reason, not worked around.
 - Model roles fixed, aliases only (implementers Opus, reviewers/verifier Sonnet) — never pin exact ids or effort.

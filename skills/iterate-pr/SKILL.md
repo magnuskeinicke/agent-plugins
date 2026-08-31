@@ -6,12 +6,12 @@ argument-hint: "[PR number | issue id | nothing = current branch's PR]"
 
 # Iterate PR
 
-Take an **existing PR** and run the same bounded **review ⇄ fix loop** `/work-slice` uses — the plugin's **engine CLI** drives gut-check, the roster reviewers, the relevance validator, the finding ledger (stable `CR-NNN` ids), test-first fix passes, and the stop conditions — without any of the pipeline around it. No PRD, no slice claim, no Playwright. The loop converges (or stalls), the fixes are pushed to the PR branch, and — under `/goal` — a `/babysit-stack` finish stage drives the PR the rest of the way to "in order" (CI green, threads resolved).
+Take an **existing PR** and run the same bounded **review ⇄ fix loop** `/work-slice` uses — the plugin's **engine CLI** drives gut-check, the roster reviewers, the relevance validator, the finding ledger (stable `CR-NNN` ids), test-first fix passes, and the stop conditions — without any of the pipeline around it. No PRD, no slice claim, no Playwright. The loop converges (or stalls), the fixes are pushed to the PR branch, and a `/babysit-stack` finish stage drives the PR the rest of the way to "in order" (CI green, threads resolved) — one bounded pass at a time; **run the skill again to resume**.
 
 Division of labour with the siblings:
 
 - **`/review-code`** — one read-only round, report only. Use it when nothing should be changed.
-- **`/iterate-pr`** (this) — review ⇄ fix rounds with **our** reviewers on a PR, then (under `/goal`) babysit that PR to done.
+- **`/iterate-pr`** (this) — review ⇄ fix rounds with **our** reviewers on a PR, then babysit that PR to done.
 - **`/babysit-stack`** — CI, the review bot, and **existing review threads**. This skill's own loop never touches threads — it delegates all of that to babysit passes in Step 5.
 
 ## Repo contract — resolve this first
@@ -73,17 +73,11 @@ Also capture:
 - `userFacing` — biases **true**; false only for clearly internal-only changes.
 - Optionally take a round cap from the user ("one round", "up to 5 rounds") → `--max-rounds` (1–5; omitted = the engine's own stop conditions govern, hard cap 5).
 
-## Setting the goal — before the loop starts
+## Resume — run again to continue
 
-Same pattern as `/feature-goal`: `/goal` is the built-in stop-blocker the **user types** (a skill cannot set it). This skill has no approval gates, so the goal can cover the whole run. If no goal is active, print the template and ask the user to set it before Step 3 (carry on identically if they decline or are away — the skill just won't auto-resume):
+There is no stop-hook: **persistence is re-invocation.** One invocation advances as far as live state allows, then ends with a report naming where the PR stands, what (if anything) it is waiting on, and that `/iterate-pr <n>` resumes it. For unattended pacing, wrap the re-invocation in whatever cadence the runtime offers (`/loop 15m "/iterate-pr <n>"`, a scheduler, or re-running by hand).
 
-```
-/goal PR <n> in order: review loop converged or stalled ledger posted, fixes
-pushed, CI green, all review threads resolved — /babysit-stack verdict on
-PR <n> reads GOAL MET (needs-human blockers count as not met)
-```
-
-**Re-entry (every /goal iteration) is stage detection, not memory:** `node <ENGINE> status --slice pr-<n>` names the loop's phase. Phase `done` with fixes pushed (branch not ahead of `origin/<headRefName>`) → skip to Step 5's babysit pass; phase `done` with unpushed commits → Step 4; any other phase → resume the loop at the pending step. Never re-`init` a finished run — one engine run per PR per /iterate-pr invocation; everything after `done` is babysit passes.
+**Re-entry is stage detection from durable markers, not memory:** `node <ENGINE> status --slice pr-<n>` names the loop's phase. Phase `done` with fixes pushed (branch not ahead of `origin/<headRefName>`) → skip to Step 5's babysit pass; phase `done` with unpushed commits → Step 4; any other phase → resume the loop at the pending step. Never re-`init` a finished run — one engine run per PR, ever; everything after `done` is babysit passes.
 
 ## Step 3 — Run the loop (engine CLI)
 
@@ -164,23 +158,23 @@ If round 1 was already clean, say so and push nothing.
 
 The review loop only proves **our** reviewers are satisfied. "Everything in order" additionally means CI green and every review thread resolved — that machinery already exists, so delegate: run **`/babysit-stack <PR number>`** (it accepts explicit PR numbers; pass the whole stack's numbers when this PR has stacked siblings that need restacking after the push). Each pass ends with a `VERDICT: GOAL MET | NOT MET` block — handle it exactly like `/feature-goal`'s BABYSIT stage:
 
-- **NOT MET, actionable items remain** → under /goal the session keeps going: run another pass (respecting babysit's per-item caps).
-- **NOT MET, only pending CI / an awaited `<BOT>` review** → say so and attempt to stop; the /goal hook bounces it and the next iteration re-checks — babysit's bounded `--watch` paces this instead of hot-looping.
-- **NOT MET, only `needs-human` blockers** (including this skill's own stalled-verdict ledger posted in Step 4) → report them clearly and attempt to stop with that as the reason; the human unblocks or `/goal clear`s.
+- **NOT MET, actionable items remain** → run another pass now (respecting babysit's per-item caps).
+- **NOT MET, only pending CI / an awaited `<BOT>` review** → nothing to do but wait: end the invocation, naming what's pending — babysit's bounded `--watch` is the only in-pass wait; a re-invocation re-checks.
+- **NOT MET, only `needs-human` blockers** (including this skill's own stalled-verdict ledger posted in Step 4) → report them clearly as the stop reason and end the invocation; the human unblocks, then re-invokes.
 - **GOAL MET** → done. Report the final state and stop.
 
 **Bot-review judgement call:** babysit-stack requests `<BOT>` once per PR. On a PR that already had its bot round (check `gh api repos/{owner}/{repo}/pulls/<n>/reviews` for the bot's login — `copilot-pull-request-reviewer[bot]` for Copilot), babysit's own once-per-PR gate already prevents a re-request — never work around it.
 
-No goal set → Step 5 is still worth **one** pass (so the report ends on live CI/thread state), but don't loop it by hand — tell the user to set the goal or re-invoke.
+Every invocation runs at least **one** pass here (so the report ends on live CI/thread state) — but never spin passes back-to-back when only external state is pending; end and let the re-invocation cadence pace it.
 
 ## Boundaries
 
 - **Never merge, approve, mark ready, or close** — a draft stays a draft; state changes are the human's.
 - The review loop never touches existing review threads (reply/resolve) — thread work happens only inside the Step 5 `/babysit-stack` passes, under that skill's rules and caps.
 - **The CLI owns the loop.** Reviewer selection, suppression, the relevance gate's thresholds, gate injection, stall/cap stops, dispute adjudication flow, and the verdict all come from `<ENGINE>`'s JSON output — never re-derive them in prose, never hand-edit `.context/pr-<n>/ledger.json` or a findings file, and never skip a command because you "know" what it will say.
-- **One engine run per PR per invocation — including across /goal re-entries.** A finished run (`status` phase `done`) is never re-`init`ed into more rounds; a stalled verdict's ledger goes onto the PR as a comment. Persistence after the loop is babysit passes, not more review rounds.
+- **One engine run per PR — including across re-invocations.** A finished run (`status` phase `done`) is never re-`init`ed into more rounds; a stalled verdict's ledger goes onto the PR as a comment. Persistence after the loop is babysit passes, not more review rounds.
 - **Fan-out is mechanism-agnostic; subagents are an optional accelerator.** Parallel subagents, `codex exec` children, or inline-sequential all satisfy the same contract: every emitted task's `outputFile` written before `collect` settles. A dead reviewer (missing/invalid output after one re-run) means degraded coverage stated explicitly, never silent convergence.
-- `/goal` is user-typed, never self-set; the skill works identically without it. A `needs-human` blocker is reported as the stop reason, not worked around.
+- **Persistence is re-invocation, never a stop-hook.** End the invocation with the resume report instead of spinning on external state; a `needs-human` blocker is reported as the stop reason, not worked around.
 - Fixes stay inside the PR's existing scope; consolidations become proposals, not code. TDD discipline is carried in the fix prompts (red-green where behaviour changes).
 - Model roles fixed, aliases only: reporters leaner, fixers + the closeout adjudicator the strongest — never pin exact ids or effort.
 - The roster in `agents/` is the lane source; the host's `reviewers.*` config is an additive focus overlay the CLI applies. Tune `docs/agents/repo-config.md`, never fork lanes inline.
