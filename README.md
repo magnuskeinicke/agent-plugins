@@ -66,6 +66,54 @@ codex/install.sh --uninstall
 The fallback refuses to clobber an existing real directory, so a vendored skill of the same name is
 safe. Start a new thread after either route.
 
+## Using the suite in a new repo
+
+Two phases: a one-time setup, then the daily pipeline.
+
+### One-time setup
+
+1. **Install the plugin** (once per machine, not per repo — see the install sections above), then
+   restart the session.
+2. **Run `/magnus:init-repo`** in the new repo. It scaffolds the one required host file,
+   `docs/agents/repo-config.md`, discovering the repo's real values itself (integration branch, gate
+   commands, tracker + issue prefix, labels, PR title rule, area paths, lib map) and asking for a
+   single confirmation on the four load-bearing keys: `integrationBranch`, `gates.all`,
+   `tracker.kind` + `tracker.issuePrefix`, and `labels.agentReady`. Every key is optional — an empty
+   key falls back to the generic default in `engine/lib/defaults.mjs`, so the suite works with zero
+   config, just blunter.
+3. **Sharpen later, optionally:** `/magnus:grill-with-docs` builds `CONTEXT.md` and `docs/adr/`
+   lazily as terms and decisions get resolved; `docs/agents/issue-tracker.md` and
+   `docs/agents/triage-labels.md` hold the prose tracker/label rules; `goldenPaths` starts empty by
+   design (`/magnus:to-issues` pins exemplars as it works); `design.fidelityCheck` and `routing.*`
+   are extension points for design-fidelity checks and slice→agent routing. Full key reference:
+   [`CONTRACT.md`](./CONTRACT.md).
+
+### Daily workflow
+
+The full pipeline is one command: **`/magnus:feature-goal <parent issue>`** — a re-entrant stage
+machine (run it again to resume) that chains:
+
+1. `/grill-with-docs` — grill the plan until shared understanding
+2. `/to-prd` — write the PRD into the parent ticket
+3. `/to-issues` — slice it into stacked, agent-ready sub-issues
+4. `/work-slice` per slice — test-first implementation inside the bounded engine-CLI review-fix
+   loop, ending in a stacked draft PR
+5. `/babysit-stack` — bot review, CI fixes, and comment resolution until the stack is green
+
+Standalone entry points onto the same machinery:
+
+| Command | Use for |
+| --- | --- |
+| `/magnus:work-issue <id>` | a lean ticket straight to a reviewed draft PR — skips PRD/slicing |
+| `/magnus:solve-ready-tickets apply` | autonomously drain the `agentReady`-labeled queue; built for a scheduler |
+| `/magnus:review-code` | one read-only reviewer round on any diff, PR, or working tree |
+| `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
+| `/magnus:babysit-stack` | one idempotent green-the-stack pass; loop it from outside |
+
+Under all of them sits the engine CLI (next section): skills run it from the host repo root, obey
+its JSON output, and resume from durable markers — `## Workflow State` checkpoints, the ledger in
+`.context/<slice-id>/`, and PR state — so any interrupted run continues by re-invoking the skill.
+
 ## The engine CLI
 
 The review machinery lives in `engine/` as a dependency-free Node CLI — no
