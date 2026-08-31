@@ -17,7 +17,7 @@ export const FINDING = {
         'Short slug naming the underlying cause (what is wrong, not where) — powers the cross-round finding identity, so keep it stable across re-raises.',
     },
   },
-  required: ['title', 'detail'],
+  required: ['title', 'detail', 'rootCause'],
 };
 
 export const FINDINGS_SCHEMA = {
