@@ -9,10 +9,11 @@ Drive **one** slice from a PRD to a stacked **draft PR**. The slices were produc
 
 ## Repo contract — resolve this first
 
-Read `docs/agents/repo-config.md` (its `## Config` JSON block) and pass it to the
-workflow verbatim as `repoConfig`. The placeholders below stand for its values.
-Missing file or empty key → the workflow's generic defaults apply and you say so
-once.
+Read `docs/agents/repo-config.md` (its `## Config` JSON block). The engine CLI
+reads the same file itself (`--config`, defaulting to that path in the host
+repo root); the placeholders below stand for its values wherever this skill
+acts directly. Missing file or empty key → the generic defaults apply and you
+say so once.
 
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
@@ -33,6 +34,37 @@ Also read the prose docs the config points at: `tracker.docPath` (how to fetch
 issues, read blocked-by relations, mark state) and `labels.docPath` (the `<NEXT>`
 work pointer vs the autonomous-loop trigger).
 
+## Resume — the `## Workflow State` checkpoint
+
+This skill is **re-entrant: run it again to resume.** The checkpoint lives at
+`.context/<slice-id>/workflow-state.md` in the host repo (gitignored) and is a
+single overwritten block — full OIDs, never abbreviations:
+
+```markdown
+## Workflow State
+- Stage: IMPLEMENTED
+- Slice: PROJ-1234
+- Branch: summary-feature/02-proj-1234
+- Base: summary-feature/01-proj-1230 @ <full base OID>
+- Head: <full head OID>
+- PR: (none yet | #123)
+- Verdict: (pending | converged | stalled — shipped with N open findings (CR-…))
+```
+
+Stages, in order: `CLAIMED` (Step 1 done) → `BRANCH_READY` (Step 2 done) →
+`IMPLEMENTED` (Step 3 implement pass committed) → `REVIEWED` (review loop
+verdict recorded) → `VERIFIED` (Playwright loop done or skipped-with-reason) →
+`EVIDENCE_POSTED` (Step 4 QA evidence + consolidation tickets) → `PR_OPENED`
+(Step 5.2) → `STACK_LINKED` (Step 5.3–5.4) → `COMPLETE` (Step 6 pointer
+advanced). **Rewrite the block at every stage boundary.**
+
+On invocation, if the chosen slice's checkpoint exists: read `Stage`, verify
+its facts against the durable markers — the branch exists, `git rev-parse
+HEAD` matches or descends from `Head`, the review loop's own state via the
+CLI's `status`, PR state via `gh pr view` — **reality wins over the file** —
+then continue from the first incomplete stage instead of restarting. Mid-loop
+resume belongs to the CLI: `status` prints the phase and the pending step.
+
 ## Step 1 — Select the slice
 
 **Preflight (before you claim anything):** confirm you're in a clean, dedicated worktree per Step 2. If you're not in a git worktree, or it has uncommitted changes, **STOP and tell the user** — do not claim the slice and do not create a worktree yourself.
@@ -47,7 +79,7 @@ If the chosen slice is **HITL / `<HITL>`**, stop and tell the user what decision
 
 Fetch the chosen slice AND its parent PRD (the PRD lives in the parent's `# PRD` comment — read it from there). Read, verbatim: the slice's **Kind** (skeleton vs delta), **Novel decision**, acceptance criteria, "Where to look" code-layer pointers, the **"Convention contract"** section (binding exemplars + must-use libs), "Design" Figma nodes/tokens, and "Stacked on" predecessor. For a **delta**, also read the ticket's **"Skeleton map" comment** (posted by the skeleton's `/work-slice` run — the actual files the skeleton created; the primary mirror). Read the parent PRD for the wider contract.
 
-**Claim the slice.** Remove its `<NEXT>` label and set its status to **`<IN-PROGRESS>`** so it reads as actively worked and no parallel run grabs it. The pointer only moves on to the next slice after the draft PR is opened (Step 6). When removing/adding `<NEXT>`, write back the issue's full existing label set minus/plus only that label — never drop a type label, `<SKIP>`, or any product label (Linear's `save_issue.labels` replaces the whole set; see `labels.docPath`).
+**Claim the slice.** Remove its `<NEXT>` label and set its status to **`<IN-PROGRESS>`** so it reads as actively worked and no parallel run grabs it. The pointer only moves on to the next slice after the draft PR is opened (Step 6). When removing/adding `<NEXT>`, write back the issue's full existing label set minus/plus only that label — never drop a type label, `<SKIP>`, or any product label (Linear's `save_issue.labels` replaces the whole set; see `labels.docPath`). Checkpoint: `CLAIMED`.
 
 ## Step 2 — Confirm the worktree & resolve the branch base
 
@@ -102,133 +134,130 @@ Conductor branches the worktree off `<BASE>`, not off the predecessor — so a d
   The count check is the guard: if the branch already carries commits you are not in a virgin slice worktree — **STOP and tell the user** rather than discarding work.
 - **Predecessor already merged** → stay on `<BASE>` and note it; this slice starts a fresh stack.
 
-Verify with `git log --oneline -1` that HEAD is the predecessor's tip. From here every commit in Step 3 is a plain `git commit` on this branch, and Step 5 links the branch's PR into the GitHub stack.
+Verify with `git log --oneline -1` that HEAD is the predecessor's tip. From here every commit in Step 3 is a plain `git commit` on this branch, and Step 5 links the branch's PR into the GitHub stack. Checkpoint: `BRANCH_READY`.
 
-## Step 3 — Implement + targeted review loop (Workflow)
+## Step 3 — Implement + targeted review loop (engine CLI)
 
-**Precondition:** Step 2 must have already renamed the branch to its stack name and, for a downstream slice, based it on the predecessor (`git log --oneline -1` shows the predecessor's tip). The workflow's agents commit with plain `git commit` on the current branch — if the base is wrong, every review round reviews the wrong diff.
+**Precondition:** Step 2 must have already renamed the branch to its stack name and, for a downstream slice, based it on the predecessor (`git log --oneline -1` shows the predecessor's tip). Every agent in this step commits with plain `git commit` on the current branch — if the base is wrong, every review round reviews the wrong diff.
 
-This step runs as a **single `Workflow` call** — invoking it here is the sanctioned opt-in. The workflow is the orchestrator: it implements the slice, detects what changed, fans out **only the relevant reviewers in parallel**, aggregates their structured summaries into a finding ledger, and loops fix ⇄ review until the ledger converges or stalls (hard cap 5 as a safety boundary). Once that code-review loop converges it runs a **separate Playwright user-story loop** (verify ⇄ fix, its own smaller cap) on user-facing slices. The main session invokes the workflow, waits, and reads back the returned summary for the Step 4 result presentation. **Do not implement or review in the main session** — the workflow owns it.
+The loop machinery is the plugin's **engine CLI** — a dependency-free Node CLI. **Loop control is deterministic CLI output, never prose discipline:** run each command from the host repo root, read the JSON it prints, and do exactly what its `action` / `next` field says. Never re-derive reviewer selection, finding suppression, classification thresholds, or stop conditions yourself — the CLI owns them, and its run state lives in the host repo's gitignored `.context/<slice-id>/` (ledger, emitted prompts, findings inbox). Which reviewers exist and when they trigger: `references/reviewer-roster.md` (documentation; `engine/lib/roster.mjs` is the source of truth).
 
-`scriptPath` must be an **absolute** path into this plugin's install root — the
-script ships with the plugin, not with the host repo, so a repo-relative path
-resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/work-slice/work-slice-loop.workflow.js`
-when that variable is set, otherwise
-`ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/work-slice/work-slice-loop.workflow.js | sort -V | tail -1`.
-Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
+Resolve `<ENGINE>` once — it lives in the **plugin install root**, not the host repo:
 
-```
-Workflow({
-  scriptPath: "<PLUGIN_ROOT>/skills/work-slice/work-slice-loop.workflow.js",
-  args: {
-    sliceId,             // the slice issue id
-    sliceKind,           // "skeleton" | "delta" — the ticket's Kind section (defaults to delta)
-    acceptanceCriteria,  // verbatim, array or string
-    whereToLook,         // the slice's "Where to look" pointers — for a delta, prepend the
-                         // "Skeleton map" comment's file list (the primary mirror)
-    conventionContract,  // the slice's "Convention contract" section, verbatim (binding
-                         // exemplars per layer + must-use libs)
-    figma,               // Figma node deep-links + recorded tokens (UI slices)
-    baseBranch,          // resolved in Step 2 (predecessor stack branch, or `<BASE>`)
-    prdContract,         // the parent PRD's wider contract
-    repoConfig           // the JSON block from docs/agents/repo-config.md (integration branch,
-                         // dev-server command, e2e dir, browser-guide path, area→path map, goldenPaths,
-                         // libMap). Omit if the file is missing — the workflow falls back to built-in defaults.
-  }
-})
+```bash
+engine="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/engine/cli.mjs}"
+[ -n "$engine" ] && [ -f "$engine" ] || engine="$(realpath "<this-skill-dir>/../..")/engine/cli.mjs"  # symlinked install
+[ -f "$engine" ] || engine="$(ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/engine/cli.mjs 2>/dev/null | sort -V | tail -1)"
 ```
 
-The script body encodes everything below (the reviewer engine, model pinning, the loop, the schemas) — the sections that follow document its behaviour. To tune the workflow, edit `work-slice-loop.workflow.js` and re-run with the same `scriptPath`.
+### 3.0 Write the run contract
 
-### Model roles (aliases, never exact pins)
+`mkdir -p .context/<slice-id>` and write `.context/<slice-id>/contract.md` — the contract text every prompt in the loop (reviewers, validator, fixer, adjudicator) receives. Include, verbatim where the ticket has it: the slice id + title, its **Kind** with the matching guidance below, the acceptance criteria, the one **novel decision**, "Where to look" (for a delta, prepend the Skeleton map comment's file list — the primary mirror), the **Convention contract** (binding exemplars + must-use libs), the Figma node deep-links, the parent PRD's wider contract, and the commit rule (message starts with the slice id; never `git push`).
 
-Models are role-based and use aliases (`opus` / `sonnet`) so they track the latest model tier — never pin exact model ids or effort levels:
+- **Skeleton:** this is the stack's WALKING SKELETON — the full end-to-end path with the REAL contract (schema, types, API shape, UI shell, one happy-path behaviour, tests wired) and stubbed/minimal behaviour elsewhere. Every cross-layer decision lands here; downstream deltas mirror this code, so its shape IS the feature's convention. Clone the exemplar's shape; don't invent structure an exemplar settles.
+- **Delta:** a BEHAVIOUR DELTA on the walking skeleton — the skeleton (this feature's earlier slices, already on the base branch) is the primary pattern to mirror; sibling features are the fallback. Prefer APPENDING over modifying, introduce at most the ticket's one named novel decision, and **never alter the skeleton's published contract** (contract freeze — a needed contract change stops the slice and escalates).
 
-- **Implementers write, so they get the strongest model:** implement + every fix round (code-review and Playwright) → `opus`. The **closeout adjudicator** also runs `opus` — it overrules reviewers and implementers, so it gets the strongest judgement.
-- **Reviewers report, so they run leaner:** the gut-check pre-pass, baseline + lane + reuse + scope reviewers, the relevance validator, AND the read-only Playwright verifier → `sonnet` (browser-driving transcripts are token-heavy; the Playwright *fix* passes stay `opus`).
+### 3.1 Implement pass
 
-### Reviewer lanes — area → anchor skill → trigger paths
+One implementer, the **strongest model** — spawn it as a subagent when the runtime has one, otherwise do it yourself inline. TDD discipline: one tracer-bullet test → impl per acceptance criterion (vertical slice — never all-tests-then-all-impl), using "Where to look" as the starting map. Binding rules: mirror the convention contract's exemplars (a deviation is allowed only when declared in the provenance table with a concrete reason — silent deviation is a review-blocking offence); no new helper/util/hook/component without first searching `<SRC>` (and the design system, and `repoConfig.libMap`) for an existing equivalent; consolidation is in-scope only within this slice's own new code plus at most ONE existing call site — anything wider is a noted candidate, not a refactor; stay strictly inside this slice's scope and note anything a later slice owns instead of pulling it forward. For UI: fetch the Figma screenshot fresh via the Figma MCP from the slice's node deep-link and reuse design-system tokens/components, not magic numbers. Run tests + lint/typecheck with `<GATE>` and see them pass **in-session** before claiming green. Commit (message starts with the slice id; never push).
 
-The workflow detects **areas** by matching the changed files against the trigger column, then **consolidates the triggered areas into two composite review lanes** so a round runs at most **baseline + 2 lane reviewers + reuse + scope**: **web** = frontend + i18n + performance, **server** = backend + database + security. A lane reviewer's prompt merges only its *triggered* member areas' skills + focus — same coverage, fewer agents, less finding churn. Defensive enrichment: a triggered `frontend` area always pulls the `performance` lens into the web lane, and a triggered `backend` area always pulls `security` into the server lane (those two rarely trigger by path alone). **Baseline always runs.** The **reuse reviewer** is its own agent, gated not on paths but on the diff **adding or modifying files** (the implementer reports `changedFiles`/`addedFiles`; modified files are in scope for intra-diff DRY + YAGNI): it hunts duplicates of existing lib/design-system code (blocking) and verifies the implementer's **provenance table** — every added file must cite the exemplar it mirrors or declare a `[deviation: reason]`; missing or false rows block. Generalizable-new-code goes into `consolidations` (never blocking — Step 4 files it as follow-up tickets). The **scope-fidelity reviewer** is another gated agent — it runs when the diff adds new files or >~150 inserted lines: a loose finder lists everything in the diff not traceable to the slice's acceptance criteria (full recall, no threshold), then a strict justifier keeps a finding only by citing a specific AC, a documented repo rule, or a concrete failure path the extra code prevents ("peer code does it too" alone is a note, never blocking). Necessity comes from the ticket's frozen AC as written — never inferred from the diff. The **review-CLI reviewer** (`pr.cliReviewer`, e.g. `coderabbit review --agent`) is one more agent in the round — a read-only wrapper that runs the CLI, verifies its findings against the code, and reports bugs/security/leak risks as blocking, nits as notes; it runs **once per workflow run, in the first reviewer round only** (rate-limited external service) — fix rounds re-run only our own lanes. No `pr.cliReviewer` configured → the lane is skipped. The **gut-check pre-pass** (the `gut-check` skill) also runs once per run, opening the first reviewer round *before* the lanes: a rubric-free first read whose `route`d observations enter the ledger and whose `block` (work outside the ticket's requirements) hard-stops the run for the human. Playwright is a per-slice judgement call (below). **Both halves of a lane come from the host repo's config**: `repoConfig.areaPaths` says which paths trigger an area, `repoConfig.reviewers` says which repo skills that area applies and what it looks for. The plugin merges them over generic lanes at runtime, so an area the repo does not name still reviews — just blunter. The table below is a shape sketch, not the content; on any mismatch the config wins.
+Record the result as JSON at `.context/<slice-id>/implement-result.json`:
 
-| Area (lane) | Anchor skill(s) | Fires when the diff touches |
-|---|---|---|
-| **Baseline** (always, own agent) | `conventionsFile` conventions + the slice acceptance criteria | every run — correctness, missed AC, convention/reuse, test quality |
-| **Reuse** (own agent, gated on added/modified files) | `conventionsFile` conventions + `repoConfig.libMap` | the diff ADDS or MODIFIES files — duplicate-of-lib (blocking), provenance audit (blocking), intra-diff DRY/YAGNI, generalizable-code → `consolidations` (follow-up tickets, never blocking) |
-| **Scope fidelity** (own agent, gated on size) | the slice's frozen acceptance criteria | the diff adds new files or >~150 inserted lines — loose finder (everything not traceable to AC) + strict justifier (survives only via a cited AC / repo rule / concrete failure path) |
-| Frontend / UI (`web`) | `reviewers.frontend.skills` | `areaPaths.frontend` |
-| Backend (`server`) | `reviewers.backend.skills` | `areaPaths.backend` |
-| Database (`server`) | `reviewers.database.skills` | `areaPaths.database` |
-| i18n / translations (`web`) | `reviewers.i18n.skills` | `areaPaths.i18n` |
-| Security (`server`) | `reviewers.security.skills` | `areaPaths.security` — plus always when `backend` triggers |
-| Performance (client) (`web`) | `reviewers.performance.skills` | declared by the implementer — plus always when `frontend` triggers |
+```json
+{"summary": "", "committed": true, "head": "<git rev-parse HEAD>", "testsGreen": true,
+ "testEvidence": "<commands + final summary lines>",
+ "changedFiles": [], "addedFiles": [], "deletedFiles": [],
+ "provenance": [{"file": "", "mirroredFrom": "", "deviation": ""}],
+ "touchedAreas": [], "userFacingImpact": true, "diffStat": "", "notes": []}
+```
 
-The `performance` area is the **client/React lens only**. Server-side performance — N+1 query patterns, sequential awaits where `Promise.all` fits, over-fetching, missing indexes, join cost — is baked directly into the **backend** and **database** focus definitions, where the queries live. No extra agent; the server lane always carries it.
+`changedFiles`/`addedFiles`/`deletedFiles` from `git diff --name-only [--diff-filter=A|D] <base>...HEAD`; one provenance row per added file (`mirroredFrom` = the exemplar actually followed, or `deviation` = why none fits — never both blank); `userFacingImpact` biases **true**; `testsGreen=true` only after running the gates in-session. No committed diff → stop and tell the user (nothing to review or PR). Checkpoint: `IMPLEMENTED`.
 
-A reviewer is told to apply its anchor skill's rules against the slice's diff and report **correctness / missed-AC / convention-reuse** problems — not style nits. Reviewers are **read-only**; they only report.
+### 3.2 Start the loop
 
-### Playwright user-story loop (after the code-review loop converges)
+Extract the provenance array to `.context/<slice-id>/provenance.json`, then:
 
-Playwright is **not** part of the per-round code review — it runs as its own loop **after** that loop converges, and only when the change warrants it. Whether to run it is the orchestrator's judgement per slice — **lean toward running it.** Skip only when the slice clearly has no user-facing impact (pure refactor, internal util, a migration with no behaviour change). A backend-only diff can still change user-facing behaviour — when in doubt, run it. (The workflow gates this on the implement/fix agent's `userFacingImpact` flag, which biases to `true`.)
+```bash
+node "$engine" init --slice <slice-id> --base <base> \
+  --tests-green <bool> --committed <bool>          # gate values from implement-result.json
+```
 
-It mirrors the repo's existing browser-verification mechanism — **read `browserGuidePath` first** for login steps, seeded users, routes, the core flows, selectors, and any fake-media flags. **With `devServerCommand` empty, skip the Playwright loop entirely and say so** — never invent a start command. Each round it must:
+`resumed: true` means a prior run's state exists — run `status` and continue at the phase it names instead of restarting.
 
-1. Reuse a still-running dev server from a prior round when one serves; otherwise start the app in the background with `devServerCommand` and capture its URL (wait until it serves).
-2. Restore the parked spec from a prior round (`<e2eDir>/test-output/slice-verify.spec.ts.parked`, gitignored) when it exists; otherwise author a throwaway Playwright spec (reuse the `e2eDir` project's config + its login-spec dev-login pattern) driving **isolated headless Chromium**, `video: 'on'`, `baseURL` = the running app, plus any fake-media flags the browser guide names.
-3. Dev-login as the seeded user matching the slice, then **exercise this slice's acceptance-criteria user stories**, capturing a screenshot for **every** criterion — PASS and FAIL alike, named `ac-<n>-<pass|fail>.png` — plus the run video. These are **QA evidence**: Step 4 uploads them to the slice ticket, so each screenshot must actually show the behaviour it proves (or the breakage).
-4. **Clean up before returning:** nothing untracked may remain in a source dir — an untracked spec fails the repo's pre-push lint hook at PR time and would be swept into the next fix commit by `git add -A`. On a passing or final round, delete the throwaway spec (and any parked copy); on a failing non-final round, park it in the gitignored test-output dir for the next round to reuse. Only the gitignored screenshots/video (and a parked spec) stay.
-5. Return a PASS/FAIL per criterion with the proving screenshot. **A broken user story = a failed acceptance criterion = a blocking finding** that triggers a fix round; keep the screenshot as proof. The workflow returns the last round's per-criterion verdicts as `playwrightCriteria`.
+### 3.3 Obey the CLI
 
-### The loop (inside the workflow)
+The cycle (`status` re-prints the pending step any time):
 
-1. **Implement** — one Opus agent, TDD discipline (one test → impl per acceptance criterion — never all-tests-then-all-impl). Use the "Where to look" pointers as the starting map. **Mirroring is binding**: a skeleton clones the exemplar's shape (it makes every cross-layer decision the deltas inherit); a delta mirrors the skeleton first, appends rather than modifies, never alters the skeleton's contract (contract freeze — a needed contract change is a stop-and-escalate, not an edit), and introduces at most the ticket's one named novel decision. No new helper without a `<SRC>` search; consolidation is in-scope only within the slice's own new code + at most one existing call site. The agent returns a **provenance table** (added file → `mirroredFrom` exemplar, or `[deviation: reason]` — silent deviation forbidden). For UI: fetch the Figma screenshot fresh via the Figma MCP from the slice's node deep-link and reuse design-system tokens/components, not magic numbers. Stay inside this slice's scope — if you discover it needs something a later slice owns, note it, don't pull future work forward. Commit. → GREEN slice.
-2. **Code-review loop**, starting from the GREEN slice — **baseline + area reviewers only, no Playwright**. Its lifecycle runs on a **finding ledger**: every validated finding gets a stable `CR-NNN` id (monotonic, never recycled), a fingerprint (reviewer lane + file + root cause — never line numbers, lines shift across fix commits), and a status `open | addressed | deferred | disputed | dropped`. `addressed` records the fix commit hash; the final ledger goes onto the PR so the human sees exactly what survived. The first reviewer round opens with a **gut-check pre-pass** (once per run, before any lane — the `gut-check` skill's rubric-free first read): `route`d observations enter the round's findings and the ledger like any reviewer's, `reject`ed ones die, and a `block` — work outside the ticket's requirements — hard-stops the loop for the human before any reviewer spend.
-   0. **Tests + commit gate** — reviewers never see red or uncommitted code (they inspect `git diff <base>...HEAD`). If the latest implement/fix pass reports `testsGreen=false` or `committed=false`, the round is spent on a dedicated fix pass instead of reviewers. Every implement/fix agent must set `testsGreen=true` only after actually running tests + lint/typecheck in-session and must return the commands + summary lines as `testEvidence`, plus its post-commit `head` sha — the `verify-before-done` iron law applied in-loop: no completion claim without fresh in-session evidence. A previously-failing gate clearing counts as material progress.
-   1. **Detect changed areas** — `git diff --name-only <base>...HEAD`, match each path against the registry trigger column, then group the triggered areas into the **web/server lanes** → the active reviewer set (baseline always; at most baseline + 2 lanes; plus the **reuse reviewer** whenever the diff adds or modifies files; plus the **scope-fidelity reviewer** when the diff adds new files or >~150 inserted lines; plus the **review-CLI reviewer** in the first reviewer round only).
-   2. **Review** — spawn the selected reviewers **in parallel** (each Sonnet, fresh), each returning a structured summary `{ area, blockingFindings[], notes[] }` (each finding carries a `rootCause` slug for its cross-round identity). From round 2 on, every reviewer receives the **ledger** (ids + statuses): verify `addressed` fixes (a re-raise reopens the same id), never re-raise `disputed`/`deferred` items — such re-raises are **auto-suppressed** by fingerprint before they reach anyone — and report only NEW problems introduced by the fix diff.
-   3. **Validate (relevance + confidence gate)** — one Sonnet validator receives the surviving raw findings + the diff and classifies each: (a) caused by this diff or pre-existing/out-of-scope, (b) confidence 0–100 that it is real and correctly located. It classifies only — it may NOT add findings. Confidence ≥80 AND diff-caused → eligible for the fix pass. 60–79, or ≥80-but-pre-existing → demoted to **advisory** (a PR note; pre-existing ones become `consolidations` follow-ups) — never fixed in-slice. <60 → **dropped as UNVERIFIED**, recorded in the ledger so a repeat is visible.
-   4. **Aggregate (deterministic) + stop conditions, first hit wins.** The ledger is scored each round (open blocking = 4, suggestion = 1, advisory = 0.25; deferred/disputed/dropped = 0); a round makes **material progress** only if the score drops ≥1, an open blocking finding dies, or a failing test gate clears. Then: (1) zero open blocking findings AND every reviewer lane reported (a round with dead reviewers never converges) → **converged**, go to the Playwright loop; (2) two consecutive rounds without material progress → **stalled**, stop; (3) a fingerprint that survives 2 fix attempts → marked `deferred`, no longer targeted; (4) hard cap at 5 rounds — a safety boundary, not a target. Otherwise → fix.
-   5. **Fix** — hand the open blocking findings (by `CR-NNN` id) to a single fresh Opus agent to resolve test-first (RED→GREEN where behaviour changes). The fixer may **dispute** a finding instead of fixing it — only with concrete evidence (file:line, test output, spec text); everything else must be resolved and is marked `addressed` with the fix commit hash. Commit. The next round re-runs the triggered lanes + baseline with the **fix's commit range as their primary diff** (the full slice diff stays available as context). The reuse reviewer is skipped when the added-file set + provenance are unchanged since its last clean pass. Return to step 1 with fresh reviewers.
-   6. **Closeout adjudication** — if the loop ends with `disputed` entries, ONE fresh Opus adjudicator rules each on **evidence only**: it sees the final diff, the reviewer's original evidence, and the implementer's dispute evidence — never the fix agent's free-text justifications. `upheld` reopens the finding as `open` (reported in the stalled verdict); `dismissed` closes it. Adjudicator/reviewer deadlock is never re-looped — the disagreement is reported on the PR for the human.
-   - **On stop without convergence** the verdict is explicit — `stalled — shipped with N open findings (CR-…)` — never a silently exhausted cap. The main session still opens the draft PR (Step 4→5) and carries the open findings into it. Pure judgement-call / debatable findings never block; they ride back as notes.
-3. **Playwright user-story loop, max 3 rounds** — runs **only after the code-review loop converged AND the slice is user-facing** (the case-by-case judgement above; skip pure refactors / internal utils / no-behaviour-change migrations):
-   1. **Verify** — one fresh Sonnet Playwright reviewer drives the running app and returns PASS/FAIL per acceptance-criterion user story with proving screenshots. It cleans up (or parks, on a failing non-final round) its throwaway spec before returning — only gitignored files remain.
-   2. **Aggregate.** No broken user stories → the Playwright loop **converges**; done. Otherwise → fix.
-   3. **Fix** — hand the broken user stories (each a failed AC = blocking) to a single fresh Opus agent to resolve test-first. Commit. Re-verify with a fresh Playwright reviewer.
-   - **Cap at 3 rounds.** If round 3 still has broken user stories, **stop** and return them as outstanding — escalate to the human.
-4. Before returning, run the slice's tests + lint/typecheck green with `<GATE>`.
+```bash
+node "$engine" plan --slice <id> --changed-files <csv> --added-files <csv> --deleted-files <csv> \
+  --insertions <n> --user-facing <bool> --declared-areas <csv> \
+  --provenance-file .context/<id>/provenance.json --head <head> --commit-rule '<slice-id> …'
+# → gate-fix (red gate: run ONE fix implementer with the emitted prompt, then apply-fix), or
+# → the round's task manifest: prePass (round 1), coderabbit (round 1, when configured), reviewers[]
+node "$engine" collect --slice <id>
+# → validator task when findings survived suppression; run it, then
+node "$engine" decide --slice <id> --verdicts <verdicts.json> --commit-rule '<slice-id> …'
+# action=fix        → run ONE fresh fix implementer with fix.promptFile → apply-fix --result <fix-result.json>
+#                     → plan again with the fix range's files (git diff --name-only <prevHead>..<newHead>, etc.)
+# action=adjudicate → adjudicate → run ONE fresh agent with the emitted prompt (never the fix implementer)
+#                     → apply-adjudication --rulings <rulings.json>
+# action=converged|stalled|hard-stop → the loop is over:
+node "$engine" report --slice <id>
+```
 
-The workflow **returns** to the main session: the **verdict** (`converged`, or `stalled — shipped with N open findings (CR-…)`), the **finding ledger** (`ledger` + preformatted `ledgerText`: open/deferred/disputed entries with dispute evidence and adjudication rulings), the debt score, code-review rounds + Playwright rounds used, any outstanding blocking findings, the carried notes, the final **provenance table**, the **consolidations** list (reuse follow-up candidates + relevance-gate demotions), the diff stat, and the Playwright proof paths. That summary feeds Step 4.
+**Running an emitted task.** Every task names an `agentFile` (the roster file — its body is the agent's system prompt), a `promptFile` (the task), an `outputFile` (the JSON the agent must write — path and schema are in the prompt), and a `model` when the roster file pins one. Mechanism is runtime-dependent; **subagents are an optional accelerator, the loop is sequential-first**:
 
-## Codex fallback — no `Workflow` tool
+- **Claude:** spawn each reviewer as a subagent from its agent definition; reviewers are read-only, so run a round's reviewers **in parallel**.
+- **Codex:** background `codex exec` children, the agent-file body prepended to the task prompt.
+- **Neither:** run each reviewer yourself, one at a time, adopting the roster file's persona fresh per reviewer — and disclose the fallback once. Sequential costs wall-clock only; it is **never a licence to drop a reviewer**.
 
-Codex has no `Workflow` tool. Run Step 3 sequentially with the same contract:
-implement → tests/commit gate → the gut-check pre-pass → the selected reviewers
-one at a time → the relevance validator → one fix pass over the eligible
-findings, repeating until a stop condition fires; then the Playwright loop.
-Keep the finding ledger yourself as a scratch table (`CR-NNN`, fingerprint,
-status, fix commit). Every rule above holds — the model roles, the caps, the
-gates, the verdict language. Only the parallelism is lost, so the rounds cost
-more wall-clock; do not compensate by skipping reviewers.
+Ground rules, regardless of mechanism:
+
+- **Gut-check runs first** (round 1). If its JSON contains any `"disposition": "block"` observation, skip the reviewers and run `collect` immediately — it hard-stops for the human before any reviewer spend. Otherwise run the reviewers (+ the CodeRabbit wrapper).
+- **Every emitted reviewer must report before `collect`.** A missing or invalid `outputFile` is a dead reviewer: re-run it once; still nothing → proceed, but state the degraded coverage explicitly (it rides into the PR notes as such) — zero findings only counts when every reviewer actually reported.
+- **Reviewers are read-only** — only the implement/fix agents edit code. Fix and adjudicator agents are always **fresh** (never reuse the implementer's context for the adjudicator).
+- **Model roles:** writers (implement, every fix pass) and the adjudicator get the strongest model; reporters (reviewers, gut-check, CodeRabbit wrapper, validator) run leaner. Aliases only, never exact model ids; honor a task's `model` field when present.
+- `--head` = the implement pass's commit on the **first** `plan` only; `apply-fix` records each fix head itself, so later `plan` calls omit it. After each `apply-fix`, update the checkpoint's `Head`, and recompute the next `plan`'s file flags from the **fix range** (`<prevHead>..<newHead>`) with the whole-slice provenance from the fix result.
+- Never hand-edit `.context/<slice-id>/ledger.json` or a findings file — findings enter through reviewer output files, decisions exit through the CLI.
+
+The stop conditions live in the CLI (convergence, two-round stall, per-fingerprint deferral, hard cap 5 rounds — a safety boundary, not a target). A non-converged stop reports `stalled — shipped with N open findings (CR-…)`, never a silently exhausted cap.
+
+### 3.4 Read out the result
+
+`report` returns the verdict, the ledger report (open / addressed / deferred / disputed entries with `CR-NNN` ids, dispute evidence, adjudication rulings), and the advisory notes. Also gather the `consolidations` arrays from `.context/<slice-id>/round-*/findings/*.json` (reuse-audit follow-up candidates) and the notes from the implement/fix results. Checkpoint: `REVIEWED`, with the verdict verbatim. A `hard-stop` (gut-check block) goes straight to the user — no PR.
+
+### 3.5 Playwright user-story loop (skill-owned, max 3 rounds)
+
+Runs **only after the review loop converged AND the slice is user-facing** — the implementer's `userFacingImpact` flag biases true; skip only pure refactors / internal utils / no-behaviour-change migrations, and say so. A backend-only diff can still change user-facing behaviour — when in doubt, run it. **With `devServerCommand` empty, skip entirely and say so** — never invent a start command. This loop is yours, not the CLI's: track its rounds yourself (max 3). Verify with a lean model (subagent when available — browser transcripts are token-heavy), fix with the strongest.
+
+Each verify round — read `browserGuidePath` first (login steps, seeded users, routes, selectors, fake-media flags):
+
+1. Reuse a still-running dev server from a prior round when one serves; otherwise start the app in the background with `devServerCommand` and wait until it serves.
+2. Restore the parked spec (`<e2eDir>/test-output/slice-verify.spec.ts.parked`, gitignored) when it exists; otherwise author a throwaway Playwright spec (reuse the `e2eDir` config + its login-spec dev-login pattern) driving isolated headless Chromium, `video: 'on'`, `baseURL` = the running app, plus any fake-media flags the browser guide names.
+3. Dev-login as the seeded user matching the slice, then exercise **this slice's acceptance-criterion user stories**, capturing a screenshot for **every** criterion — PASS and FAIL alike, named `ac-<n>-<pass|fail>.png` — plus the run video. These are QA evidence: Step 4 uploads them to the ticket, so each screenshot must actually show the behaviour it proves (or the breakage).
+4. **Clean up before returning:** nothing untracked may remain in a source dir (the pre-push lint hook fails on it). On a passing or final round, delete the throwaway spec (and any parked copy); on a failing non-final round, park it in the gitignored test-output dir. Only gitignored screenshots/video (and a parked spec) stay.
+5. Record PASS/FAIL per criterion with the proving screenshot. "Couldn't verify" is a FAIL, not a pass. **A broken user story = a failed acceptance criterion = a blocking finding**: hand the failures to one fresh fix agent (test-first), commit, re-verify with a fresh round. Round 3 still failing → stop and escalate; the failures ride into the PR as outstanding.
+
+Checkpoint: `VERIFIED`. Before Step 4, run the slice's tests + lint/typecheck green with `<GATE>` one final time.
 
 ## Step 4 — Present the result, then proceed
 
-**No confirmation gate — the draft PR is the review surface, so proceed straight to Step 5.** First print, from the workflow's returned summary (so the terminal has the record):
+**No confirmation gate — the draft PR is the review surface, so proceed straight to Step 5.** First print, from the loop's outputs (so the terminal has the record):
 
 - The slice id + one-line summary of what was built.
 - The diff stat (and how to see the full diff).
 - Acceptance criteria, each ticked or flagged (Playwright proof screenshots where it verified them).
-- The loop outcome: the **verdict verbatim** (`converged`, or `stalled — shipped with N open findings (CR-…)`), which reviewers ran, how many code-review rounds it took, whether the Playwright loop ran and converged (or how many of its 3 rounds it used) — plus the **ledger** (`ledgerText`): open / deferred / disputed entries with their `CR-NNN` ids.
-- Any judgement-call findings — `[advisory:…]` notes the relevance gate demoted, and `[disputed:…]` entries with their adjudication rulings (an upheld dispute is back open; a deadlock is yours to adjudicate on the PR).
+- The loop outcome: the **verdict verbatim**, which reviewers ran, how many review rounds it took, whether the Playwright loop ran and converged (or how many of its 3 rounds it used) — plus the ledger report: open / deferred / disputed entries with their `CR-NNN` ids.
+- Any judgement-call findings — advisory notes the relevance gate demoted, and disputed entries with their adjudication rulings (an upheld dispute is back open; a deadlock is yours to adjudicate on the PR).
 - The **provenance table** (added file → mirrored exemplar or declared deviation) — the convention audit trail.
-- Any **consolidations** the reuse reviewer surfaced, and any **ratchet candidates**: a convention finding that showed up in 2+ rounds (or that you recognise from earlier slices) is a candidate for a lint rule / Nx module-boundary tag — name it so the human can move it from review into the tests gate.
+- Any **consolidations** the reuse audit surfaced, and any **ratchet candidates**: a convention finding that showed up in 2+ rounds (or that you recognise from earlier slices) is a candidate for a lint rule / Nx module-boundary tag — name it so the human can move it from review into the tests gate.
 - The branch + its base (the stack position).
 
-**QA evidence → the tracker (when the Playwright loop ran):** the workflow returns `playwrightCriteria` (per-AC PASS/FAIL + screenshot path) and `playwrightProof` (screenshots + video). Upload the proof files to the **slice ticket** with `<TRACKER>`'s attachment flow (Linear: `prepare_attachment_upload` → PUT the file to the returned URL → `create_attachment_from_upload`), then post/update a ticket comment starting with `## QA evidence`: one row per acceptance criterion — PASS/FAIL + link to its uploaded screenshot (video linked at the bottom). Failed criteria stay in the table marked FAIL so QA sees exactly what broke. Idempotent: update an existing `## QA evidence` comment rather than adding a second.
+**QA evidence → the tracker (when the Playwright loop ran):** upload the proof files (per-AC screenshots + video) to the **slice ticket** with `<TRACKER>`'s attachment flow (Linear: `prepare_attachment_upload` → PUT the file to the returned URL → `create_attachment_from_upload`), then post/update a ticket comment starting with `## QA evidence`: one row per acceptance criterion — PASS/FAIL + link to its uploaded screenshot (video linked at the bottom). Failed criteria stay in the table marked FAIL so QA sees exactly what broke. Idempotent: update an existing `## QA evidence` comment rather than adding a second.
 
-**Consolidation follow-ups → the tracker (when the workflow returned `consolidations`):** file each as its own ticket on the team (same create flow as `tracker.docPath`): title from the consolidation, body = the detail + targetLib + a link back to this slice's PR, labels = the chore type label + `<SKIP>`. This is the strict boundary that keeps the slice diff small — generalisation happens in its own reviewed change, never by scope-creeping this slice. List the created ticket ids in the terminal summary and in the Step 5 PR comment.
+**Consolidation follow-ups → the tracker (when the loop surfaced `consolidations`):** file each as its own ticket on the team (same create flow as `tracker.docPath`): title from the consolidation, body = the detail + targetLib + a link back to this slice's PR, labels = the chore type label + `<SKIP>`. This is the strict boundary that keeps the slice diff small — generalisation happens in its own reviewed change, never by scope-creeping this slice. List the created ticket ids in the terminal summary and in the Step 5 PR comment. Checkpoint: `EVIDENCE_POSTED`.
 
-Then open the draft PR (Step 5) **without asking**. Open it even when a loop hit its cap — carry the unresolved blocking findings + judgement-call notes into the PR body / a review comment so they surface on the draft. The **only** thing that skips Step 5 is the implement agent having produced no committed diff (nothing to PR) — in that case stop and tell the user.
+Then open the draft PR (Step 5) **without asking**. Open it even when the loop stalled — carry the unresolved blocking findings + judgement-call notes into the PR body / a review comment so they surface on the draft. The **only** things that skip Step 5: no committed diff (nothing to PR), or a gut-check `hard-stop` — in either case stop and tell the user.
 
 ## Step 5 — Open the stacked draft PR (automatically)
 
@@ -241,7 +270,7 @@ No `pr.stackTool` and no `skills.createPr`? Then open the PR with `gh pr create 
 
 The mechanism that makes this work: `gh stack link` **only creates a PR for a branch that has none** — a branch whose PR is already open is linked, not duplicated. So `<PR-SKILL>` opens the PR first and `link` reconciles it. Two rules make it safe: **always link by PR number** (never by branch name — a branch name races the "no PR yet → create one" path if the PR lookup lags), and **never pass `--open`** (it would mark the drafts ready for review).
 
-**0. Scrub worktree artifacts first.** The Playwright reviewer cleans up after itself, but guard anyway: an untracked throwaway e2e spec left in `<e2eDir>` makes the repo's pre-push lint hook lint it and fail the push. Run `git status --porcelain` — for each `??` line, remove it (the implementer committed its work, so anything still untracked is review scaffolding, never the shipped change). Then confirm the tree is clean. Do **not** touch tracked/committed files.
+**0. Scrub worktree artifacts first.** The Playwright rounds clean up after themselves, but guard anyway: an untracked throwaway e2e spec left in `<e2eDir>` makes the repo's pre-push lint hook lint it and fail the push. Run `git status --porcelain` — for each `??` line, remove it (the implementer committed its work, so anything still untracked is review scaffolding, never the shipped change). Then confirm the tree is clean. Do **not** touch tracked/committed files.
 
 **1. Clean up the stale remote branch.** Conductor pushed the pre-rename name. If it still exists on the remote, delete it so only the stack branch remains — and **close any PR that was opened against it**. This matters: two open PRs for one slice make the Step 5.3 PR-number lookup ambiguous and leave a zombie PR in the reviewer's queue.
 
@@ -260,6 +289,8 @@ pr=$(gh pr view --json number --jq .number)
 gh pr ready "$pr" --undo   # ready -> draft
 ```
 
+Checkpoint: `PR_OPENED`, with the PR number.
+
 **3. Link the PR into the stack.** Load the `<STACK>` skill first. Which form to use depends on what already exists — resolve it from `gh stack view --json` (run it while checked out on the branch; a `not part of a stack` error just means "no stack yet"), or list the predecessor's PR number with `gh pr list --state open --search "<predecessor issue id>" --json number,headRefName`:
 
 - **Skeleton slice** → **nothing to link yet.** A stack needs ≥2 PRs; the skeleton's PR simply stays based on `<BASE>`. It becomes the bottom of the stack when the next slice links onto it.
@@ -272,7 +303,7 @@ gh pr ready "$pr" --undo   # ready -> draft
 
 Then verify: `gh pr view <n> --json baseRefName,isDraft` must show the **predecessor's branch** and `true`. If `isDraft` came back `false`, `--open` leaked in — re-run `gh pr ready <n> --undo`.
 
-**4. Post the convention audit + finding ledger as a PR comment.** Use a comment, not `gh pr edit --body` (`<PR-SKILL>` owns the body and the stack tool writes its own navigation section into it): `gh pr comment <n> --body` with a `## Convention provenance` section (the provenance table: added file → mirrored exemplar or `[deviation: reason]`), a `## Review ledger` section when the workflow returned a non-empty `ledgerText` (the verdict line verbatim, then the open/deferred/disputed entries with their `CR-NNN` ids, dispute evidence, and adjudication rulings — this is the exact record of what survived review), and, when present, a `## Consolidation follow-ups` section linking the tickets filed in Step 4. This is what the human reviews the convention story against.
+**4. Post the convention audit + finding ledger as a PR comment.** Use a comment, not `gh pr edit --body` (`<PR-SKILL>` owns the body and the stack tool writes its own navigation section into it): `gh pr comment <n> --body` with a `## Convention provenance` section (the provenance table: added file → mirrored exemplar or `[deviation: reason]`), a `## Review ledger` section when `report` returned a non-empty ledger (the verdict line verbatim, then the open/deferred/disputed entries with their `CR-NNN` ids, dispute evidence, and adjudication rulings — this is the exact record of what survived review), and, when present, a `## Consolidation follow-ups` section linking the tickets filed in Step 4. This is what the human reviews the convention story against. Checkpoint: `STACK_LINKED`.
 
 That is the whole stack bookkeeping — no hand-maintained `### Stack` block. GitHub holds the parent/child chain and renders the navigation into each PR; later slices' `link` calls extend it.
 
@@ -282,7 +313,7 @@ That is the whole stack bookkeeping — no hand-maintained `### Stack` block. Gi
 
 The PR is open, so this slice is "ready for PR" — hand off:
 
-**If this slice was the skeleton**, first post a **"Skeleton map" comment on every downstream delta ticket**: the list of files the skeleton created/changed, one line each (`path — what it is / which layer`), taken from the workflow's `changedFiles` + provenance. This refreshes the deltas' "Where to look" with the feature's *actual* shape — a fresh delta agent mirrors these files, not a guess made before the skeleton existed. (Comments only — never edit sibling ticket bodies.) Idempotent: update an existing `Skeleton map` comment rather than adding a second.
+**If this slice was the skeleton**, first post a **"Skeleton map" comment on every downstream delta ticket**: the list of files the skeleton created/changed, one line each (`path — what it is / which layer`), taken from the final implement/fix result's `changedFiles` + provenance. This refreshes the deltas' "Where to look" with the feature's *actual* shape — a fresh delta agent mirrors these files, not a guess made before the skeleton existed. (Comments only — never edit sibling ticket bodies.) Idempotent: update an existing `Skeleton map` comment rather than adding a second.
 
 **PRD sync-back.** If implementation deviated from the PRD — a disputed finding upheld, a contract clarified, an AC amended in flight — append one line per deviation to an `## Implementation deltas` section of the **`# PRD` comment on the parent ticket** (add the section if missing; extend it, never overwrite the comment's PRD body, and never touch the ticket description — the same additive rule `/to-prd` follows). This keeps `/to-issues` re-runs and `/compliance-check` reading a truthful spec. No deviations → write nothing.
 
@@ -292,7 +323,7 @@ Then advance the work pointer:
 - **If it is AFK** (not `<HITL>`) → add **`<NEXT>`** to it. That is the signal the next `/work-slice` run (or, later, an autonomous loop) reads to pick it up. Only ever one slice carries `<NEXT>`.
 - **If it is HITL / `<HITL>`, or there is no next slice** → do **not** stamp `<NEXT>`. Tell the user the stack needs a human decision next (name the slice), or that the stack is complete.
 
-Then tell the user this slice is up for review and that the next `/work-slice <parent-id>` run will pick up whatever now carries `<NEXT>` and stack it on this branch. Name that slice.
+Then tell the user this slice is up for review and that the next `/work-slice <parent-id>` run will pick up whatever now carries `<NEXT>` and stack it on this branch. Name that slice. Checkpoint: `COMPLETE`.
 
 ## Boundaries
 
@@ -302,24 +333,20 @@ Then tell the user this slice is up for review and that the next `/work-slice <p
 - **`<PR-SKILL>` is a repo skill — never edit it.** It opens the PR verbatim (title regex, conflict check, Summary, tracker test plan). Then **`gh stack link` adopts that PR** — retargets the base to the predecessor and records the chain (Step 5.3). **Always link by PR number, never by branch name** (a branch name can take `link`'s create-a-PR path and duplicate the PR skill's), and **never pass `--open`** (it marks the drafts ready). Never `gh stack submit` in this flow — it opens its own auto-titled PRs. Post the convention audit as a comment, not `gh pr edit --body`.
 - Never merge, approve, or mark the PR ready — Step 5 opens it as a **draft** (`<PR-SKILL>` opens ready → `gh pr ready --undo`); promoting to ready is the human's call after review.
 - Never implement a needs-human/HITL slice unattended (Step 1).
-- **Model roles are fixed, models are aliases:** implementers (implement + every fix round, including Playwright fixes) and the closeout adjudicator are **Opus**; every read-only reviewer — the gut-check pre-pass + baseline + lanes + reuse + scope + the relevance validator + the review-CLI wrapper + the Playwright verifier — is **Sonnet**. Never pin exact model ids or effort levels. Not the orchestrator's discretion.
-- Reviewers are **read-only** — only the implement/fix agent edits code (Step 3).
-- Reviewers run **in parallel**; the workflow aggregates their structured summaries and decides fix vs done vs escalate deterministically.
-- **Re-review is focused:** after a code-review fix, reviewers get the fix's commit range as their primary diff (full slice diff as context only), and the reuse reviewer skips when nothing it audits changed since its last clean pass. The always-on baseline is the net against a fix regressing an already-passed area. Playwright is no longer part of the per-round review — it's the dedicated post-convergence loop below.
-- **Reviews have memory — the finding ledger:** stable `CR-NNN` ids, fingerprints (lane + file + root cause, never line numbers), statuses `open|addressed|deferred|disputed|dropped`. Reviewers verify `addressed` fixes and hunt fix-introduced problems; re-raises of `disputed`/`deferred` fingerprints are auto-suppressed and never score.
-- **Findings pass a relevance gate before any fix:** a validator classifies each finding (diff-caused? confidence 0–100) — only ≥80-confidence diff-caused findings reach the fix pass; 60–79 or pre-existing demote to advisory (note / consolidation follow-up, never fixed in-slice); <60 drop as UNVERIFIED. The validator classifies only — it never adds findings.
-- **Disputes exit the loop, then get adjudicated:** the fixer may reject a factually-wrong finding with concrete evidence; at loop end an independent Opus adjudicator rules each dispute on evidence only (never the fixer's rhetoric) — upheld reopens it into the stalled verdict, deadlock is reported to the human, never re-looped.
-- **The loop stops on measured progress, not just a cap.** First hit wins: converged (zero open blocking + every lane reported) / two consecutive rounds without material progress (debt score drop ≥1, a blocking finding dying, or a gate clearing) / a fingerprint surviving 2 fix attempts is deferred / the hard cap (5 code-review rounds, 3 Playwright) — a safety boundary, not a target. A non-converged stop reports `stalled — shipped with N open findings (CR-…)`, never a silently exhausted cap.
-- **Tests + commit gate before every review/verify round:** reviewers and the Playwright agent never see red or uncommitted code. A `testsGreen=false` or `committed=false` result routes back to a dedicated implementer fix pass (consuming a round of the same cap), and implementers must prove green with `testEvidence` (commands + summary lines run in-session), never assert it.
-- **A round with dead reviewers never converges:** if any spawned reviewer returns null (agent died) and no blocking findings came back, the loop escalates to the human instead of reporting convergence — zero findings only counts when every reviewer actually reported.
-- Playwright runs as a **dedicated loop, only after the code-review loop converges**, and only on user-facing slices. A broken user story is a **blocking** finding (failed AC), not advisory — it triggers a fix round inside that loop (max 3), with the screenshot kept as proof.
-- TDD discipline is carried in the implement/fix agent's prompt (red-green per criterion); workflow subagents don't load the `tdd` skill directly.
+- **The CLI owns the loop.** Reviewer selection, suppression, the relevance gate's thresholds, gate injection, stall/cap stops, dispute adjudication flow, and the verdict all come from `<ENGINE>`'s JSON output — never re-derive them in prose, never hand-edit `.context/<slice-id>/ledger.json` or a findings file, and never skip a command because you "know" what it will say.
+- **Fan-out is mechanism-agnostic; subagents are an optional accelerator.** Parallel subagents, `codex exec` children, or inline-sequential all satisfy the same contract: every emitted task's `outputFile` written before `collect`. Losing parallelism is never a licence to drop a reviewer; a dead reviewer (missing/invalid output after one re-run) means degraded coverage stated explicitly, never silent convergence.
+- **Model roles are fixed, models are aliases:** writers (implement + every fix pass, including Playwright fixes) and the closeout adjudicator get the strongest model; every read-only reporter — gut-check, roster reviewers, CodeRabbit wrapper, validator, Playwright verifier — runs leaner. Never pin exact model ids or effort levels.
+- Reviewers are **read-only** — only the implement/fix agents edit code; fix and adjudicator agents are always fresh.
+- **Tests + commit gate:** reviewers never see red or uncommitted code — the CLI turns a red gate into a gate-fix pass mechanically, and implementers must prove green with `testEvidence` (commands + summary lines run in-session), never assert it.
+- Playwright runs as a **skill-owned loop, only after the CLI's loop converges**, and only on user-facing slices (max 3 rounds). A broken user story is a **blocking** finding (failed AC), not advisory — with the screenshot kept as proof.
+- TDD discipline is carried in the implement/fix prompts (red-green per criterion); loop agents don't load the `tdd` skill directly.
+- **Checkpoint every stage boundary** (`## Workflow State`, full OIDs). On re-invocation resume from it — but durable markers (branch, ledger, PR state) always win over the checkpoint file.
 - Don't apply `labels.agentReady` to anything — this skill speaks `<NEXT>`, never the autonomous-loop trigger.
 - Don't modify the parent PRD ticket's description or sibling slices' bodies. The only writes beyond this slice's own ticket: moving the `<NEXT>` pointer, posting/updating the "Skeleton map" comment on downstream deltas, and appending to the `## Implementation deltas` section of the parent's `# PRD` comment (Step 6).
-- **Conventions are binding, not advisory:** exemplar mirroring per the slice's Convention contract; every added file carries a provenance row (`mirroredFrom` or a declared `[deviation: reason]`) — silent deviation is a blocking finding; no new helper without a `<SRC>` search; the reuse reviewer runs whenever the diff adds or modifies files.
+- **Conventions are binding, not advisory:** exemplar mirroring per the slice's Convention contract; every added file carries a provenance row (`mirroredFrom` or a declared `[deviation: reason]`) — silent deviation is a blocking finding; no new helper without a `<SRC>` search.
 - **Contract freeze:** a delta never alters the skeleton's published contract (schema/types/API shape). A needed contract change stops the slice and escalates — the stack gets restructured, not quietly edited.
 - **Consolidation never widens a slice:** in-slice extraction only within this slice's own new code + at most one existing call site; everything wider becomes a filed follow-up ticket (Step 4), linked from the PR comment (Step 5).
-- **No pre-PR confirmation gate.** Once the loop finishes, open the draft PR automatically (Step 4→5); the only skip is "no committed diff". Never promote it to ready or merge — that stays the human's call on the draft.
+- **No pre-PR confirmation gate.** Once the loop finishes, open the draft PR automatically (Step 4→5); the only skips are "no committed diff" and a gut-check hard-stop. Never promote it to ready or merge — that stays the human's call on the draft.
 
 ---
 

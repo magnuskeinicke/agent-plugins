@@ -6,7 +6,7 @@ argument-hint: "[issue id]"
 
 # Work Issue — the lean loop
 
-Drive **one standalone tracker issue** to a **draft PR**, with the same quality machinery as the big pipeline but none of its planning stages: no grilling, no PRD, no slice split, no stack. The ticket itself is the contract. Implementation runs inside the **work-slice workflow** (implement Opus/TDD → up to 5 review rounds → Playwright loop max 3), and under `/goal` a `/babysit-stack` finish stage drives the PR to CI-green with resolved threads.
+Drive **one standalone tracker issue** to a **draft PR**, with the same quality machinery as the big pipeline but none of its planning stages: no grilling, no PRD, no slice split, no stack. The ticket itself is the contract. Implementation runs inside the **work-slice engine-CLI loop** (implement TDD → up to 5 review rounds → Playwright loop max 3), and under `/goal` a `/babysit-stack` finish stage drives the PR to CI-green with resolved threads.
 
 When to use which:
 
@@ -16,8 +16,8 @@ When to use which:
 
 ## Repo contract — resolve this first
 
-Read `docs/agents/repo-config.md` (its `## Config` JSON block) and pass it to the
-workflow verbatim as `repoConfig`. The placeholders below stand for its values;
+Read `docs/agents/repo-config.md` (its `## Config` JSON block). The engine CLI
+reads the same file itself; the placeholders below stand for its values;
 missing file or empty key → use the fallback and say so once.
 
 | Placeholder | Config key | Absent → |
@@ -55,7 +55,7 @@ Fetch the issue from `<TRACKER>`. Hard gates, in order:
 
 **Acceptance criteria:** take the ticket's `- [ ]` checkboxes verbatim. If it has none, distill them from the description and post them back as a `## Acceptance criteria` comment (idempotent — update an existing one) so QA evidence has rows to reference. Also collect "where to look" pointers and any Figma links from the body.
 
-## Setting the goal — before the workflow starts
+## Setting the goal — before the loop starts
 
 Same pattern as `/feature-goal`: `/goal` is the built-in stop-blocker the **user types** (a skill cannot set it). Steps 1–2 are the only interactive gates, so set it here, once they're cleared. If no goal is active, print the template and ask (carry on identically if the user declines or is away — the skill just won't auto-resume):
 
@@ -68,39 +68,18 @@ GOAL MET (needs-human blockers count as not met)
 **Re-entry (every /goal iteration) is stage detection from observable state, never memory:**
 
 1. No committed diff vs `<BASE>` → Step 3 (implement).
-2. Committed diff, no open/merged PR for the branch (`gh pr list --state all --head <branch>`) → Step 5 (draft PR). Never re-run the workflow after it returned — converged or cap-hit, its result stands; cap leftovers ride on the PR.
+2. Committed diff, no open/merged PR for the branch (`gh pr list --state all --head <branch>`) → Step 5 (draft PR). Never re-run the review loop after its verdict — converged or stalled, the result stands; leftovers ride on the PR.
 3. Open PR → Step 6 (babysit passes).
 4. Last `/babysit-stack` verdict GOAL MET (or the PR merged) → done; report and stop.
 
-## Step 3 — Implement + review loop (Workflow)
+## Step 3 — Implement + review loop (engine CLI)
 
-One **`Workflow` call** — the sanctioned opt-in. **Do not implement or review in the main session** — the workflow owns implement (Opus, TDD per criterion), the bounded review ⇄ fix loop (max 5 rounds; baseline + web/server lanes + reuse, Sonnet), and the Playwright user-story loop (max 3) on user-facing changes:
+Work-slice Step 3 applies verbatim — implement pass, then the engine-CLI review ⇄ fix loop (`init → plan → collect → decide → apply-fix → adjudicate → report`, loop control from the CLI's JSON output), then the Playwright user-story loop (max 3) on user-facing changes. The run contract you write to `.context/<issue-id>/contract.md` maps this way:
 
-`scriptPath` must be an **absolute** path into this plugin's install root — the
-script ships with the plugin, not with the host repo, so a repo-relative path
-resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/work-slice/work-slice-loop.workflow.js`
-when that variable is set, otherwise
-`ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/work-slice/work-slice-loop.workflow.js | sort -V | tail -1`.
-Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
-
-```
-Workflow({
-  scriptPath: "<PLUGIN_ROOT>/skills/work-slice/work-slice-loop.workflow.js",
-  args: {
-    sliceId,             // the issue id
-    sliceKind: "delta",  // no skeleton here — mirror existing sibling features
-    acceptanceCriteria,  // from Step 2, verbatim
-    whereToLook,         // the ticket's pointers, or omit to discover
-    conventionContract: "", // no PRD contract — repoConfig.goldenPaths still guides
-    figma,               // ticket's Figma links, if any
-    baseBranch,          // `<BASE>`
-    prdContract,         // the ticket DESCRIPTION verbatim — the wider intent
-    repoConfig           // JSON block from docs/agents/repo-config.md
-  }
-})
-```
-
-`sliceKind: "delta"` makes the implementer mirror existing sibling features (there is no skeleton — siblings are the exemplars); provenance rules stay binding. Verify `args` reached the script — a returned "(unknown slice)" means they didn't; bake literals and re-run.
+- slice id = the issue id; **Kind = delta**, with sibling features as the exemplars (there is no skeleton — mirror existing siblings; provenance rules stay binding).
+- acceptance criteria = Step 2's, verbatim; where-to-look = the ticket's pointers, or omit to let the implementer discover.
+- convention contract = empty (no PRD contract — `repoConfig.goldenPaths` still guides); Figma = the ticket's links, if any.
+- the wider contract = the ticket DESCRIPTION verbatim; `--base` = `<BASE>`.
 
 ## Step 4 — Present + tracker bookkeeping
 
@@ -132,7 +111,7 @@ Run **`/babysit-stack <PR number>`** — one pass: `<BOT>` requested (once, ever
 - Never on pipeline tickets (`<SKIP>`) — redirect to `/work-slice` / `/feature-goal`; never on `<HITL>` unattended.
 - Never create a worktree or branch; never rename the Conductor branch; no stack commands (nothing to stack).
 - All constituent caps respected (5 review rounds, 3 Playwright, babysit's fix/thread caps, one bot review request per PR ever) — caps exhausted → escalate on the PR, never grind.
-- The workflow runs **once** per ticket, including across /goal re-entries — persistence after it is babysit passes, not more review rounds.
+- The review loop runs **once** per ticket, including across /goal re-entries — persistence after it is babysit passes, not more review rounds.
 - Label writes stay additive; never stamp `<AGENT-READY>` or `labels.sliceNext` on anything; consolidation follow-ups are new tickets, never scope creep.
 - `/goal` is user-typed, never self-set; the skill works identically without it.
 - Model roles fixed, aliases only (implementers Opus, reviewers/verifier Sonnet) — never pin exact ids or effort.
