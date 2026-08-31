@@ -180,6 +180,115 @@ test('init is idempotent and resumable', () => {
   assert.equal(again.round, 1);
 });
 
+test('review-only: findings end the run as a report, no fix pass (magnus:review-code)', () => {
+  const { run } = makeRun();
+  run('init', '--base', 'origin/main', '--review-only');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
+  const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
+  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', blockingFindings: [{ title: 'Off-by-one', detail: 'loop bound', file: 'src/a.ts', rootCause: 'loop-bound' }, { title: 'Old wart', detail: 'pre-existing', file: 'src/a.ts', rootCause: 'wart' }, { title: 'Ghost', detail: 'cannot see it', file: 'src/a.ts', rootCause: 'ghost' }], notes: [] }));
+  for (const r of plan.reviewers.filter((r) => r.id !== 'code-reviewer'))
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+  const collect = run('collect');
+  writeFileSync(collect.validator.outputFile, JSON.stringify({ verdicts: [
+    { id: 'R1-01', diffCaused: true, confidence: 92 },
+    { id: 'R1-02', diffCaused: false, confidence: 90 },
+    { id: 'R1-03', diffCaused: true, confidence: 30 },
+  ] }));
+  const decide = run('decide', '--verdicts', collect.validator.outputFile);
+  assert.equal(decide.action, 'report', 'review-only never emits a fix');
+  assert.match(decide.verdict, /1 blocking finding\(s\) \(CR-001\)/);
+  assert.equal(run('status').phase, 'done');
+  const report = run('report');
+  assert.deepEqual(report.blocking.map((e) => e.id), ['CR-001']);
+  assert.equal(report.blocking[0].confidence, 92);
+  assert.deepEqual(report.advisoryNotes.map((e) => e.id), ['CR-002'], 'confident-but-pre-existing is advisory');
+  assert.deepEqual(report.unverified.map((e) => e.id), ['CR-003'], 'sub-60 confidence is dropped, still visible');
+});
+
+test('review-only with a clean round reports verdict "clean"', () => {
+  const { run } = makeRun();
+  run('init', '--base', 'origin/main', '--review-only');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
+  for (const r of plan.reviewers)
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+  run('collect');
+  const decide = run('decide');
+  assert.equal(decide.action, 'report');
+  assert.equal(decide.verdict, 'clean');
+});
+
+test('max-rounds caps the loop below the hard cap', () => {
+  const { run } = makeRun();
+  run('init', '--base', 'origin/main', '--max-rounds', '1');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
+  const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
+  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', blockingFindings: [{ title: 'Bug', detail: 'boom', file: 'src/a.ts', rootCause: 'boom' }], notes: [] }));
+  for (const r of plan.reviewers.filter((r) => r.id !== 'code-reviewer'))
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+  const collect = run('collect');
+  writeFileSync(collect.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R1-01', diffCaused: true, confidence: 95 }] }));
+  const decide = run('decide', '--verdicts', collect.validator.outputFile);
+  assert.equal(decide.action, 'stalled', 'round 1 is the cap — no fix pass emitted');
+  assert.match(decide.verdict, /stalled — shipped with 1 open finding/);
+});
+
+test('inspect override drives every prompt; non-git commands get a --name-only manifest', () => {
+  const { run } = makeRun();
+  run('init', '--base', 'origin/main', '--review-only', '--inspect', 'gh pr diff 42');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
+  assert.match(readFileSync(cr.promptFile, 'utf8'), /`gh pr diff 42`/);
+  assert.ok(!readFileSync(cr.promptFile, 'utf8').includes('origin/main...HEAD'));
+  const gut = readFileSync(plan.prePass.promptFile, 'utf8');
+  assert.match(gut, /`gh pr diff 42 --name-only`/);
+  assert.ok(!gut.includes('--numstat'), 'no numstat form for a non-git inspect command');
+});
+
+test('git inspect override derives name-status/numstat manifest forms', () => {
+  const { run } = makeRun();
+  run('init', '--base', 'HEAD', '--review-only', '--inspect', 'git diff HEAD');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  const gut = readFileSync(plan.prePass.promptFile, 'utf8');
+  assert.match(gut, /`git diff --name-status --find-renames HEAD`/);
+  assert.match(gut, /`git diff --numstat --find-renames HEAD`/);
+  assert.match(readFileSync(plan.reviewers[0].promptFile, 'utf8'), /`git diff HEAD`/);
+});
+
+test('collect names reviewers that never wrote their outputFile, and is re-runnable after the re-run', () => {
+  const { run } = makeRun();
+  run('init', '--base', 'origin/main');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
+  const [dead, ...rest] = plan.reviewers;
+  for (const r of rest)
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+  const collect = run('collect');
+  assert.deepEqual(collect.missing, [dead.id]);
+  assert.match(collect.missingReports, /re-run those reviewers once/);
+  // the dead reviewer gets its one re-run, then collect runs again
+  writeFileSync(dead.outputFile, findingsFile({ reviewer: dead.id, blockingFindings: [], notes: [] }));
+  const collect2 = run('collect');
+  assert.deepEqual(collect2.missing, []);
+  assert.equal(run('decide').action, 'converged');
+});
+
+test('coderabbit: --coderabbit-cmd emits the lane with the given command, --no-coderabbit suppresses it', () => {
+  const a = makeRun();
+  a.run('init', '--base', 'origin/main');
+  const planA = a.run('plan', '--changed-files', 'src/a.ts', '--coderabbit-cmd', 'coderabbit review --agent --uncommitted');
+  assert.ok(planA.coderabbit, 'override enables the lane without repo config');
+  assert.match(readFileSync(planA.coderabbit.promptFile, 'utf8'), /coderabbit review --agent --uncommitted/);
+
+  const b = makeRun();
+  writeFileSync(join(b.dir, 'repo-config.md'), '## Config\n```json\n{"pr": {"cliReviewer": "coderabbit review --agent"}}\n```\n');
+  b.run('init', '--base', 'origin/main');
+  const planB = b.run('plan', '--changed-files', 'src/a.ts', '--config', join(b.dir, 'repo-config.md'), '--no-coderabbit');
+  assert.equal(planB.coderabbit, null, '--no-coderabbit wins over the config value');
+});
+
 test('findings validation requires rootCause on blocking findings', async () => {
   const { validate, FINDINGS_SCHEMA } = await import('../lib/schemas.mjs');
   const report = (finding) => ({ reviewer: 'code-reviewer', blockingFindings: [finding], notes: [] });

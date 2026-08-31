@@ -20,10 +20,9 @@ function outputContract(outputFile) {
 Every blocking finding needs a stable "rootCause" slug (what is wrong, not where — it powers cross-round identity). Do not pad findings to look productive: empty arrays are the correct result for a clean diff. Findings you cannot verify at the cited file/line do not go in blockingFindings.`;
 }
 
-function diffScope(base, fixRange) {
-  const full = `git diff ${base}...HEAD`;
-  if (!fixRange) return `The diff under review: \`${full}\`.`;
-  return `PRIMARY diff under review (this round's fix): \`git diff ${fixRange}\`. The full slice diff (\`${full}\`) is available as context — but report only on the primary range plus anything it touches.`;
+function diffScope(diffCmd, fixRange) {
+  if (!fixRange) return `The diff under review: \`${diffCmd}\`.`;
+  return `PRIMARY diff under review (this round's fix): \`git diff ${fixRange}\`. The full slice diff (\`${diffCmd}\`) is available as context — but report only on the primary range plus anything it touches.`;
 }
 
 function overlayText(overlays) {
@@ -41,7 +40,7 @@ export function reviewerPrompt({
   reviewerId,
   mode,
   contractText,
-  base,
+  diffCmd,
   fixRange,
   overlays,
   ledger,
@@ -55,7 +54,7 @@ export function reviewerPrompt({
     '',
     contractText,
     '',
-    diffScope(base, fixRange),
+    diffScope(diffCmd, fixRange),
     `The repo's written conventions live in ${conventionsFile(cfg)}.`,
     overlayText(overlays),
     extra || '',
@@ -112,14 +111,17 @@ ${outputContract(outputFile)}`;
 
 // Gut-check pre-pass — rubric-free first read, round 1 only, BEFORE the
 // roster lanes; a `block` observation stops the run before any reviewer spend.
-export function gutCheckPrompt(contractText, base, outputFile) {
+export function gutCheckPrompt(contractText, inspect, outputFile) {
+  const manifest = inspect.numstatCmd
+    ? `\`${inspect.nameStatusCmd}\` and \`${inspect.numstatCmd}\``
+    : `\`${inspect.nameStatusCmd}\``;
   return `You are the gut-check pre-pass — a rubric-free FIRST READ of this change, before any structured reviewer runs. ${READ_ONLY} One question, answered honestly: does anything in this diff jump out as strange, unusual, or unnecessary? "Nothing jumps out" (an empty observations array) is a valid, complete, and frequently correct answer — do not manufacture observations.
 
 ${contractText}
 
 Read in three tiers:
-1. Manifest — every changed file, ALWAYS: \`git diff --name-status --find-renames ${base}...HEAD\` and \`git diff --numstat --find-renames ${base}...HEAD\`. Unrelated files, drive-by renames, whole-file reformats riding along with real work, deletions, stray scratch files, and generated output moving without the source that would produce it are all visible here without reading a single hunk.
-2. Hunks — as many files as fit: \`git diff ${base}...HEAD\`, working file by file in ASCENDING changed-line count so truncation costs the fewest files. Never let a partial read report as a complete pass — name any file you did not fully read in scopeNote.
+1. Manifest — every changed file, ALWAYS: ${manifest}. Unrelated files, drive-by renames, whole-file reformats riding along with real work, deletions, stray scratch files, and generated output moving without the source that would produce it are all visible here without reading a single hunk.
+2. Hunks — as many files as fit: \`${inspect.diffCmd}\`, working file by file in ASCENDING changed-line count so truncation costs the fewest files. Never let a partial read report as a complete pass — name any file you did not fully read in scopeNote.
 3. Full files — on suspicion only: open the whole file around a hunk that looks strange. Half a function often looks stranger than the whole one; drop anything the surrounding code explains.
 
 Things that count as jumping out: a change nobody asked for (unrelated file, drive-by rename, reformat alongside real work); something surprising on its face (magic constant, disabled or skipped test, commented-out block, shortened timeout, widened permission, swallowed error, a new dependency pulled in for one call, leftover TODO or debug statement); a hunk you still cannot explain after reading the surrounding file; a deletion whose behaviour has no visible replacement; config/credential/version churn beside unrelated work; anything contradicting the acceptance criteria above. Not exhaustive and not a checklist — anything that made you pause counts, and nothing counts merely because it is listed.
@@ -131,7 +133,7 @@ Give every observation a disposition:
 - "reject": it made you pause, but the surrounding code, the acceptance criteria, or the branch's purpose explains it — record it and move on.
 - "block": work clearly OUTSIDE the ticket's stated requirements (an unasked-for feature, unrelated work riding along at scale). This HARD-STOPS the run for the human — use it only when you can name the requirement the work exceeds, never for something a routed finding covers.
 
-End scopeNote with one sentence naming what you looked at: the base ref, the number of changed files the manifest covered (always all of them), and any file whose hunks you did not fully read.
+End scopeNote with one sentence naming what you looked at: the diff command you ran, the number of changed files the manifest covered (always all of them), and any file whose hunks you did not fully read.
 
 Write your result as JSON to \`${outputFile}\`:
 {"observations": [{"title", "file", "line", "detail", "disposition", "routeArea", "rootCause"}], "scopeNote": "..."}`;
@@ -139,12 +141,12 @@ Write your result as JSON to \`${outputFile}\`:
 
 // Task prompt for the relevance/confidence validator (system prompt =
 // agents/pr-relevance-validator.md).
-export function validatorPrompt(contractText, findingsText, base, outputFile) {
+export function validatorPrompt(contractText, findingsText, diffCmd, outputFile) {
   return `You CLASSIFY the findings below — you may NOT add findings of your own. ${READ_ONLY}
 
 ${contractText}
 
-The diff under review: \`git diff ${base}...HEAD\`. Open the cited files and check every finding against the actual code before classifying it.
+The diff under review: \`${diffCmd}\`. Open the cited files and check every finding against the actual code before classifying it.
 
 Findings to classify:
 ${findingsText}
@@ -156,12 +158,12 @@ diffCaused: introduced by this diff vs pre-existing/out-of-scope — a real prob
 
 // Fix pass: one fresh implementer resolves the open blocking findings
 // test-first, or disputes with concrete evidence.
-export function fixPrompt(contractText, targets, base, commitRule, outputFile) {
+export function fixPrompt(contractText, targets, diffCmd, commitRule, outputFile) {
   return `You are the fix implementer for one review round. Resolve EVERY finding below, test-first (RED→GREEN where behaviour changes), then commit.
 
 ${contractText}
 
-The slice diff so far: \`git diff ${base}...HEAD\`.
+The slice diff so far: \`${diffCmd}\`.
 
 Findings to resolve (address by [id]):
 ${fmtFeedback(targets)}
@@ -177,7 +179,7 @@ Write your result as JSON to \`${outputFile}\`:
 
 // Independent closeout adjudicator for disputed entries — self-contained
 // prompt, no roster file. Fresh agent, evidence only.
-export function adjudicatorPrompt(contractText, disputedEntries, base, outputFile) {
+export function adjudicatorPrompt(contractText, disputedEntries, diffCmd, outputFile) {
   const rows = disputedEntries
     .map(
       (e) =>
@@ -190,7 +192,7 @@ export function adjudicatorPrompt(contractText, disputedEntries, base, outputFil
 
 ${contractText}
 
-Final diff: \`git diff ${base}...HEAD\` — read it, plus the cited files, and check BOTH sides' evidence against the actual code.
+Final diff: \`${diffCmd}\` — read it, plus the cited files, and check BOTH sides' evidence against the actual code.
 
 Disputed findings:
 ${rows}

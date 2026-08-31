@@ -13,7 +13,7 @@ Scaffold a fresh repo's half with `/magnus:init-repo`.
 ## Layout
 
 ```
-skills/<name>/SKILL.md      # one dir per skill (+ assets, workflow .js where kept)
+skills/<name>/SKILL.md      # one dir per skill (+ assets)
 agents/<id>.md              # reviewer roster — vendored from kramme-cc-workflow
                             # (MIT, see agents/sources.yaml); Claude subagent def
                             # = Codex `codex exec` child system prompt
@@ -78,11 +78,10 @@ node engine/cli.mjs status --slice PROJ-1234   # example invocation
 node --test 'engine/test/*.test.mjs'           # the loop's test suite
 ```
 
-The three `*.workflow.js` scripts still shipped inside some skills
-(review-code, iterate-pr, solve-ready-tickets) are frozen Claude-only remnants
-(their embedded shared blocks no longer have a sync source) and are being
-replaced skill by skill with CLI-driven sequential loops that run on both
-agents — `work-slice` already runs CLI-driven.
+One `*.workflow.js` script remains (solve-ready-tickets) — a frozen Claude-only
+remnant (its embedded shared blocks no longer have a sync source) awaiting the
+same CLI-driven rewrite `work-slice`, `review-code` and `iterate-pr` already
+run on.
 
 ## Status
 
@@ -92,5 +91,7 @@ repo over, P4 made the suite repo-agnostic, and the Codex-first rework (PR stack
 2026-08-28) started with PR1: the shared engine became the `engine/` CLI and the
 kramme reviewer roster was vendored into `agents/`. PR2 rewrote `work-slice` onto
 the CLI: sequential-first loop (subagents an optional accelerator), a
-`## Workflow State` resume checkpoint, and no workflow script. 17 skills,
-25 roster agents.
+`## Workflow State` resume checkpoint, and no workflow script. PR3 gave
+`review-code` (CLI review-only mode, `--inspect` targets) and `iterate-pr`
+(full loop on an existing PR, `--max-rounds`) the same treatment and deleted
+their workflow scripts. 17 skills, 25 roster agents.

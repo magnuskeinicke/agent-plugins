@@ -1,19 +1,18 @@
 ---
 name: review-code
-description: Fan out the shared feature-dev reviewer lanes (baseline + web/server + reuse + the repo's review CLI) on any code, any time — uncommitted changes, a branch diff, or a PR. One read-only parallel review round, findings report back; no fix loop, no ticket needed. Use when the user says "review this code", "spawn the review agents", "run the reviewer lanes", "review my diff/working tree/branch", or wants the work-slice reviewers on ad-hoc code.
+description: Run the shared reviewer roster (engine CLI, review-only mode) on any code, any time — uncommitted changes, a branch diff, or a PR. One read-only classified review round, findings report back; no fix loop, no ticket needed. Use when the user says "review this code", "spawn the review agents", "run the reviewer lanes", "review my diff/working tree/branch", or wants the work-slice reviewers on ad-hoc code.
 ---
 
 # Review Code
 
-Run the **same review agents** the feature-dev workflows (`/work-slice`, `/solve-ready-tickets`) use — baseline + diff-matched **web/server lanes** + the **reuse reviewer** + the **scope-fidelity reviewer** (when context provides acceptance criteria and the diff is sizeable) + the **review-CLI reviewer** (a wrapper around `pr.cliReviewer`) — on **any** code, standalone. One parallel read-only round; a **relevance validator** then classifies every raw finding (diff-caused? confidence 0–100?) before it reaches the report, so the human sees blocking (≥80 confidence, diff-caused), advisory (60–79 or pre-existing), and unverified (<60) findings separately, each under a stable `CR-NNN` id. No implementer, no fix loop, no Playwright, no ticket: the human decides what to do with the findings.
+Run the **same reviewer roster** the feature-dev loops (`/work-slice`, `/iterate-pr`) use — gut-check pre-pass, always-on + mechanically-triggered roster lanes, the reuse audit, the CodeRabbit wrapper when configured — on **any** code, standalone, through the plugin's **engine CLI in review-only mode**. One read-only round; the relevance validator classifies every finding before it reaches the report, so the human sees **blocking** (≥80 confidence, diff-caused), **advisory** (60–79, or confident-but-pre-existing), and **unverified** (<60) findings separately, each under a stable `CR-NNN` id. No implementer, no fix loop, no Playwright, no ticket: the human decides what to do with the findings.
 
 ## Repo contract — resolve this first
 
-Read `docs/agents/repo-config.md` (its `## Config` JSON block) and pass it to the
-workflow verbatim as `repoConfig`. The reviewer lenses themselves live in its
-`reviewers` key; the plugin merges them over its generic lanes at runtime, so
-tuning the md is all it takes — there is nothing to sync. Missing file or empty
-key → the generic lanes apply and you say so once.
+The engine CLI reads `docs/agents/repo-config.md` itself (`--config`, defaulting
+to that path in the host repo root). The placeholders below stand for its values
+where this skill acts directly. Missing file or empty key → the generic
+defaults apply and you say so once.
 
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
@@ -21,94 +20,115 @@ key → the generic lanes apply and you say so once.
 | `<CLI-REVIEWER>` | `pr.cliReviewer` | that reviewer lane is skipped |
 | `<CONVENTIONS>` | `conventionsFile` | `CLAUDE.md` |
 
+Which reviewers exist and when they trigger: `../work-slice/references/reviewer-roster.md`
+(documentation; `engine/lib/roster.mjs` is the source of truth). The host's
+`reviewers.*` / `areaPaths` config is an additive focus overlay the CLI applies
+itself — tune the md, never fork lanes here.
+
 ## Step 1 — Resolve the review target
 
-Input is optional: a base ref/branch, a PR number, or nothing.
+Input is optional: a base ref/branch, a PR number, specific files, or nothing.
 
-- **Nothing given, dirty worktree** (`git status --porcelain` non-empty) → review the **uncommitted work**: `inspect = "git diff HEAD"`, changed = `git diff --name-only HEAD`, added = `git diff --name-only --diff-filter=A HEAD`, untracked = the `??` paths from `git status --porcelain` (source files only — skip build artifacts/screenshots).
-- **Nothing given, clean worktree** → review the **branch vs its base**: `inspect = "git diff <base>...HEAD"` where `<base>` = `<BASE>`. Changed/added via `--name-only` / `--diff-filter=A` on the same range.
-- **Base ref given** ("review against X", "review vs the integration branch") → same as above with that base.
-- **PR number given** → don't check anything out: `inspect = "gh pr diff <n>"`, changed = `gh pr diff <n> --name-only`, added = paths whose diff hunk starts from `/dev/null` (parse `gh pr diff <n>` for `new file mode` entries). Note in `context` that reviewers see only the diff, not a checkout.
-- **Specific files given** → `inspect = "git diff HEAD -- <paths>"` (or, for files with no diff, list them as `untrackedFiles` so reviewers read them in full).
+- **Nothing given, dirty worktree** (`git status --porcelain` non-empty) → review the **uncommitted work**: `inspect = "git diff HEAD"`, changed/added/deleted = `git diff --name-only [--diff-filter=A|D] HEAD`, untracked = the `??` paths from `git status --porcelain` (source files only — skip build artifacts/screenshots).
+- **Nothing given, clean worktree** → review the **branch vs its base**: base = `<BASE>`, no inspect override (the CLI defaults to `git diff <base>...HEAD`). Changed/added/deleted via `--name-only` / `--diff-filter` on that range.
+- **Base ref given** ("review against X") → same as above with that base.
+- **PR number given** → don't check anything out: `inspect = "gh pr diff <n>"`, changed = `gh pr diff <n> --name-only`, added = paths whose hunk starts from `/dev/null` (`new file mode` entries). Reviewers see only the diff, not a checkout — say so in the contract, and note that file-level verification is degraded.
+- **Specific files given** → `inspect = "git diff HEAD -- <paths>"`; files with no diff go in the untracked list so reviewers read them in full.
 
 If there is nothing to review (clean tree AND no commits past base), stop and tell the user.
 
-Also capture `insertions` — the inserted-line count from `git diff --shortstat` on the same range (0 when unknown). Together with added files it gates the scope-fidelity lane.
+Also capture:
 
-Optionally set `declaredAreas` (from `frontend|backend|database|i18n|security|performance`) when you know the change touches an area its paths don't reveal — e.g. an auth-relevant change in a neutral path → declare `security`.
+- `insertions` — inserted-line count from `git diff --shortstat` on the same range (0 when unknown).
+- `declaredAreas` (optional, from `frontend|backend|database|i18n|security|performance`) when the change touches an area its paths don't reveal — e.g. an auth-relevant change in a neutral path → declare `security`.
+- `userFacing` — biases **true**; false only for clearly internal-only changes.
+- The `<CLI-REVIEWER>` invocation matching the target (for `coderabbit`): uncommitted work → `coderabbit review --agent --uncommitted -c <CONVENTIONS>` (append `--include-untracked` when untracked files exist); branch vs base → `coderabbit review --agent --committed --base-commit "$(git merge-base <base> HEAD)" -c <CONVENTIONS>`; PR reviewed diff-only → none (the CLI needs a checkout — pass `--no-coderabbit`).
 
-Build `coderabbitCmd` — the exact `<CLI-REVIEWER>` invocation matching the review target (the workflow passes it verbatim to that reviewer agent; empty/absent = the lane is skipped, which is also the correct result when `pr.cliReviewer` is unset). For `coderabbit`:
+## Step 2 — Run the review round (engine CLI)
 
-- Uncommitted work → `coderabbit review --agent --uncommitted -c <CONVENTIONS>` (append `--include-untracked` when `untrackedFiles` is non-empty).
-- Branch vs base → `coderabbit review --agent --committed --base-commit "$(git merge-base <base> HEAD)" -c <CONVENTIONS>`.
-- PR reviewed diff-only (no local checkout) → omit `coderabbitCmd`; the CLI needs a checkout.
+The round is driven by the plugin's **engine CLI**. **Loop control is
+deterministic CLI output, never prose discipline:** run each command from the
+host repo root, read the JSON it prints, and do what its `action` / `next`
+field says. Run state lives in the host repo's gitignored `.context/<run-id>/`.
 
-## Step 2 — Run the review round (Workflow)
+Resolve `<ENGINE>` once — it lives in the **plugin install root**, not the host repo:
 
-This step runs as a **single `Workflow` call** — invoking it here is the sanctioned opt-in. The workflow selects the reviewer set from the changed paths (baseline always; at most 2 lanes; reuse when the diff adds or modifies files; scope-fidelity when `hasAcceptanceCriteria` is set and the diff is sizeable; the review CLI when `coderabbitCmd` is given), spawns them **in parallel**, and returns the aggregated findings.
-
-`scriptPath` must be an **absolute** path into this plugin's install root — the
-script ships with the plugin, not with the host repo, so a repo-relative path
-resolves to nothing. Resolve it first: use `$CLAUDE_PLUGIN_ROOT/skills/review-code/review-code.workflow.js`
-when that variable is set, otherwise
-`ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/skills/review-code/review-code.workflow.js | sort -V | tail -1`.
-Below, `<PLUGIN_ROOT>` stands for the resolved root — substitute the real path.
-
-```
-Workflow({
-  scriptPath: "<PLUGIN_ROOT>/skills/review-code/review-code.workflow.js",
-  args: {
-    inspect,        // the command reviewers run to see the code (Step 1)
-    context,        // optional: what the change is / what to judge it against
-                    // (acceptance criteria, a ticket description, "pre-commit check")
-    changedFiles,   // repo-relative paths under review (Step 1)
-    addedFiles,     // added-vs-base paths — with changedFiles, gates the reuse reviewer
-    untrackedFiles, // new files not in any diff — reviewers read them in full
-    declaredAreas,  // optional area hints beyond the path map
-    coderabbitCmd,  // Step 1's review-CLI command; omit to skip that reviewer
-    insertions,     // Step 1's inserted-line count — gates the scope-fidelity lane
-    hasAcceptanceCriteria, // true ONLY when `context` carries real AC — gates the scope-fidelity lane
-    repoConfig      // the JSON block from docs/agents/repo-config.md, if present
-  }
-})
+```bash
+engine="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/engine/cli.mjs}"
+[ -n "$engine" ] && [ -f "$engine" ] || engine="$(realpath "<this-skill-dir>/../..")/engine/cli.mjs"  # symlinked install
+[ -f "$engine" ] || engine="$(ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/engine/cli.mjs 2>/dev/null | sort -V | tail -1)"
 ```
 
-**Do not review in the main session** — the workflow owns it. Reviewers and the relevance validator are **Sonnet** (role-based aliases, never exact pins — same policy as the other feature-dev workflows) and **read-only**: they only report. The scope-fidelity lane runs only when `hasAcceptanceCriteria` is set (pass it as true ONLY when the `context` you built actually contains acceptance criteria — a bare "pre-commit check" doesn't count) AND the diff adds files or >~150 inserted lines — necessity is judged against the stated AC, never inferred from the diff.
+**Run id:** `review-$(date +%Y%m%d-%H%M%S)` — each invocation is a fresh run.
+(Resuming an interrupted run instead: find the newest `.context/review-*`
+dir and ask `status` where it stopped.)
+
+**Write the contract.** `mkdir -p .context/<run-id>` and write
+`.context/<run-id>/contract.md`: what the change is / what to judge it against
+(acceptance criteria, a ticket description, "pre-commit check" — whatever
+context you have; say when you have none), the untracked files to read in full
+(they are invisible to the diff), and for a PR-diff-only target the caveat that
+the local checkout does not contain the change.
+
+**Drive the CLI:**
+
+```bash
+node "$engine" init --slice <run-id> --base <base-or-HEAD> --review-only \
+  [--inspect '<inspect cmd from Step 1>']        # omit for a plain branch-vs-base review
+node "$engine" plan --slice <run-id> --changed-files <csv> --added-files <csv> --deleted-files <csv> \
+  --insertions <n> --user-facing <bool> [--declared-areas <csv>] \
+  [--coderabbit-cmd '<Step 1 command>' | --no-coderabbit]
+# → the round's task manifest: prePass (gut-check), coderabbit?, reviewers[]
+node "$engine" collect --slice <run-id>
+# → validator task when findings survived; run it, then
+node "$engine" decide --slice <run-id> --verdicts <verdicts.json>
+# → action=report (or hard-stop on a gut-check block)
+node "$engine" report --slice <run-id>
+```
+
+`--review-only` makes the run single-round: `decide` classifies and stops —
+no fix prompt is ever emitted.
+
+**Running an emitted task.** Every task names an `agentFile` (roster file —
+its body is the agent's system prompt), a `promptFile`, an `outputFile` (the
+JSON the agent must write), and a `model` when the roster pins one. Mechanism
+is runtime-dependent; **subagents are an optional accelerator, the round is
+sequential-first**: Claude spawns each reviewer as a subagent (read-only, so
+run them **in parallel**); Codex runs background `codex exec` children with
+the agent-file body prepended; with neither, run each reviewer yourself, one
+at a time, adopting the roster persona fresh — and disclose the fallback once.
+
+Ground rules:
+
+- **Gut-check runs first.** A `"disposition": "block"` observation → run `collect` immediately; it hard-stops for the human before any reviewer spend.
+- **Every emitted reviewer must report before `collect` settles.** `collect` lists `missing` and `invalid` reports: re-run each dead reviewer once, then run `collect` again; still dead → proceed, but the verdict is NOT clean — state the degraded coverage explicitly.
+- **Reviewers and the validator are read-only** — the only side effect of this skill is the report. Reporters run on a leaner model; aliases only, never exact model ids.
+- Never hand-edit `.context/<run-id>/ledger.json` or a findings file.
 
 ## Step 3 — Present the report
 
-Print, from the returned summary:
+Print, from `report`'s output plus the findings files:
 
-- **Verdict**: clean, or N blocking findings. `clean` is only true when every spawned reviewer reported — a round with dead reviewers (`reviewersDied > 0`) is NOT clean even with zero blocking findings.
-- Which reviewers ran (`reviewers`) — and flag any that died (`reviewersDied` / `reviewersSpawned` vs `reviewersReturned`).
-- **Blocking findings** (`blockingFindings` — validator-confirmed: confidence ≥80 and diff-caused): one block each — `CR-NNN [area] title (file:line)`, detail, suggested fix, confidence.
-- **Advisory findings** (`advisoryFindings` — 60–79 confidence, or confident-but-pre-existing, flagged `preExisting`): worth a glance, never "fix before ship".
-- **Unverified** (`unverified` — confidence <60): listed so nothing dies silently; treat as noise unless something rings true.
-- **Notes**: judgement-call points, grouped by area.
-- **Consolidations**: generalizable-code candidates the reuse reviewer surfaced (these would become follow-up tickets in the workflow skills; here just list them).
+- **Verdict verbatim**: `clean`, or `N blocking finding(s) (CR-…)`. `clean` only counts when every emitted reviewer reported — a round with dead reviewers is not clean even with zero findings.
+- Which reviewers ran, and any that died (from `collect`'s `missing`/`invalid`).
+- **Blocking** (`report.blocking`): one block each — `CR-NNN [source] title (file:line)`, detail, suggested fix, confidence.
+- **Advisory** (`report.advisoryNotes`): 60–79 confidence or confident-but-pre-existing — worth a glance, never "fix before ship".
+- **Unverified** (`report.unverified`): listed so nothing dies silently; noise unless something rings true.
+- **Notes**: the `notes` arrays from `.context/<run-id>/round-1/findings/*.json` — judgement-call points, grouped by reviewer.
+- **Consolidations**: the `consolidations` arrays from the same files — generalizable-code candidates (the workflow skills would file these as tickets; here just list them).
 
 Then **stop** — findings are the deliverable. Do not fix anything unless the user asks; if they do, fixing happens in the main session as a normal task (there is no fix loop in this skill).
 
-## Codex fallback — no `Workflow` tool
-
-Codex has no `Workflow` tool, so Step 2 cannot run as one call. Run the same
-round **sequentially** instead, with the same inputs and the same read-only
-rule: select the reviewer set exactly as Step 2 describes, then run each
-reviewer as its own read-only pass, then the relevance validator over the
-pooled findings, then Step 3's report. One pass each, no fix loop — the
-classification thresholds and the "a dead reviewer means not clean" rule apply
-unchanged.
-
 ## Boundaries
 
-- **Read-only, always.** No edits, no commits, no branch changes, no tickets. The only side effect is the report.
-- One round. No fix ⇄ review loop, no convergence cap — that machinery belongs to `/work-slice` / `/solve-ready-tickets`.
+- **Read-only, always.** No edits, no commits, no branch changes, no checkouts, no tickets. The only side effect is the report (and the gitignored `.context/<run-id>/` state).
+- One round, CLI-enforced (`--review-only`). No fix ⇄ review loop — that machinery belongs to `/work-slice` / `/iterate-pr`.
 - No Playwright — user-story verification needs acceptance criteria and a runnable slice; out of scope here.
-- Reviewer definitions come from the host repo's `repoConfig.reviewers` and `repoConfig.areaPaths` (docs/agents/repo-config.md), merged over the plugin's generic lanes at runtime — tune there, never fork them inline here.
-- Model roles are fixed, models are aliases: reviewers and the relevance validator are **Sonnet**. Never pin exact model ids or effort levels.
+- **The CLI owns the round.** Reviewer selection, suppression, classification thresholds, and the verdict come from `<ENGINE>`'s JSON — never re-derive them, never hand-edit its state files, never skip a command because you "know" what it will say.
+- The roster in `agents/` is the lane source; the host's `reviewers.*` config is an additive focus overlay the CLI applies. Tune `docs/agents/repo-config.md`, never fork lanes inline.
 - The relevance validator classifies findings — it never adds its own; a dead validator means findings pass through unclassified (reported as blocking), never silently dropped.
-- The reuse reviewer runs without a provenance table here (ad-hoc code has none) — it hunts lib duplicates and consolidation candidates only.
-- The review-CLI reviewer only relays **verified** CLI findings (bugs/security/leaks blocking; nits as notes); if the CLI is unavailable it reports that as a note instead of reviewing itself. This skill is single-round, so the once-only rule is trivially satisfied.
+- The reuse audit runs without a provenance table here (ad-hoc code has none) — it hunts lib duplicates and consolidation candidates only.
+- The CodeRabbit wrapper only relays **verified** CLI findings; if the CLI is unavailable it reports that as a note instead of reviewing itself. Single round, so the once-only rule is trivially satisfied.
 
 ---
 
