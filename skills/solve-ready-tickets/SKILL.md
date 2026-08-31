@@ -433,47 +433,6 @@ Mode: dry-run | apply   ·   In queue: <n>   ·   Resumed: <r>   ·   Picked up:
 In `dry-run`, the table shows what *would* be picked up and in what order; no
 Outcome column actions are taken.
 
-## Safety rules
-
-- Default to `dry-run`. Claim / branch / implement / open PRs only on `apply`.
-- **Clear `<AGENT-READY>` on claim** (additive write — never clobber other labels)
-  so a ticket is never picked up twice; pair it with the `<IN-PROGRESS>` move.
-- **Terminal state is a DRAFT PR.** Never merge, mark the PR ready, approve, mark
-  the issue done, or run compliance. "Run compliance" means *initiating*
-  `/compliance-check` or *adding* a compliance verdict — it does **not** mean
-  preserving a compliance label the ticket already carried; echoing an existing
-  label back on the additive claim write is mandatory, not a compliance action
-  (see Step 2). The draft is the human gate.
-- Honor `<SKIP>` and `<HITL>` as hard exclusions even if `<AGENT-READY>`
-  is somehow also present.
-- **One worktree per ticket**, based on `<BASE>` — never work in the user's
-  active checkout. Every solve command runs from the ticket's worktree.
-- The orchestrator does no code work: implementation + review live entirely in
-  the emitted tasks the engine CLI drives (Step 4); the PR mechanics live in
-  `<PR-SKILL>`. Read summaries and CLI JSON, not full logs.
-- **The CLI owns the loop.** Reviewer selection, suppression, classification
-  thresholds, gate injection, and the stop conditions come from `<ENGINE>`'s
-  JSON output — never re-derive them, never hand-edit
-  `.context/<issue-id>/ledger.json` or a findings file, never skip a command.
-- **Re-entrant, never duplicating:** a re-run resumes in-flight tickets from
-  durable markers (the `.context/<issue-id>/` state dir is the ownership
-  marker) before selecting new ones; a branch without that marker is a
-  human's WIP — flag it, never touch it. Never re-`init` a finished engine
-  run.
-- A ticket that triages to `escalate` is **declined**, not routed: write the
-  elaborate decline comment, clear `<RISK:>*` (`<AGENT-READY>` already cleared on
-  claim), add **no** routing label, move it back to `<READY>`
-  so `daily-ticket-manager` re-classifies it, and remove its worktree.
-  Never stamp `<HITL>` yourself — routing is the manager's call once the
-  solver hands back the new info.
-- A ticket that fails to claim, stays red after the gate-fix pass, gut-check
-  hard-stops, or errors mid-solve is flagged and skipped — never crash the
-  whole run, never force a low-quality PR.
-- Don't touch tickets that aren't mine, aren't `<AGENT-READY>` (or in-flight from
-  a prior run of this skill), or aren't in `<READY>`/`<IN-PROGRESS>`
-  accordingly. Don't create or close tickets.
-- An empty queue is a valid result — report it and stop.
-
 ## Scheduling
 
 Built to run unattended (e.g. nightly, after the morning `daily-ticket-manager`
@@ -485,6 +444,35 @@ explicitly approved `apply`. A scheduled `apply` run still only ever: clears
 `<AGENT-READY>` + claims, branches in a worktree, resumes or runs the solve
 loop, opens a **draft** PR, and comments — never merging, never marking done,
 never running compliance.
+
+## Workflow Boundaries
+
+**This skill drains the agent-ready queue: claims stamped tickets, solves each in an isolated worktree via the engine CLI, and stops at a draft PR.**
+
+- **DOES**: resume in-flight tickets from durable markers, claim (clear `<AGENT-READY>` + move to `<IN-PROGRESS>`), branch one worktree per ticket off `<BASE>`, drive the engine-CLI loop (`--max-rounds 2`), run the lean Playwright check, open a **draft** PR + ticket comment, report the run
+- **DOES NOT**: merge, mark PRs ready, approve, mark issues done, run compliance, create or close tickets, file consolidation follow-up tickets (surfaced for the human — unlike `/work-slice`), make routing calls on escalations (`daily-ticket-manager` re-classifies), or write/review code itself (the engine CLI's emitted tasks own that)
+
+## Red Flags — STOP
+
+- About to mutate anything in `dry-run`, or in an unattended run whose prompt didn't explicitly say `apply` — the mode is read-only; report only.
+- About to write labels without reading the current set first — `save_issue.labels` replaces the whole set; write it back minus only the managed label (Step 2's additive rule).
+- About to open a PR on red tests, or after a gut-check `hard-stop` — ship nothing: comment on the ticket, flag for a human, move to the next ticket.
+- About to touch a branch that carries an issue id but has no `.context/<issue-id>/` state dir — that is a human's WIP; flag it, never touch it.
+- About to re-`init` a finished engine run, hand-edit `ledger.json` or a findings file, or re-derive/trim the reviewer manifest — the CLI owns the loop.
+- About to stamp `<HITL>` or route an `escalate` ticket yourself — decline instead: elaborate comment, clear `<RISK:>*`, back to `<READY>`, remove the worktree.
+- About to run a solve command from the user's active checkout — every solve command runs from the ticket's own worktree.
+- Empty queue and tempted to widen scope — an empty queue is a valid result; report it and stop. Honor `<SKIP>` and `<HITL>` as hard exclusions even alongside `<AGENT-READY>`.
+
+## Verification
+
+Before reporting done:
+
+- [ ] Every picked-up ticket was claimed both ways: `<AGENT-READY>` cleared with all other labels intact, and status moved to `<IN-PROGRESS>`.
+- [ ] Every shipped PR is **draft** (`gh pr ready <n> --undo` ran), tests proven green via `testEvidence`, and the worktree is clean of untracked scaffolding.
+- [ ] Every touched ticket carries its terminal comment (`## Autonomous solve` or `## Autonomous solve — declined`), updated idempotently, with QA evidence uploaded when the Playwright check ran.
+- [ ] Declined tickets: `<RISK:>*` cleared, no routing label added, status back in `<READY>`, worktree and branch removed.
+- [ ] The Step 6 report accounts for every queue ticket — drafted, declined, skipped-for-routing, or flagged — plus every resumed in-flight one.
+- [ ] Nothing in the run merged, marked ready, marked done, or initiated compliance.
 
 ---
 

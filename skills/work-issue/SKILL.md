@@ -109,3 +109,29 @@ Run **`/babysit-stack <PR number>`** — one pass: `<BOT>` requested (once, ever
 - Label writes stay additive; never stamp `<AGENT-READY>` or `labels.sliceNext` on anything; consolidation follow-ups are new tickets, never scope creep.
 - **Persistence is re-invocation, never a stop-hook.** End the invocation with the resume report instead of spinning on external state; a `needs-human` blocker is the stop reason, not worked around.
 - Model roles fixed, aliases only (implementers Opus, reviewers/verifier Sonnet) — never pin exact ids or effort.
+
+## Workflow Boundaries
+
+**This skill takes one lean tracker issue straight to a green, review-resolved draft PR — no planning stages, no stack.**
+
+- **DOES**: gate on leanness (`<AGENT-READY>` or judged), claim the ticket, run work-slice's implement + engine-CLI review loop + Playwright verbatim, open the draft PR via `<PR-SKILL>` + `gh pr ready --undo`, drive it green with `/babysit-stack` passes.
+- **DOES NOT**: grill / write PRDs / slice (`/feature-goal`), work pipeline tickets (`<SKIP>` → `/work-slice` / `/feature-goal`), create or rename worktrees/branches, run stack commands, mark the issue done or the PR ready.
+
+## Red Flags — STOP
+
+- Ticket carries `<HITL>` — stop and name the decision; carries `<SKIP>` — stop and redirect to `/work-slice` / `/feature-goal`.
+- No `<AGENT-READY>` and the ticket isn't lean (more than one novel decision, schema/contract redesign, not one small PR) — stop and recommend the full pipeline; only the user overrules.
+- Worktree dirty, not a worktree, or the branch isn't virgin (`git rev-list --count <BASE>..HEAD` ≠ 0) — stop and tell the user.
+- About to create/rename a branch or run a stack command — stop: keep Conductor's checkout, base stays `<BASE>`.
+- About to re-run the review loop after its verdict on a re-invocation — stop: converged or stalled, the result stands; leftovers ride the PR.
+- About to mark the issue done or the PR ready on GOAL MET — stop: the ticket stays `<IN-PROGRESS>`; the draft PR is the human review gate.
+
+## Verification
+
+Before reporting done:
+
+- [ ] Claim done right: status `<IN-PROGRESS>`, `<AGENT-READY>` removed via an additive label write (full set minus only that label).
+- [ ] Acceptance criteria exist on the ticket — verbatim checkboxes or an idempotent `## Acceptance criteria` comment.
+- [ ] Draft PR open against `<BASE>` with `isDraft: true`; a cap-hit loop left a `## Outstanding review findings` PR comment.
+- [ ] User-facing change: `## QA evidence` comment with a PASS/FAIL row per criterion; consolidation follow-ups filed as tickets with `<SKIP>`.
+- [ ] The report names what the ticket waits on and that `/work-issue <ISSUE>` resumes; done claimed only on a babysit GOAL MET verdict.

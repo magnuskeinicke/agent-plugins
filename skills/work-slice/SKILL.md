@@ -360,3 +360,33 @@ Then tell the user this slice is up for review and that the next `/work-slice <p
 ---
 
 Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-workflow
+
+## Workflow Boundaries
+
+**This skill drives exactly one PRD slice to a stacked draft PR.**
+
+- **DOES**: claim the `<NEXT>` slice, rename/base the existing branch, implement test-first, drive the engine-CLI review loop, run the Playwright user-story loop, post QA evidence + consolidation tickets, open + stack-link the draft PR, advance `<NEXT>`.
+- **DOES NOT**: create worktrees or branches (Conductor owns them), babysit CI/bot/threads (`/babysit-stack`), re-derive loop decisions (the engine CLI owns rounds, suppression, verdicts), merge or mark ready (the human's call on the draft), batch slices.
+
+## Red Flags — STOP
+
+- About to create a worktree or a new branch — stop: rename/reset the existing checkout only (Step 2); a dirty or missing worktree goes back to the user.
+- About to claim a slice labelled `<AGENT:><other-agent>` — stop before the claim and report "reserved for `<name>`".
+- About to implement a `<HITL>` slice unattended — stop and name the decision it needs.
+- About to skip an engine command, re-derive its verdict, or hand-edit `.context/<slice-id>/ledger.json` / a findings file — stop: the CLI owns the loop.
+- About to start a second dev server for a Playwright round — stop: reuse the instance already serving; a bound-but-wrong port goes to the user.
+- A capture shows a secret shape (`sk-`, `ghp_`, `Bearer `, `?token=`) or real customer data — discard and recapture; never blur/crop/edit.
+- About to `gh stack link` by branch name, pass `--open`, or run `gh stack submit` — stop: link by PR number only, never `--open`, never `submit`.
+- A delta needs the skeleton's published contract changed — stop and escalate (contract freeze); the stack gets restructured, not quietly edited.
+
+## Verification
+
+Before reporting done:
+
+- [ ] `.context/<slice-id>/workflow-state.md` reads `COMPLETE` with full OIDs and the loop verdict verbatim.
+- [ ] `gh pr view <n> --json baseRefName,isDraft` shows the predecessor's branch (`<BASE>` for the skeleton) and `isDraft: true`.
+- [ ] The `## Convention provenance` (+ `## Review ledger`, + consolidation links) landed as a PR **comment**, not a body edit.
+- [ ] User-facing slice: `## QA evidence` comment on the ticket — one PASS/FAIL row + uploaded screenshot per acceptance criterion.
+- [ ] Skeleton slice: "Skeleton map" comment posted/updated on every downstream delta ticket.
+- [ ] Exactly one slice carries `<NEXT>` — or the report names why none does (HITL next / stack complete).
+- [ ] `git status --porcelain` is clean — no review scaffolding left to trip the pre-push hook.

@@ -98,3 +98,31 @@ Only offer to create an ADR when all three are true:
 If any of the three is missing, skip the ADR. Use the format in [ADR-FORMAT.md](./ADR-FORMAT.md).
 
 </supporting-info>
+
+## Workflow Boundaries
+
+**This skill interviews the user against the repo's domain docs, updating `CONTEXT.md` and ADRs inline as decisions crystallise.**
+
+- **DOES**: fetch the seed ticket, ask one question at a time with a recommended answer, challenge terms against the glossary, cross-reference claims with code, update `CONTEXT.md` inline, create ADRs when all three criteria hold
+- **DOES NOT**: write the PRD (`/to-prd` does, into the same ticket), create implementation tickets (`/to-issues`), implement code, or put implementation details into `CONTEXT.md`
+
+## Red Flags — STOP
+
+- About to ask several questions at once — stop; one at a time, wait for the answer.
+- About to ask the user something the codebase can answer — stop; explore the codebase instead.
+- About to write an implementation detail, spec fragment, or scratch note into `CONTEXT.md` — stop; it is a glossary and nothing else.
+- Batching glossary updates for later — stop; update `CONTEXT.md` the moment a term resolves.
+- About to offer an ADR that is not hard to reverse, surprising without context, AND a real trade-off — stop; all three or skip it.
+- About to create `CONTEXT.md` or `docs/adr/` with nothing to write yet — stop; create files lazily, on first content.
+- Session seeded with a ticket you have not fetched — stop; fetch it and follow its links first.
+
+## Verification
+
+Before reporting done:
+
+- [ ] Every branch of the design tree walked to a resolved decision or an explicitly parked question.
+- [ ] Each resolved term captured in `CONTEXT.md` per CONTEXT-FORMAT.md, free of implementation details.
+- [ ] Conflicts with the existing glossary called out and settled, not papered over.
+- [ ] Any ADR created meets all three criteria and follows ADR-FORMAT.md.
+- [ ] Claims about system behaviour cross-checked against the code, contradictions surfaced.
+- [ ] The seed ticket id noted where it won't get lost — `/to-prd` writes into that same ticket.

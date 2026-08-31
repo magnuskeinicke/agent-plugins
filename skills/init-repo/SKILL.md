@@ -131,3 +131,30 @@ and why, and what to do next (`/magnus:grill-with-docs` for `CONTEXT.md`,
 - `goldenPaths` starts empty by design — exemplars are pinned deliberately by
   `/magnus:to-issues`, not guessed here.
 - Doesn't commit or push; the user reviews the diff.
+
+## Workflow Boundaries
+
+**This skill scaffolds the host-repo half of the plugin contract — `docs/agents/**` and nothing else.**
+
+- **DOES**: discover the repo's real values with evidence, confirm the load-bearing few, write or gap-fill `docs/agents/repo-config.md`, offer the optional prose docs, verify the `## Config` block parses and matches `CONTRACT.md`
+- **DOES NOT**: create tracker labels, issues, branches, or PRs (the owning skills do), touch source/config/CI/hooks, scaffold `CONTEXT.md` or `docs/adr/` (created lazily by `/magnus:grill-with-docs`), pin `goldenPaths` (owned by `/magnus:to-issues`), or commit/push
+
+## Red Flags — STOP
+
+- `docs/agents/repo-config.md` already exists and you're about to write it whole — stop; this is a gap-fill run: fill only missing/empty keys, never rewrite a key that has a value.
+- About to guess a key you couldn't determine — stop; leave it empty and report why. An empty key degrades to a documented default; a guess is a silent wrong answer.
+- About to fill `goldenPaths` on a first run — stop; leave it empty and say so; `/magnus:to-issues` pins exemplars deliberately.
+- About to create a tracker label while resolving `labels.*` — stop; record only what exists.
+- About to scaffold an empty `CONTEXT.md` or `docs/adr/` — stop; never scaffold them empty.
+- About to write outside `docs/agents/**`, or to commit/push — stop; the user reviews the diff.
+
+## Verification
+
+Before reporting done:
+
+- [ ] `docs/agents/repo-config.md` exists and its `## Config` block parses as JSON
+- [ ] Every key name checks out against `CONTRACT.md` — no typo'd keys
+- [ ] Every referenced path exists (`conventionsFile`, `e2eDir`, `browserGuidePath`, each `goldenPaths` entry, each `libMap` key)
+- [ ] The load-bearing values (`integrationBranch`, `gates.all`, `tracker.kind` + `tracker.issuePrefix`, `labels.agentReady`) were confirmed in one pass
+- [ ] Report includes the key → value → evidence table, the keys left empty with reasons, and the next steps
+- [ ] Nothing changed outside `docs/agents/**`; nothing committed or pushed

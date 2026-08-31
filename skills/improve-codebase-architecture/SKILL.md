@@ -95,3 +95,31 @@ The candidate's child issue is the live document — keep it in sync as the desi
 - **Sharpening a fuzzy term during the conversation?** Update `CONTEXT.md` right there.
 - **User rejects the candidate with a load-bearing reason?** Close the child as won't-do (`<TRACKER>`'s form: Linear → status `Cancelled`; GitHub → close as `not planned`), and offer an ADR, framed as: _"Want me to record this as an ADR so future architecture reviews don't re-suggest it?"_ Only offer when the reason would actually be needed by a future explorer to avoid re-suggesting the same thing — skip ephemeral reasons ("not worth it right now") and self-evident ones. See [ADR-FORMAT.md](../grill-with-docs/ADR-FORMAT.md).
 - **Want to explore alternative interfaces for the deepened module?** See [INTERFACE-DESIGN.md](INTERFACE-DESIGN.md).
+
+## Workflow Boundaries
+
+**This skill surfaces deepening opportunities and files them as tracker issues — it designs through grilling, it never implements.**
+
+- **DOES**: explore via an Explore subagent, apply the deletion test, build + open the HTML report from the OS temp dir; on `apply`, file parent + child issues with the report attached, then grill picked candidates and keep the child issue / `CONTEXT.md` / ADRs in sync
+- **DOES NOT**: implement refactors, propose interfaces before the grilling loop, slice oversized candidates (hand to `/grill-with-docs` → `/to-prd` → `/to-issues`), write the report into the repo, or touch the tracker in dry run
+
+## Red Flags — STOP
+
+- About to create issues, upload the attachment, or write `CONTEXT.md`/ADRs without an `apply` token — stop; print the file plan and end with "Re-run with `apply` to file these."
+- On `apply`, about to file without confirming parent + child titles and strengths — stop; filing is an outward-facing write; confirm unless the user said "just file them."
+- About to write the HTML report inside the repo, or commit/publish it on GitHub — stop; it belongs in `<tmpdir>/architecture-review-<timestamp>.html`; GitHub gets the temp path noted in the parent body.
+- About to propose concrete interfaces while filing candidates — stop; that's the grilling loop's job.
+- About to file a refactor an existing ADR forbids without real friction — stop; surface it only when worth reopening, marked with an `> ADR / convention note` callout.
+- Drifting into "component," "service," "API," or "boundary" — stop; use LANGUAGE.md terms (module, interface, seam, depth, locality) and CONTEXT.md's domain names.
+- Candidate too large for one PR and about to slice it here — stop; hand it to `/grill-with-docs` → `/to-prd` → `/to-issues`.
+
+## Verification
+
+Before reporting done:
+
+- [ ] HTML report written to the OS temp dir and opened locally; every candidate has a before/after visualisation
+- [ ] Dry run: zero tracker/doc writes; file plan printed with parent + each child's title, strength→priority, labels, status, assignee, relations
+- [ ] `apply`: one parent (report attached, Top recommendation + child checklist) and one child per candidate, all assigned to the user
+- [ ] Each child carries Files, Problem, Solution, Wins, Before/after, Recommendation strength; graph-shaped before/afters inlined as ` ```mermaid ` blocks
+- [ ] Rejected candidates closed as won't-do (Linear `Cancelled` / GitHub `not planned`), an ADR offered only for load-bearing reasons
+- [ ] New or sharpened domain terms recorded in `CONTEXT.md`

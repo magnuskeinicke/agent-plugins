@@ -4,8 +4,8 @@ description: >
   Review and triage the tracker tickets assigned to me that are queued to start — every issue assigned
   to me, on the repo's team, in its ready-for-dev status, regardless of cycle. Classifies
   each on two axes: how risky it is to execute unattended (risk: low / medium / high), and who should
-  pick it up (routing: agent-ready vs needs-human). The ticket's `type` (bug / feature / docs / …) is
-  assumed already set by the PM / PRD pipeline — this skill does not assess it. It produces a triage
+  pick it up (routing: agent-ready vs needs-human). Ticket `type` is assumed set upstream by the
+  PM / PRD pipeline — not assessed here. It produces a triage
   report and, on `apply`, applies risk/routing labels and writes an "Agent Assessment" comment.
   Use this whenever I ask to "review my tickets", "triage my queue", "what's ready for me to pick up",
   "classify my Linear tickets", "which of my tickets can an agent pick up", "what needs my attention",
@@ -355,3 +355,32 @@ label + comment). Default a scheduled run to `dry-run` unless I have explicitly 
 `apply` run still only ever creates managed labels (`<RISK:>` / `<AGENT-READY>` / `<HITL>`), fills label gaps
 on those axes per ticket, and writes the assessment comment — never downgrading an existing managed label,
 never touching `<TYPE:>*` or any other field.
+
+## Workflow Boundaries
+
+**This skill triages my `<READY>` queue — it classifies and records, nothing more.**
+
+- **DOES**: resolve the repo contract, fetch my `<READY>` tickets, classify risk + routing, print the triage report; on `apply`, create missing managed labels, fill label gaps, write/update the Agent Assessment comment
+- **DOES NOT**: implement tickets (that's the agent loop via `solve-ready-tickets`), apply `<TYPE:>*` labels (owned by `to-prd` / `to-issues`), change state/assignee/title/description/estimate, create or close tickets, or touch `<SKIP>` or non-`<READY>` tickets
+
+## Red Flags — STOP
+
+- About to label, comment, or create a label without an explicit `apply` — stop; dry-run mutates nothing.
+- `tracker.statuses.readyForDev`, `labels.agentReady`, or `labels.needsHuman` is empty in the config — stop; name the missing key and end the run, never guess.
+- About to write `save_issue.labels` without merging in the ticket's current labels — stop; that field replaces the entire set.
+- About to replace or downgrade an existing `<RISK:>` / routing label that disagrees with this run — stop; keep the existing label and flag the disagreement in the report.
+- About to stamp `<AGENT-READY>` on a ticket carrying a `## Autonomous solve — declined` comment — stop; route `<HITL>` unless the named blocker is clearly resolved.
+- About to classify a `<SKIP>`-labelled ticket, or exclude one for having a parent/sub-issues — stop; `<SKIP>` is the only exclusion.
+- Empty in-scope set and tempted to widen the search — stop; report the empty queue and end.
+- Unattended run whose schedule prompt doesn't explicitly say `apply` — stop; treat it as `dry-run`.
+
+## Verification
+
+Before reporting done:
+
+- [ ] Report printed with mode, team, in-scope count, skip count, the per-ticket table, both action lists, and the counts block
+- [ ] Every classified ticket has exactly one `<RISK:>` level and at most one routing label — never both routing labels
+- [ ] `dry-run`: zero tracker writes — no labels, no comments, no label creation
+- [ ] `apply`: every written label set preserves all non-managed and `<TYPE:>*` labels; identical sets were not re-written
+- [ ] `apply`: Agent Assessment comments created/updated only where risk/routing/reason changed; `<HITL>` comments carry a `Human needed:` block
+- [ ] Disagreements with existing managed labels flagged in Notes, not overwritten

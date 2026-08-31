@@ -133,3 +133,29 @@ Then **stop** — findings are the deliverable. Do not fix anything unless the u
 ---
 
 Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-workflow
+
+## Workflow Boundaries
+
+**This skill runs one read-only classified review round on ad-hoc code — findings are the whole deliverable.**
+
+- **DOES**: resolve the target (uncommitted work, branch vs base, PR diff, named files), write the contract, drive the engine CLI in `--review-only` mode, present blocking / advisory / unverified findings under stable `CR-NNN` ids plus notes and consolidation candidates.
+- **DOES NOT**: fix anything or loop (`/work-slice` / `/iterate-pr` own fix rounds), check out PR branches, run Playwright, file tickets (consolidations are listed only), edit any file.
+
+## Red Flags — STOP
+
+- About to edit code, commit, check anything out, or file a ticket — stop: the report (and gitignored `.context/<run-id>/`) is the only side effect.
+- About to run a second round or act on a fix impulse — stop: `--review-only` is single-round; `decide` classifies and stops.
+- About to call the round `clean` while a reviewer is dead — stop: re-run it once; still dead → degraded coverage, verdict NOT clean.
+- Gut-check returned a `"disposition": "block"` — stop the reviewers and run `collect` immediately; it hard-stops for the human.
+- About to hand-edit `.context/<run-id>/ledger.json` / a findings file, or re-derive the classification thresholds — stop: the CLI owns the round.
+- About to run CodeRabbit against a PR-diff-only target — stop: it needs a checkout; pass `--no-coderabbit`.
+
+## Verification
+
+Before reporting done:
+
+- [ ] Verdict verbatim (`clean` or `N blocking finding(s) (CR-…)`) plus which reviewers ran and which died.
+- [ ] Blocking, advisory, and unverified findings presented separately — unverified listed, never silently dropped.
+- [ ] Untracked source files were named in the contract (invisible to the diff); a PR-diff-only target's degraded-verification caveat is stated.
+- [ ] Notes and consolidations from `.context/<run-id>/round-1/findings/*.json` are in the report.
+- [ ] The working tree is untouched — no edits, commits, or checkouts; the round stopped at the report.

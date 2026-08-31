@@ -273,3 +273,32 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
   pending.
 - A human blocker (HITL slice, needs-human thread, cap-exhausted failure)
   is reported as the stop reason, not worked around.
+
+## Workflow Boundaries
+
+**This skill orchestrates the feature pipeline as a re-entrant stage machine — it sequences the constituent skills, never re-implements them.**
+
+- **DOES**: detect the stage from durable markers, run `/to-prd` and `/to-issues` at their gates, walk the slice loop (work-slice verbatim, Step 2 substituted), delegate `<AGENT:>`-routed slices via `routing.delegate`, run `/babysit-stack` passes, keep `.context/<ISSUE>/pipeline-state.md`, end every run with the resume line.
+- **DOES NOT**: grill (the human runs `/grill-with-docs`), own review-loop internals (the engine CLI does), own CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, create extra worktrees.
+
+## Red Flags — STOP
+
+- About to fabricate a PRD from a bare ticket title with no grilling session in the conversation — stop: send the user to `/grill-with-docs` and end.
+- About to redo a stage whose artifacts exist (PRD comment, sub-issues, open PRs) — stop: repair forward from stage detection; durable markers beat the checkpoint.
+- About to implement a slice labelled `<AGENT:><other>` here because delegation is inconvenient — stop: delegate via `routing.delegate.<name>` or end naming the agent it waits on.
+- About to trust a delegated child's exit code — stop: verify the slice's durable markers (workflow-state checkpoint, engine `status`, branch, PR) like a re-entry would.
+- About to run another babysit pass when only CI / an awaited `<BOT>` review is pending — stop: record the verdict, end with the resume line; the cadence re-checks.
+- About to run `gh stack submit` or `gh stack link --open` — stop: submit opens auto-titled PRs, `--open` un-drafts.
+- About to create a second worktree — stop: the whole pipeline walks this one, switching branches.
+- About to work past a `<HITL>` slice, a `needs-human` blocker, or an exhausted cap — stop: that is a human gate; report it and end.
+
+## Verification
+
+Before reporting done:
+
+- [ ] `.context/<ISSUE>/pipeline-state.md` rewritten to the current stage, slice cursor, and last babysit verdict.
+- [ ] The reported stage matches live markers (`# PRD` comment, sub-issues, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
+- [ ] Planning docs (`CONTEXT.md`, `docs/adr/**`, `docs/agents/**`) were committed before the first slice, so work-slice's clean-tree preflight passes.
+- [ ] Every completed slice has a draft PR, and `<NEXT>` has exactly one carrier (or the report names the HITL/complete reason for none).
+- [ ] The report ends with the resume line: stage, blocking reason if any, and `/feature-goal <ISSUE>`.
+- [ ] Stage DONE claimed only when the last `/babysit-stack` verdict reads GOAL MET.
