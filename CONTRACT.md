@@ -125,7 +125,8 @@ during the Playwright verify rounds on UI slices. The contract:
 | --- | --- | --- | --- |
 | `routing.labelPrefix` | string | `''` → routing disabled | tracker-label prefix for reserving a slice to an agent (`agent:` → `agent:claude`) |
 | `routing.frontendAgent` | string | `''` → no stamping | agent name `magnus:to-issues` stamps on frontend-dominant slices (paths judged by `areaPaths.frontend`) |
-| `routing.delegate` | agent → command template | `{}` → report/skip, never delegate | headless invocation per agent, e.g. `{"claude": "claude -p \"<prompt>\" --permission-mode acceptEdits", "codex": "codex exec \"<prompt>\""}` |
+| `routing.delegate` | agent → command template | `{}` → report/skip, never delegate | headless invocation per agent, e.g. `{"claude": "claude -p \"<prompt>\" --permission-mode acceptEdits", "codex": "codex exec \"<prompt>\""}` — local-mode machinery |
+| `routing.dispatch` | string | `'cloud'` | where `magnus:feature-goal` runs the slice loop: `cloud` → one Conductor cloud workspace per slice via the Conductor MCP (falls back to `local` when the MCP is unreachable); `local` → the sequential single-worktree loop |
 
 Different agents have different strengths (e.g. Claude at frontend). With
 routing configured, `magnus:to-issues` stamps `<labelPrefix><agent>` on slices
@@ -136,6 +137,14 @@ delegates such a slice via `routing.delegate` (child process running
 invocation naming which agent the slice waits on. Routing is **slice-granular
 only** — never per-step or per-file. The suite's durable markers (checkpoint
 files, ledger, PR state) are what make a slice resumable by any agent.
+
+`routing.dispatch` decides the venue, not the agent: with the default
+`cloud`, `magnus:feature-goal` creates one Conductor **cloud** workspace per
+slice (Conductor MCP `create_workspace`) and the `<AGENT:>` label picks that
+workspace's agent — `routing.delegate` is only consulted in `local` mode.
+Only `feature-goal` auto-dispatches; the standalone commands (`work-issue`,
+`solve-ready-tickets`, `daily-ticket-manager`) are venue-neutral and run
+wherever the user starts them.
 
 ### Review targeting
 

@@ -5,7 +5,10 @@ description: >
   grilled plan → PRD (/to-prd) → sliced PR stack (/to-issues) → each slice
   implemented red-green-refactor with the bounded review loop (work-slice
   engine-CLI loop) → babysit every PR (bot review, CI, comment resolution) until
-  the stack is green and resolved. Every invocation re-detects where the
+  the stack is green and resolved. After slicing, the real work is dispatched
+  to one Conductor CLOUD workspace per slice by default, so it keeps running
+  unattended; pass `local` (or set routing.dispatch) for the in-worktree
+  sequential loop. Every invocation re-detects where the
   pipeline stands from durable markers and advances it — run it again to
   resume. Use when I say "run the feature pipeline", "take this ticket to a
   green stack", "resume the feature pipeline", "/feature-goal", or after a
@@ -45,6 +48,7 @@ once, in your first message.
 | `<BOT>` | `pr.botReviewer` | no bot review round to request or wait on |
 | `<STACK>` | `pr.stackTool` | plain branches; every PR targets `<BASE>` |
 | `<AGENT:>` | `routing.labelPrefix` (with `routing.delegate`) | no agent routing — this runtime works every slice |
+| `<DISPATCH>` | `routing.dispatch` (`cloud` \| `local`) | `cloud` — dispatch slices to Conductor cloud workspaces |
 
 Also read the prose docs the config points at when they exist:
 `tracker.docPath`, `labels.docPath`, and `docs/agents/README.md`.
@@ -58,7 +62,8 @@ with a report. A run ends at exactly three kinds of boundary:
   `<HITL>` slice, a `needs-human` babysit blocker, an exhausted cap, or a slice
   reserved for another agent with no `routing.delegate` configured. Name the
   gate and what the human must decide; the human acts, then re-invokes.
-- **Waiting on external state** — CI running, an awaited `<BOT>` review.
+- **Waiting on external state** — CI running, an awaited `<BOT>` review, or
+  dispatched slices still working in their cloud workspaces.
   Report what's pending; a re-invocation re-checks. For unattended pacing the
   user can wrap the re-invocation in whatever cadence the runtime offers
   (`/loop 15m "/feature-goal <ISSUE>"`, a scheduler, or re-running by hand) —
@@ -75,8 +80,10 @@ if any, and the exact command (`/feature-goal <ISSUE>`) that continues it.
 ```markdown
 ## Workflow State
 - Stage: GRILL/PRD | SLICE-SPLIT | SLICE-LOOP | BABYSIT | DONE
+- Dispatch: cloud | local
 - Parent: PROJ-1200
 - Slice cursor: PROJ-1234 (03 of 05) | (none)
+- Nudged: (none | PROJ-1234 ×1, …)
 - Last babysit verdict: (none | GOAL MET | NOT MET — <reason>)
 ```
 
@@ -128,10 +135,74 @@ follow that skill verbatim.
 have written `CONTEXT.md`, `docs/adr/**`, and `docs/agents/repo-config.md` in
 this worktree. Commit them now on the current branch (one commit, e.g.
 `docs: <ISSUE> planning docs`) so work-slice's clean-tree preflight passes.
-The first-slice check below tolerates exactly these doc-only commits; they
-ride along in the first slice's PR.
+In local mode the first-slice check below tolerates exactly these doc-only
+commits; they ride along in the first slice's PR. In cloud mode also **push
+the branch** (`git push -u origin <branch>`) and name it in the parent
+ticket's dispatch comment — cloud workspaces branch from `<BASE>` and won't
+carry these files; the tracker (PRD + slice tickets) stays the contract they
+build from, with the pushed branch as the docs reference.
 
-## Stage SLICE-LOOP — sequential slices in THIS worktree
+## Stage SLICE-LOOP — where the real work runs
+
+Grilling, PRD, and slicing are interactive; **the implementation is not** —
+by default it leaves this machine. Resolve the mode once per pipeline and
+record it in the checkpoint:
+
+- **`cloud` (`<DISPATCH>` default)** — every slice runs remotely in its own
+  Conductor **cloud** workspace; this invocation only dispatches and
+  monitors. Requires the Conductor MCP (`create_workspace`, `send_message`,
+  `get_session_status`, `list_messages`). MCP unreachable → say so once and
+  fall back to local mode.
+- **`local`** — `routing.dispatch` is `local`, or the user said `local`
+  (argument or conversation): the sequential in-this-worktree loop below.
+
+The mode choice never forks work: a slice already dispatched (its
+`## Cloud dispatch` ticket comment exists) stays cloud-owned even after a
+fallback — resume or nudge its session; never re-implement it here.
+
+### Cloud mode — dispatch + monitor
+
+Slice state comes from durable markers, never memory: **merged PR** = done ·
+**open PR** = awaiting babysit · **`## Cloud dispatch` comment** on the
+ticket = in flight · none of those = undispatched.
+
+One invocation does three things, then ends at the usual boundaries:
+
+1. **Dispatch every unblocked, undispatched slice.** Unblocked = the
+   skeleton, or a slice whose predecessor (`blockedBy`) already has an open
+   or merged PR — its branch is pushed, so the delta can stack on it. The
+   depth-2 topology fans out: every file-disjoint delta becomes dispatchable
+   the moment the skeleton's PR is up. A `<HITL>` slice is a human gate —
+   never dispatched; report the decision it needs. Per slice, in stack order:
+   - **`create_workspace`** — one isolated cloud workspace + its first
+     session on this repo's project, named after the slice
+     (`<NN>-<issue-id>`). Agent: the slice's `<AGENT:>` label when present —
+     in cloud mode the routing label picks the workspace's agent and
+     `routing.delegate` is never consulted — else this runtime's own agent.
+     First prompt exactly `/work-slice <slice-id>`. Work-slice runs
+     **verbatim** there: a cloud workspace IS the virgin per-slice Conductor
+     workspace it expects, so its Step 2 branch-rename applies unchanged
+     (none of local mode's Step-2 substitution).
+   - **Stamp the dispatch marker.** Post a `## Cloud dispatch` comment on the
+     slice ticket: workspace deep link, session id, dispatched-by note.
+     Idempotent — update an existing one, never add a second. This comment is
+     the cross-machine double-dispatch guard: a slice carrying it is never
+     dispatched again and never implemented inline.
+2. **Check the in-flight slices.** For each dispatched slice with no PR yet,
+   `get_session_status` once: `working` → leave it alone. `idle` → re-read
+   the durable markers (branch on the remote, `gh pr list`): PR up → it
+   finished; still nothing → **nudge**: `send_message` with
+   `/work-slice <slice-id>` (work-slice is re-entrant; the session resumes
+   from its own checkpoint). Record the nudge in the pipeline checkpoint; a
+   slice already nudged in a previous invocation with no new markers since →
+   don't nudge again — flag it needs-human with the deep link.
+3. **End at a boundary.** Slices still in flight or blocked → that's waiting
+   on external state: print the dispatch table (slice → workspace deep link →
+   status) and end with the resume line — never spin-poll sessions inside
+   one invocation. Every slice with an open/merged PR → fall through to
+   BABYSIT.
+
+### Local mode — sequential slices in THIS worktree
 
 This is `/work-slice` run slice-after-slice in one session. Follow work-slice
 **verbatim** — Step 1 (select + claim), Step 3 (the engine-CLI loop), Step 4 (present,
@@ -228,6 +299,17 @@ After the last slice, fall through to BABYSIT.
 
 Run **`/babysit-stack <ISSUE>`** — one pass: ensure `<BOT>` is requested on
 every PR, watch/fix CI, address + resolve review threads, restack after fixes.
+
+**Cloud mode runs the pass remotely too.** The slice branches are checked out
+in cloud workspaces (fixing them here would hit the held-branch hazard), and
+babysit's cross-pass state must live in one workspace's `.context/` — so the
+babysit home is the **skeleton slice's cloud workspace**. `send_message`
+there: `/babysit-stack <ISSUE>`; when `get_session_status` goes idle, read
+the verdict block from its transcript (`list_messages`, after-cursor) plus
+live PR state, then handle it exactly like the local verdicts below (another
+pass = send again to the same session). Local mode runs the pass in this
+worktree as before.
+
 It ends with a `VERDICT: GOAL MET | NOT MET` block:
 
 - **NOT MET, actionable items remain** → run another pass now (respecting its
@@ -254,12 +336,17 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
   Playwright rounds, babysit's fix caps). Caps exhausted → escalate on the PR,
   never grind.
 - **Routing is honoured, never overridden:** a slice labelled `<AGENT:><name>`
-  for another runtime is delegated (when `routing.delegate.<name>` exists) or
-  reported — never implemented here because delegation is inconvenient. A
-  delegated slice's work is verified from durable markers, not the child's
-  exit code alone.
-- Stacking is `<STACK>` + plain git. Do not create extra worktrees: the whole
-  pipeline lives in this one, switching branches as it walks the stack. With
+  gets a cloud workspace running that agent (cloud mode) or is delegated via
+  `routing.delegate.<name>` / reported (local mode) — never implemented here
+  because routing is inconvenient. A dispatched or delegated slice's work is
+  verified from durable markers, not a session status or exit code alone.
+- **Cloud workspaces come only from the Conductor MCP** — one per slice,
+  never reused for another slice, never faked with `git worktree add`. A
+  dispatched slice is monitored and nudged, never implemented inline; its
+  `## Cloud dispatch` comment is authoritative over any local checkpoint.
+- Stacking is `<STACK>` + plain git. In local mode, do not create extra
+  worktrees: the whole pipeline lives in this one, switching branches as it
+  walks the stack. With
   `gh-stack`: never `gh stack submit` (it opens its own auto-titled PRs) and
   never `gh stack link --open` (it un-drafts).
 - Label writes stay additive (Linear's `save_issue.labels` replaces the whole
@@ -278,8 +365,8 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
 
 **This skill orchestrates the feature pipeline as a re-entrant stage machine — it sequences the constituent skills, never re-implements them.**
 
-- **DOES**: detect the stage from durable markers, run `/to-prd` and `/to-issues` at their gates, walk the slice loop (work-slice verbatim, Step 2 substituted), delegate `<AGENT:>`-routed slices via `routing.delegate`, run `/babysit-stack` passes, keep `.context/<ISSUE>/pipeline-state.md`, end every run with the resume line.
-- **DOES NOT**: grill (the human runs `/grill-with-docs`), own review-loop internals (the engine CLI does), own CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, create extra worktrees.
+- **DOES**: detect the stage from durable markers, run `/to-prd` and `/to-issues` at their gates, dispatch slices to Conductor cloud workspaces (`<DISPATCH>` = `cloud`: `create_workspace` per slice, `## Cloud dispatch` markers, monitor/nudge sessions) or walk the local slice loop (work-slice verbatim, Step 2 substituted), delegate `<AGENT:>`-routed slices (cloud: workspace agent; local: `routing.delegate`), run `/babysit-stack` passes (cloud: sent to the skeleton's workspace), keep `.context/<ISSUE>/pipeline-state.md`, end every run with the resume line.
+- **DOES NOT**: grill (the human runs `/grill-with-docs`), own review-loop internals (the engine CLI does), own CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, create extra worktrees locally, implement a cloud-dispatched slice inline, or relocate the venue-neutral standalone commands (`/work-issue`, `/solve-ready-tickets`, `/daily-ticket-manager` run wherever the user starts them).
 
 ## Red Flags — STOP
 
@@ -289,14 +376,19 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
 - About to trust a delegated child's exit code — stop: verify the slice's durable markers (workflow-state checkpoint, engine `status`, branch, PR) like a re-entry would.
 - About to run another babysit pass when only CI / an awaited `<BOT>` review is pending — stop: record the verdict, end with the resume line; the cadence re-checks.
 - About to run `gh stack submit` or `gh stack link --open` — stop: submit opens auto-titled PRs, `--open` un-drafts.
-- About to create a second worktree — stop: the whole pipeline walks this one, switching branches.
+- About to implement a slice inline that carries a `## Cloud dispatch` comment — stop: resume or nudge its session; the cloud workspace owns it.
+- About to `create_workspace` for a slice that already has a dispatch marker or a live workspace — stop: one workspace per slice, ever; check the marker first.
+- About to dispatch a slice whose predecessor has no open/merged PR, or a `<HITL>` slice — stop: blocked and human-gated slices wait.
+- About to spin-poll `get_session_status` inside one invocation — stop: one check (plus at most one nudge) per slice per invocation, then end with the resume line.
+- About to create a second worktree in local mode — stop: the whole pipeline walks this one, switching branches; cloud workspaces come only from the Conductor MCP.
 - About to work past a `<HITL>` slice, a `needs-human` blocker, or an exhausted cap — stop: that is a human gate; report it and end.
 
 ## Verification
 
 Before reporting done:
 
-- [ ] `.context/<ISSUE>/pipeline-state.md` rewritten to the current stage, slice cursor, and last babysit verdict.
+- [ ] `.context/<ISSUE>/pipeline-state.md` rewritten to the current stage, dispatch mode, slice cursor, nudges, and last babysit verdict.
+- [ ] Cloud mode: every dispatched slice's ticket carries exactly one `## Cloud dispatch` comment with the workspace deep link; no slice has two workspaces; a local fallback was announced once.
 - [ ] The reported stage matches live markers (`# PRD` comment, sub-issues, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
 - [ ] Planning docs (`CONTEXT.md`, `docs/adr/**`, `docs/agents/**`) were committed before the first slice, so work-slice's clean-tree preflight passes.
 - [ ] Every completed slice has a draft PR, and `<NEXT>` has exactly one carrier (or the report names the HITL/complete reason for none).

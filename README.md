@@ -96,9 +96,12 @@ machine (run it again to resume) that chains:
 1. `/grill-with-docs` — grill the plan until shared understanding
 2. `/to-prd` — write the PRD into the parent ticket
 3. `/to-issues` — slice it into stacked, agent-ready sub-issues
-4. `/work-slice` per slice — test-first implementation inside the bounded engine-CLI review-fix
-   loop, ending in a stacked draft PR
+4. `/work-slice` per slice — **dispatched to one Conductor cloud workspace per slice by default**
+   (`routing.dispatch`, Conductor MCP), so implementation keeps running unattended; pass `local`
+   for the in-worktree sequential loop. Each slice: test-first implementation inside the bounded
+   engine-CLI review-fix loop, ending in a stacked draft PR
 5. `/babysit-stack` — bot review, CI fixes, and comment resolution until the stack is green
+   (cloud mode: passes run in the skeleton slice's cloud workspace)
 
 Standalone entry points onto the same machinery:
 
@@ -109,6 +112,9 @@ Standalone entry points onto the same machinery:
 | `/magnus:review-code` | one read-only reviewer round on any diff, PR, or working tree |
 | `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
 | `/magnus:babysit-stack` | one idempotent green-the-stack pass; loop it from outside |
+
+The standalone commands are **venue-neutral**: run them locally or in a Conductor cloud
+workspace — only `/feature-goal` auto-dispatches to the cloud.
 
 Under all of them sits the engine CLI (next section): skills run it from the host repo root, obey
 its JSON output, and resume from durable markers — `## Workflow State` checkpoints, the ledger in
