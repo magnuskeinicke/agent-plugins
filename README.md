@@ -98,7 +98,10 @@ machine (run it again to resume) that chains:
 3. `/to-issues` — slice it into stacked, agent-ready sub-issues
 4. `/work-slice` per slice — **dispatched to one Conductor cloud workspace per slice by default**
    (`routing.dispatch`, Conductor MCP), so implementation keeps running unattended; pass `local`
-   for the in-worktree sequential loop. Each slice: test-first implementation inside the bounded
+   for the in-worktree sequential loop. Each workspace bootstraps itself: session 1 installs this
+   plugin in the fresh sandbox, then a new session runs the slice (skills load only at session
+   start). Nothing goes in the host repo's shared Conductor settings, so colleagues' workspaces
+   are untouched. Each slice: test-first implementation inside the bounded
    engine-CLI review-fix loop, ending in a stacked draft PR
 5. `/babysit-stack` — bot review, CI fixes, and comment resolution until the stack is green
    (cloud mode: passes run in the skeleton slice's cloud workspace)

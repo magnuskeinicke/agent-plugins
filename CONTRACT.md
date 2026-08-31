@@ -142,6 +142,10 @@ files, ledger, PR state) are what make a slice resumable by any agent.
 `cloud`, `magnus:feature-goal` creates one Conductor **cloud** workspace per
 slice (Conductor MCP `create_workspace`) and the `<AGENT:>` label picks that
 workspace's agent — `routing.delegate` is only consulted in `local` mode.
+Each cloud workspace self-bootstraps: its first session installs this plugin
+in the fresh sandbox, then a second session runs `/work-slice` (skills load
+only at session start). The host repo's shared Conductor settings are never
+touched, so the plugin stays personal to the dispatching user.
 Only `feature-goal` auto-dispatches; the standalone commands (`work-issue`,
 `solve-ready-tickets`, `daily-ticket-manager`) are venue-neutral and run
 wherever the user starts them.
