@@ -288,3 +288,12 @@ test('coderabbit: --coderabbit-cmd emits the lane with the given command, --no-c
   const planB = b.run('plan', '--changed-files', 'src/a.ts', '--config', join(b.dir, 'repo-config.md'), '--no-coderabbit');
   assert.equal(planB.coderabbit, null, '--no-coderabbit wins over the config value');
 });
+
+test('findings validation requires rootCause on blocking findings', async () => {
+  const { validate, FINDINGS_SCHEMA } = await import('../lib/schemas.mjs');
+  const report = (finding) => ({ reviewer: 'code-reviewer', blockingFindings: [finding], notes: [] });
+  const missing = validate(report({ title: 'Reworded re-raise', detail: 'boom' }), FINDINGS_SCHEMA);
+  assert.ok(missing.some((e) => e.includes('missing required "rootCause"')));
+  const withSlug = validate(report({ title: 'Reworded re-raise', detail: 'boom', rootCause: 'null-widget' }), FINDINGS_SCHEMA);
+  assert.deepEqual(withSlug, []);
+});
