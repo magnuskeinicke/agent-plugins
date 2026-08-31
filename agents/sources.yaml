@@ -1,0 +1,19 @@
+sources:
+  - id: kramme-cc-workflow-agents
+    url: https://github.com/Abildtoft/kramme-cc-workflow/tree/main/kramme-cc-workflow/agents
+    title: "kramme-cc-workflow — reviewer agent definitions"
+    rationale: >
+      All 25 agent definition files in this directory are vendored from
+      kramme-cc-workflow (MIT, Copyright (c) 2026 Abildtoft). Filenames and
+      frontmatter `name:` fields drop the `kramme:` prefix so they surface
+      under this plugin's namespace; bodies are otherwise verbatim, except
+      codebase-pattern-reviewer.md, which adds a magnus-only "diff reuse audit
+      mode" section (marked inline). One file serves both runtimes: Claude
+      spawns it as a subagent definition, Codex uses its body as the
+      `codex exec` child's system prompt. The engine's roster mapping lives in
+      engine/lib/roster.mjs.
+    usage: vendored
+    vendored_ref: 56c49f34ce70a8a9be10f08bd91ea6d4e732a384
+    vendored_version: "0.77.0"
+    license: MIT
+    last_reviewed_at: 2026-08-28

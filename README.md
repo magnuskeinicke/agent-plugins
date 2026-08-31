@@ -14,15 +14,18 @@ Scaffold a fresh repo's half with `/magnus:init-repo`.
 
 ```
 skills/<name>/SKILL.md      # one dir per skill (+ assets, workflow .js where kept)
-shared/                     # plugin-owned engine copied into the workflow scripts:
-                            # repo-config-defaults.js (generic fallbacks),
-                            # reviewer-engine.js (lanes/ledger/validator),
-                            # loop-schemas.js, sync.sh
+agents/<id>.md              # reviewer roster — vendored from kramme-cc-workflow
+                            # (MIT, see agents/sources.yaml); Claude subagent def
+                            # = Codex `codex exec` child system prompt
+engine/cli.mjs              # the review-loop CLI: roster selection, prompts,
+                            # findings ingestion, ledger, stop conditions
+engine/lib/*.mjs            # config/areas/roster/ledger/schemas/prompts modules
+engine/test/*.test.mjs      # node --test suite for the loop
 .claude-plugin/             # Claude Code: plugin.json + marketplace.json
 .codex-plugin/plugin.json   # Codex: plugin manifest (plugin root = repo root)
 .agents/plugins/marketplace.json   # Codex: marketplace manifest
 codex/install.sh            # Codex fallback adapter: symlink skills into ~/.codex/skills
-CONTRACT.md                 # what a host repo must provide
+CONTRACT.md                 # what a host repo must provide + the engine CLI contract
 ```
 
 ## Install — Claude Code
@@ -63,28 +66,27 @@ codex/install.sh --uninstall
 The fallback refuses to clobber an existing real directory, so a vendored skill of the same name is
 safe. Start a new thread after either route.
 
-## Syncing shared blocks into the workflow scripts
+## The engine CLI
 
-Four skills ship a `Workflow` script (`work-slice`, `review-code`, `iterate-pr`,
-`solve-ready-tickets`). The runtime cannot import files, so those scripts must be
-self-contained: shared code is copied verbatim between `// >>> shared:<name>` /
-`// <<< shared:<name>` markers. **All three sources are plugin-owned and
-host-agnostic** — `repo-config-defaults.js`, `reviewer-engine.js`,
-`loop-schemas.js`. Host knowledge is never baked in; it arrives at runtime as
-`repoConfig` in the workflow args.
+The review machinery lives in `engine/` as a dependency-free Node CLI — no
+sync step, no generated blocks. Skills call it from the host repo root and
+obey its JSON output; run state lands in the host's gitignored
+`.context/<slice-id>/`. Interface and lifecycle: [`CONTRACT.md`](./CONTRACT.md).
 
 ```bash
-shared/sync.sh            # copy into every workflow script
-shared/sync.sh --check    # exit 1 on drift
+node engine/cli.mjs status --slice PROJ-1234   # example invocation
+node --test 'engine/test/*.test.mjs'           # the loop's test suite
 ```
 
-Run it in this working copy, never against an installed plugin cache dir. Commit the
-result, bump the plugin version, then reinstall in each agent.
+The four `*.workflow.js` scripts still shipped inside some skills are frozen
+Claude-only remnants (their embedded shared blocks no longer have a sync
+source) and are being replaced skill by skill with CLI-driven sequential
+loops that run on both agents.
 
 ## Status
 
 Migration is tracked in the host repo at `.context/agent-plugins-migration-plan.md`
 (voice-to-text). P1 scaffolded the manifests, P2 landed the 16 skills, P3 cut the host
-repo over, and P4 made the suite repo-agnostic: no host literal survives in any skill,
-the reviewer registry's machinery moved here as `shared/reviewer-engine.js`, and
-`/magnus:init-repo` scaffolds a new host's contract. 17 skills.
+repo over, P4 made the suite repo-agnostic, and the Codex-first rework (PR stack,
+2026-08-28) started with PR1: the shared engine became the `engine/` CLI and the
+kramme reviewer roster was vendored into `agents/`. 17 skills, 25 roster agents.

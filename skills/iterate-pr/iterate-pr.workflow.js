@@ -22,7 +22,7 @@ export const meta = {
 //   maxRounds, commitPrefix, hasAcceptanceCriteria, diffStat, repoConfig }
 // Normalised via the shared parseWorkflowArgs (hoisted from the registry block below).
 const A = parseWorkflowArgs(args);
-// >>> shared:repo-config-defaults — generated from the plugin's shared/repo-config-defaults.js; edit there and run shared/sync.sh
+// >>> shared:repo-config-defaults — FROZEN copy (sync source removed; the engine/ CLI replaces it — see README)
 // Generic, host-agnostic fallbacks for every `repoConfig` key. A host repo
 // overrides any subset from its docs/agents/repo-config.md `## Config` block;
 // resolveRepoConfig() in shared/reviewer-engine.js merges the two, two levels
@@ -177,7 +177,7 @@ const LIB_MAP = buildLibMap(CFG);
 // never past the work-slice cap of 5.
 const MAX_ROUNDS = Math.min(5, Math.max(1, Number(A.maxRounds) || 3));
 
-// >>> shared:reviewer-engine — generated from the plugin's shared/reviewer-engine.js; edit there and run shared/sync.sh
+// >>> shared:reviewer-engine — FROZEN copy (sync source removed; the engine/ CLI replaces it — see README)
 // Shared reviewer ENGINE for the feature-dev workflow scripts. Plugin-owned and
 // host-agnostic: it holds the review machinery (lane composition, finding
 // schemas, the ledger, the relevance validator, the closeout adjudicator, the
@@ -189,12 +189,9 @@ const MAX_ROUNDS = Math.min(5, Math.max(1, Number(A.maxRounds) || 3));
 // deliberately generic: a repo that supplies nothing still gets a working
 // (blunter) review. See the plugin's CONTRACT.md.
 //
-// Workflow scripts must be self-contained — they cannot import this file — so
-// shared/sync.sh copies it verbatim into each target between the
-// `// >>> shared:reviewer-engine` / `// <<< shared:reviewer-engine` markers
-// (`--check` fails on drift). Edit HERE, never in the generated blocks.
-// Assumes the `shared:repo-config-defaults` block (REPO_CONFIG_DEFAULTS)
-// appears ABOVE this block in every target — sync.sh maintains both.
+// FROZEN copy: the sync source (shared/reviewer-engine.js) is gone — the
+// engine/ CLI owns this machinery now. This block changes only when the
+// whole script is deleted in favour of the CLI-driven loop.
 
 // Runtime quirk: the Workflow runtime can deliver `args` as a JSON *string*.
 function parseWorkflowArgs(raw) {
@@ -884,13 +881,12 @@ Set "area" to "scope". Do not invent problems to look productive — an empty bl
 }
 // <<< shared:reviewer-engine
 
-// >>> shared:loop-schemas — generated from the plugin's shared/loop-schemas.js; edit there and run shared/sync.sh
+// >>> shared:loop-schemas — FROZEN copy (sync source removed; the engine/ CLI replaces it — see README)
 // Shared implement/fix-loop schemas — used only by loop-shaped workflows
 // (work-slice-loop + iterate-pr; solve-ready-loop does not carry this block).
-// Synced by the plugin's `shared/sync.sh` between the
-// `// >>> shared:loop-schemas` / `// <<< shared:loop-schemas` markers; edit
-// HERE, never in the generated blocks. Depends on the reviewer-engine block
-// (KNOWN_AREAS, FINDING, findingFingerprint) being synced above it in the target.
+// FROZEN copy: the sync source (shared/loop-schemas.js) is gone — the
+// engine/ CLI owns these schemas now. Depends on the reviewer-engine block
+// (KNOWN_AREAS, FINDING, findingFingerprint) appearing above it in this file.
 
 // Injected by the tests gate: reviewers never see red code — a red round is
 // spent on a dedicated tests-fix pass instead of reviewers.
