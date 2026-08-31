@@ -179,3 +179,12 @@ test('init is idempotent and resumable', () => {
   assert.equal(again.resumed, true);
   assert.equal(again.round, 1);
 });
+
+test('findings validation requires rootCause on blocking findings', async () => {
+  const { validate, FINDINGS_SCHEMA } = await import('../lib/schemas.mjs');
+  const report = (finding) => ({ reviewer: 'code-reviewer', blockingFindings: [finding], notes: [] });
+  const missing = validate(report({ title: 'Reworded re-raise', detail: 'boom' }), FINDINGS_SCHEMA);
+  assert.ok(missing.some((e) => e.includes('missing required "rootCause"')));
+  const withSlug = validate(report({ title: 'Reworded re-raise', detail: 'boom', rootCause: 'null-widget' }), FINDINGS_SCHEMA);
+  assert.deepEqual(withSlug, []);
+});

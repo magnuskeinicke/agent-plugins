@@ -102,7 +102,7 @@ Run the CodeRabbit CLI review via Bash (long-running — use a generous timeout,
 
 Then translate its output into the findings file:
 - VERIFY each CodeRabbit finding against the actual code (open the cited file/line) before reporting it — drop anything that does not hold up.
-- blockingFindings: verified correctness bugs, security vulnerabilities, data-loss/race/resource-leak risks, or broken error handling — each with a concrete suggestedFix.
+- blockingFindings: verified correctness bugs, security vulnerabilities, data-loss/race/resource-leak risks, or broken error handling — each with a concrete suggestedFix and a rootCause (a short stable slug of the underlying cause — reuse the exact slug when re-raising a prior finding).
 - notes: style/naming/docs/nit-level suggestions worth a human glance — never blocking.
 - If the CLI is missing, unauthenticated, rate-limited, or errors out: return an empty blockingFindings array plus a single note "CodeRabbit CLI unavailable: <reason>". Do NOT fall back to reviewing the code yourself — the roster lanes cover that.
 Set "reviewer" to "coderabbit".
