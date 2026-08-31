@@ -97,5 +97,11 @@ the CLI: sequential-first loop (subagents an optional accelerator), a
 their workflow scripts. PR4 killed the `/goal` stop-hook dependency —
 `feature-goal`, `work-issue` and `solve-ready-tickets` are re-entrant stage
 machines on durable markers ("run again to resume"), and `solve-ready-tickets`
-drives the engine CLI (last workflow script deleted). 17 skills, 25 roster
-agents.
+drives the engine CLI (last workflow script deleted). PR5 adopted the kramme
+fix-ci CI mechanics into `babysit-stack` (bucket classification, bounded
+watch, failure-signature caps, no `git add -A`). PR6 added the
+`design.fidelityCheck` repo extension point, slice agent routing
+(`agent:<name>` labels), and the `conductor-workspace` skill. PR7 was the
+conventions sweep: every SKILL.md ≤500 lines with Workflow Boundaries /
+Red Flags / Verification epilogues, descriptions within Codex's 1024-char
+limit. 18 skills, 25 roster agents.

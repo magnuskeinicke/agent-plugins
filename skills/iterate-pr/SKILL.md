@@ -185,3 +185,32 @@ Every invocation runs at least **one** pass here (so the report ends on live CI/
 ---
 
 Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-workflow
+
+## Workflow Boundaries
+
+**This skill runs the bounded review ⇄ fix loop on one existing PR, then babysits that PR to "in order".**
+
+- **DOES**: resolve + check out the PR branch, compute the diff vs `origin/<baseRefName>`, drive the engine CLI (`init → plan → collect → decide → apply-fix → adjudicate → report`), push fixes once, post a stalled ledger as a PR comment, run `/babysit-stack <n>` passes.
+- **DOES NOT**: touch review threads (Step 5's babysit passes own reply/resolve), run Playwright (`/work-slice` / `/work-issue`), open/merge/approve/ready/close PRs, re-`init` a finished engine run, restack other worktrees' branches unasked.
+
+## Red Flags — STOP
+
+- About to review or fix in the main session — stop: emitted tasks own that; you only run the CLI and the tasks it names.
+- About to re-`init` a run whose `status` phase is `done` — stop: one engine run per PR, ever; everything after is babysit passes.
+- About to reply to or resolve a review thread from this loop — stop: thread work happens only inside the Step 5 `/babysit-stack` passes.
+- About to push mid-loop — stop: the commit rule forbids it; fix commits stay local and Step 4 pushes once, plain (never force).
+- About to check out a branch held by another worktree — stop and name the worktree.
+- About to hand-edit `.context/pr-<n>/ledger.json` / a findings file, or skip a CLI command you "know" the output of — stop: the CLI owns the loop.
+- About to push to a fork you lack rights on — stop and tell the user.
+- About to spin another babysit pass when only CI / an awaited `<BOT>` review is pending — stop: end with the resume report; re-invocation re-checks.
+
+## Verification
+
+Before reporting done:
+
+- [ ] The verdict is reported verbatim: `converged` in N rounds or `stalled — shipped with N open findings (CR-…)` — plus dead reviewers and demoted/unverified findings.
+- [ ] Fix commits (if any) are pushed exactly once and the branch is no longer ahead of `origin/<headRefName>`.
+- [ ] A stalled or degraded-coverage run left a `## Review ledger` PR comment with the verdict line and `CR-NNN` entries.
+- [ ] Upstack PRs basing on this branch are named as needing restack (mechanics deferred to babysit-stack, not done unasked).
+- [ ] At least one `/babysit-stack` pass ran and its `VERDICT` block is handled — the report names what the PR still waits on.
+- [ ] The PR is still open and still a draft if it was one — nothing merged, approved, readied, or closed.

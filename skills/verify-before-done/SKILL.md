@@ -83,3 +83,31 @@ A false "done" breaks trust in every later claim, ships broken code, silently dr
 ---
 
 Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-workflow
+
+## Workflow Boundaries
+
+**This skill gates every completion claim behind fresh verification evidence from this session.**
+
+- **DOES**: identify the proving command per claim (from `gates.*`, else discovered and named), run it in full after the last edit, read the complete output, state the claim with its evidence — or state plainly what could not be verified
+- **DOES NOT**: accept stale runs, confidence, partial checks, or a subagent's "success" as evidence; invent proving commands; substitute lint for compile or tests; let hedged wording ("should", "probably", "seems to") bypass the gate
+
+## Red Flags — STOP
+
+- About to say "done", "fixed", "passing", "works" — or any paraphrase or hedge — without a fresh run — stop; run the proving command first.
+- The proving run predates your last edit — stop; it is stale, re-run it.
+- About to trust an exit code without reading `gates.traps` — stop; read the repo's known lies first.
+- About to invent a proving command, or claim a gate you could not identify — stop; discover from the repo and name the command used, or say "cannot verify".
+- About to relay a subagent's "success" as done — stop; read the diff and run the proving command yourself.
+- About to call a regression test proven after one passing run — stop; the red leg (fails with the fix stashed) is required.
+- `git stash pop` conflicted mid red-green cycle — stop; resolve preserving the fix, or tell the user the tree needs manual attention.
+
+## Verification
+
+Before reporting done:
+
+- [ ] Every claim maps to a named command run in this session, after the last edit.
+- [ ] Full output read — exit code, failure count, summary lines — not just the tail.
+- [ ] The claim states its evidence: commands run + summary lines.
+- [ ] Bug fixes: red-green cycle completed — test failed with the fix stashed, passed with it restored.
+- [ ] Subagent work verified independently via `git diff`/`git status` plus a fresh proving run.
+- [ ] Anything unverifiable stated explicitly as "cannot verify X here", never implied as success.

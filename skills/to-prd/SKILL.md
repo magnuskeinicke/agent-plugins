@@ -111,3 +111,31 @@ A description of the things that are out of scope for this PRD.
 Any further notes about the feature.
 
 </prd-template>
+
+## Workflow Boundaries
+
+**This skill synthesizes the current context into a PRD published as a comment on exactly one parent ticket.**
+
+- **DOES**: explore the repo, sketch test seams and confirm them with the user, write the PRD from the template, publish it as a `# PRD` comment, stamp `<TYPE:>*` + `<SKIP>`, report the parent id + URL
+- **DOES NOT**: interview the user (that was `/grill-with-docs`), create sub-issues or slices (`/to-issues` does), implement code, overwrite the ticket's description, or apply `<AGENT-READY>`/`<NEXT>` to the parent
+
+## Red Flags — STOP
+
+- About to open a fresh requirements interview — stop; synthesize what you already know (the seam check in step 2 is the only check-in).
+- About to write into or overwrite the ticket's description — stop; the PRD is a comment, additive, never a rewrite.
+- Session was seeded from a ticket but you're about to create a new one — stop; the seed ticket IS the parent.
+- About to put file paths or code snippets into Implementation Decisions — stop; they go stale (only a decision-rich prototype snippet may be inlined).
+- About to apply `<AGENT-READY>` or `<NEXT>` to the parent — stop; the parent is a container, never a unit of agent work.
+- About to create sub-issues, change status, or reassign — stop; that's `/to-issues`'s job.
+- About to replace the ticket's existing labels — stop; add, don't replace.
+
+## Verification
+
+Before reporting done:
+
+- [ ] PRD published as a comment under a `# PRD` heading with every template section: Problem Statement, Solution, User Stories, Implementation Decisions, Testing Decisions, Design, Out of Scope, Further Notes.
+- [ ] Ticket description untouched, and the PRD duplicates nothing it already says.
+- [ ] Test seams confirmed with the user before the PRD was written.
+- [ ] `<TYPE:>*` and `<SKIP>` applied, existing labels preserved, no routing label on the parent.
+- [ ] Design section records the Figma file key + per-screen deep-links, or states there is no design yet.
+- [ ] Parent ticket id + URL reported, with the pointer to run `/to-issues`.

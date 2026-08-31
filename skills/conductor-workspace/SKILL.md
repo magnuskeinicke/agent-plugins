@@ -99,3 +99,32 @@ Consequences:
   goes to a workspace running that agent, never "just this once" elsewhere.
 - One babysit home per stack; one workspace per slice; one agent per
   workspace at a time.
+
+## Workflow Boundaries
+
+**This skill maps and plans Conductor workspace usage for the suite — it never provisions anything.**
+
+- **DOES**: plan the workspace-per-slice layout, match labelled slices to agent-matched workspaces, explain what state travels (tracker/remote) vs what doesn't (`.context/`), pick the babysit home, name the cross-workspace hazards
+- **DOES NOT**: create workspaces (the user's or Conductor MCP's act), create branches or worktrees (`/work-slice` renames in place; single-worktree mode is `/feature-goal`'s), or run babysit passes itself (`/babysit-stack`)
+
+## Red Flags — STOP
+
+- About to `git worktree add` and call it a workspace — stop; bootstrap scripts wouldn't run; workspace creation is the user's (or the Conductor MCP's) act.
+- About to start a labelled slice under a different agent — stop; the routing gate bounces it; never "just this once" elsewhere.
+- About to run a babysit pass for a stack from a new workspace — stop; use the stack's one babysit home or the caps and once-ever gate reset.
+- About to `gh stack sync --prune` while sibling branches are checked out in other workspaces — stop; it deletes branches under live worktrees; plain `--remote origin` sync only.
+- About to check out or fix a branch held by another workspace — stop; git refuses; fix it in the owning workspace or hand it to that workspace's agent.
+- About to reuse a slice's workspace for the next slice — stop; start a fresh workspace per slice.
+- About to re-`init` an engine loop because the finished ledger lives in another workspace — stop; one engine run per PR, ever.
+- About to rename a workspace directory or commit `.context/` — stop; paths are load-bearing and `.context/` stays in `.git/info/exclude`.
+
+## Verification
+
+Before reporting done:
+
+- [ ] One workspace per slice — none planned to host two slices, or two agents at once
+- [ ] Every labelled slice is matched to a workspace running that agent; unlabelled slices marked any-agent
+- [ ] Only file-disjoint skeleton deltas run in parallel; each chained slice waits for its predecessor's push
+- [ ] Exactly one babysit home named per stack
+- [ ] Any agent handoff is sequential: commit + push + checkpoint before the other workspace opens the branch
+- [ ] No workspaces, worktrees, or branches were created by this skill

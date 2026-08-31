@@ -299,3 +299,32 @@ the user) reads this verdict verbatim.
 - Never touch branches held by other worktrees.
 - Report faithfully: pending is pending, failed is failed (with the log line),
   a skipped item says why.
+
+## Workflow Boundaries
+
+**This skill runs one idempotent babysit pass over an open PR stack and ends with a machine-checkable verdict.**
+
+- **DOES**: discover + order the stack bottom → top, request `<BOT>` (once per PR, ever), classify CI by `bucket` and fix failures test-first on the owning branch, address + resolve review threads, restack after lower-branch fixes, print the verdict block.
+- **DOES NOT**: merge/approve/mark ready, implement `missing` slices (`/feature-goal` / `/work-slice` own re-work), loop itself (re-invocation comes from outside: a calling skill, `/loop`, the user), resolve `needs-human` threads (the human's click).
+
+## Red Flags — STOP
+
+- About to re-request `<BOT>` after a fix push or on a re-run — stop: one bot round per PR, ever; gate on `botRequested` in the state file.
+- About to `git add -A` / `git add .` for a fix commit — stop: stage only the fix's files by name, then diff against the dirty-state snapshot.
+- About to silence a gate (`--no-verify`, `eslint-disable` / `@ts-ignore`, skipping/deleting a test, lowering a threshold) — stop: fix it or flag `needs-human` with the rationale.
+- Same failure signature about to get a 4th fix attempt — stop: 3 across passes is the cap; flag `needs-human` with the log line.
+- A bouncing thread about to get a 3rd fix — stop: 2 attempts, then `needs-human`.
+- About to check out a branch held by another worktree — stop: flag that PR's fixes `needs-human` instead.
+- About to wait on CI beyond the single bounded `--watch` (only when CI is the sole remaining item) — stop: record `pending` and end the pass.
+- About to classify checks from the human-readable table — stop: read `gh pr checks --json` and key on `bucket`.
+
+## Verification
+
+Before reporting done:
+
+- [ ] The verdict block is printed: per-PR table (`<BOT>` / CI / unresolved threads / Notes), actions this pass, blockers, one-line VERDICT reason.
+- [ ] GOAL MET only if every non-merged slice has an open PR, CI green, `<BOT>` review **delivered** (`n/a` when unconfigured), and zero unresolved threads.
+- [ ] Every thread resolved this pass has a reply (commit sha, evidence, or outdated-note); `needs-human` threads are left unresolved and named.
+- [ ] `.context/babysit-<parent>.json` is updated (attempt counters, failure signatures, first-seen-pending, `botRequested`) and `.context/` is in `.git/info/exclude`.
+- [ ] Fix commits contain only fix-edited files; pre-existing dirty state stayed uncommitted (reported once if present).
+- [ ] After any lower-branch fix, everything above it was restacked and pushed; the worktree ends on the top branch.

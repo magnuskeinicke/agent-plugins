@@ -107,3 +107,33 @@ Same finish as the rest of the suite: run **`/babysit-stack <pr-01> … <pr-top>
 ---
 
 Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-workflow
+
+## Workflow Boundaries
+
+**This skill re-cuts one oversized branch or PR into a validated stack of small draft PRs — the combined diff never changes.**
+
+- **DOES**: gate the split decision (Step 0), plan file-level layers by import direction, carve layer branches, validate each layer with `<GATE>`, verify the empty-diff safety net, open draft PRs via `<PR-SKILL>` bottom→top, link the stack, drive `/babysit-stack` to GOAL MET
+- **DOES NOT**: alter or "improve" the original code (findings go to `/iterate-pr` or a ticket), merge/approve/mark ready, do hunk-level surgery on shared files, re-split slices already sized by `/work-slice`, `/work-issue`, or `/to-issues`, or fork `<PR-SKILL>`'s title/body logic
+
+## Red Flags — STOP
+
+- No `<STACK>` tool configured — stop; splitting into a stack needs a stack tool, say so.
+- The change is large-but-atomic (rename sweep, one migration + consumers, lockfile bump, whole deletion) or factors into one layer — stop; no split, back to `<PR-SKILL>` in pre-PR mode.
+- The branch is a `/work-slice`, `/work-issue`, or `/to-issues` slice — stop; already sized, never re-split.
+- Tempted to fix code while carving — stop; the stack must reproduce the original tree byte-for-byte; route findings to `/iterate-pr` or a ticket.
+- `git diff <original-branch> <top-layer> --stat` is not empty — stop; a path was missed, fix before validating.
+- About to run `gh stack submit` or link with `--open` — stop; link by PR number, `<PR-SKILL>` owns titles.
+- About to force-push over a PR with review activity — stop; ask first, and only `--force-with-lease`.
+- About to mark a stack PR ready or merge it — stop; the suite ships drafts.
+
+## Verification
+
+Before reporting done:
+
+- [ ] Empty-diff check ran and returned empty: the top layer reproduces the original tree exactly.
+- [ ] Every layer validated green bottom→top with `<GATE>` against its predecessor base, `gates.traps` applied first.
+- [ ] Each layer is a draft PR with its own `<TITLE-RULE>` title, opened via `<PR-SKILL>` verbatim.
+- [ ] Stack linked by PR number: `gh stack link --base <BASE> <pr-01> … <pr-top>`.
+- [ ] Existing-PR mode: original PR retargeted to the top layer with number/threads intact and body refreshed. Pre-PR mode: stale remote branch cleaned up, checked out on the top layer.
+- [ ] Report shows the layer table, the empty-diff verification line, and per-layer validation results.
+- [ ] `/babysit-stack` passes run until GOAL MET, or the pending/needs-human stop reason named.

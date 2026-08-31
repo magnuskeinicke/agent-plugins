@@ -183,3 +183,33 @@ Exactly one slice is the walking skeleton and every delta names its novel decisi
 ---
 
 Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-workflow
+
+## Workflow Boundaries
+
+**This skill turns an approved PRD into a labelled, stacked set of agent-ready sub-issues — nothing more.**
+
+- **DOES**: fetch the PRD comment from the parent, build the code-layer map, gather Figma context for UI slices, draft skeleton + delta slices, quiz the user, publish labelled sub-issues with blocked-by relations, write pinned exemplars back to `goldenPaths`
+- **DOES NOT**: implement code, create branches, or open PRs (`/work-slice` owns that), write or edit the PRD (`/to-prd`), modify the parent ticket's body/status/assignee, or stamp `<AGENT-READY>` anywhere
+
+## Red Flags — STOP
+
+- About to slice horizontally by layer, per-file, or as temporal "steps" — stop; slice as one walking skeleton + behaviour deltas.
+- A slice carries two novel decisions — stop; two decisions → two slices.
+- About to stamp `<AGENT-READY>` on a slice or the parent — stop; that is `daily-ticket-manager`'s autonomous-loop trigger and stays off the PRD pipeline.
+- About to modify the parent ticket's body, status, or assignee — stop; the parent is read-only here.
+- The stack exceeds 4–5 PRs — stop; apply the escape hatches in order (merge adjacent, second stack, fan out disjoint deltas, question scope) first.
+- About to publish before the user approves the step-5 breakdown — stop; iterate until approved.
+- A UI slice lacks Figma file key + node deep-links — stop; add them, or flag the access blocker loudly at the top of the slice.
+- About to inline a code snippet in a slice body — stop; `file:line` pointers only (exception: a decision-rich prototype snippet, noted as such).
+
+## Verification
+
+Before reporting done:
+
+- [ ] Exactly one slice is the walking skeleton; every delta names its novel decision or "none — pure mirror".
+- [ ] Every slice is a sub-issue of the PRD parent with acceptance criteria, code-layer pointers, and a Convention contract (+ Figma nodes and tokens for UI slices).
+- [ ] Every slice carries `<TYPE:>*` + `<SKIP>`; HITL slices carry `<HITL>`; frontend-dominant slices carry `<AGENT:><frontendAgent>` when routing is configured; none carries `<AGENT-READY>`.
+- [ ] Exactly one slice carries `<NEXT>` (the AFK skeleton) — or none, with the user told the skeleton needs a human first.
+- [ ] Every slice's blocked-by relation and "Stacked on" line name its predecessor (skeleton: base = `<BASE>`).
+- [ ] Newly-pinned exemplars written back to `goldenPaths` in `docs/agents/repo-config.md`.
+- [ ] User pointed at `/work-slice` to start the skeleton.
