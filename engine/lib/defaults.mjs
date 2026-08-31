@@ -70,11 +70,15 @@ export const REPO_CONFIG_DEFAULTS = {
   // Slice agent routing (e.g. frontend slices reserved for a stronger-at-UI
   // agent). labelPrefix '' → routing disabled everywhere. delegate maps an
   // agent name to a headless command template; {} → mismatched slices are
-  // reported/skipped, never delegated.
+  // reported/skipped, never delegated. dispatch: where feature-goal's slice
+  // loop runs — 'cloud' (one Conductor cloud workspace per slice, via the
+  // Conductor MCP; falls back to local when the MCP is unreachable) or
+  // 'local' (the sequential single-worktree loop).
   routing: {
     labelPrefix: '',
     frontendAgent: '',
     delegate: {},
+    dispatch: 'cloud',
   },
   // area → path patterns (regex sources; object form `{re, flags}` carries
   // flags). Language-generic on purpose — a host repo replaces these wholesale.

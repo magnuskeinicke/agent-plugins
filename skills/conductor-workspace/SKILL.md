@@ -37,6 +37,24 @@ cross-workspace. This is the map.
   once-ever gate loses its memory. Pick one (e.g. the skeleton's) and stick
   with it.
 
+## Cloud dispatch — the full pipeline's default
+
+With `routing.dispatch` = `cloud` (the default), `/feature-goal` creates the
+workspace-per-slice layout above **remotely**: the Conductor MCP's
+`create_workspace` makes one isolated cloud workspace + first session per
+slice, first prompt `/work-slice <slice-id>` — so slices keep running while
+the user is away. The durable dispatch marker is a `## Cloud dispatch`
+comment on the slice ticket (workspace deep link + session id); it is the
+cross-machine double-dispatch guard, and a slice carrying it is cloud-owned —
+resume or nudge that session, never implement it elsewhere. In cloud mode
+the babysit home is the **skeleton slice's cloud workspace**, and the
+held-branch hazard applies to your local checkout too: the cloud workspaces
+hold the stack's branches.
+
+The standalone commands (`/work-issue`, `/solve-ready-tickets`,
+`/daily-ticket-manager`) are venue-neutral by design — the user starts them
+locally or in a cloud workspace, and no skill relocates them.
+
 ## Which agent takes a slice
 
 With `routing.labelPrefix` configured (see the plugin CONTRACT.md), slices
