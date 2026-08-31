@@ -42,6 +42,7 @@ which key is missing and end the run.
 | `<HITL>` | `labels.needsHuman` | no hard exclusion to honour |
 | `<SKIP>` | `labels.managerSkip` | no pipeline exclusion to honour |
 | `<RISK:>` | `labels.riskPrefix` | no risk label to clear on decline |
+| `<AGENT:>` | `routing.labelPrefix` | no agent-routing exclusion to honour |
 | `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<START-SKILL>` | `skills.startWork` | create the worktree with plain `git worktree add` off `<BASE>` |
 | `<PR-SKILL>` | `skills.createPr` | `gh pr create --base <BASE> --draft`, title per `pr.titleRule` |
@@ -107,7 +108,10 @@ Then **drop**, in this order:
    (`daily-ticket-manager` should never have stamped `<AGENT-READY>` on one, but
    guard anyway.)
 2. Any ticket carrying **`<HITL>`** — never both, but guard.
-3. Any ticket **already claimed**: an existing branch carrying the issue id
+3. Any ticket carrying an **`<AGENT:>` label naming a different agent** than
+   this runtime (e.g. `agent:claude` while running in Codex) — reserved for
+   that agent; report it as skipped-for-routing so the queue count adds up.
+4. Any ticket **already claimed**: an existing branch carrying the issue id
    (run `git fetch --prune origin` first so remote branches are current, then
    `git branch --all --list '*<issue-id>*'`), or an open PR referencing the issue
    (`gh pr list --search "<ISSUE>" --state open`). The claim in Step 2 clears

@@ -98,6 +98,45 @@ inline". The plugin never assumes a repo skill exists.
 `devServerCommand` empty the Playwright user-story reviewer is **skipped** and
 the run says so rather than inventing a start command.
 
+### `design` — fidelity extension point
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `design.fidelityCheck` | string | `''` → the step doesn't exist | a **repo-local** skill (or command) that judges implemented UI against the design source |
+
+Design-fidelity mechanics live in the **host repo**, never the plugin — Figma
+(or any design tool) is not guaranteed anywhere, and the screen↔route mapping
+is repo data by nature. When the key is set, `magnus:work-slice` invokes it
+during the Playwright verify rounds on UI slices. The contract:
+
+- **Input:** the slice's routes/screens under verification, its acceptance
+  criteria, and the design deep-links from the slice ticket.
+- **Output:** JSON `{"deviations": [{"screen", "designRef", "severity":
+  "blocking"|"advisory", "description", "screenshot"}]}` — an empty array means
+  fidelity holds. Comparison should be model judgment, never pixel diffing
+  (seeded data differs from design content by construction).
+- **Semantics:** a `blocking` deviation is treated exactly like a failed
+  acceptance criterion (same fix rounds, same caps); `advisory` deviations ride
+  into the PR comment and QA evidence unfixed.
+
+### `routing` — slice agent routing
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `routing.labelPrefix` | string | `''` → routing disabled | tracker-label prefix for reserving a slice to an agent (`agent:` → `agent:claude`) |
+| `routing.frontendAgent` | string | `''` → no stamping | agent name `magnus:to-issues` stamps on frontend-dominant slices (paths judged by `areaPaths.frontend`) |
+| `routing.delegate` | agent → command template | `{}` → report/skip, never delegate | headless invocation per agent, e.g. `{"claude": "claude -p \"<prompt>\" --permission-mode acceptEdits", "codex": "codex exec \"<prompt>\""}` |
+
+Different agents have different strengths (e.g. Claude at frontend). With
+routing configured, `magnus:to-issues` stamps `<labelPrefix><agent>` on slices
+reserved for a specific agent; `magnus:work-slice` refuses a slice reserved
+for an agent other than its own runtime; `magnus:feature-goal` either
+delegates such a slice via `routing.delegate` (child process running
+`/work-slice`, verified afterwards from durable markers) or ends the
+invocation naming which agent the slice waits on. Routing is **slice-granular
+only** — never per-step or per-file. The suite's durable markers (checkpoint
+files, ledger, PR state) are what make a slice resumable by any agent.
+
 ### Review targeting
 
 | Key | Type | Default | Meaning |

@@ -29,6 +29,7 @@ owns which label.
 | `<NEXT>` | `labels.sliceNext` | no work pointer — tell the user which slice is up |
 | `<HITL>` | `labels.needsHuman` | write "needs a human decision" into the slice body instead |
 | `<AGENT-READY>` | `labels.agentReady` | there is no autonomous-loop trigger to avoid |
+| `<AGENT:>` | `routing.labelPrefix` (with `routing.frontendAgent`) | no agent-routing labels — any agent works any slice |
 | `<BASE>` | `integrationBranch` | the repo's default branch |
 | `<SRC>` | `sourceDirs` | the whole source tree |
 | `<CONVENTIONS>` | `conventionsFile` | `CLAUDE.md` |
@@ -76,6 +77,8 @@ Break the PRD into **one walking-skeleton slice + N behaviour-delta slices**. Ne
 - **Skeleton first, always.** The rest fan out from it.
 </slice-rules>
 
+**Agent routing** (only when `<AGENT:>` *and* `routing.frontendAgent` are configured): mark each slice **frontend-dominant** or not, from the code-layer map — a delta whose "Where to look" rows predominantly match the repo's `areaPaths.frontend` patterns (UI components, views, styling) is frontend-dominant and will carry `<AGENT:><routing.frontendAgent>` at publish time, reserving it for the agent that's strongest at UI. The **skeleton and mixed slices carry no routing label** — they're cross-layer by construction and any agent may work them. Routing is slice-granular, never per-file.
+
 Mark each slice **AFK** (an agent can implement and open a PR unattended) or **HITL** (needs a human decision/design review first). Prefer AFK for deltas — they carry ≤1 decision by construction. The **skeleton** leans HITL (or at least a flagged, careful review): it makes every decision the rest of the stack inherits, so a wrong skeleton is N wrong slices. HITL slices get the `<HITL>` label. AFK slices carry **no routing label of their own** — the `<NEXT>` work pointer (step 6) marks only the one slice that is up next. **No slice ever gets `<AGENT-READY>`**: that label is the autonomous-loop trigger, reserved for `daily-ticket-manager` on standalone tickets, and must stay off the PRD pipeline (see `labels.docPath`).
 
 ### 4. Define the stack (delivery topology)
@@ -95,7 +98,7 @@ The "Stacked on" line in the body and the **blocked-by relation** on the tracker
 
 ### 5. Quiz the user
 
-Present the breakdown as a numbered list. For each slice show: **Title** · **Kind** (skeleton/delta) · **AFK/HITL** · **Stacked on** (predecessor) · **Novel decision** (the one it introduces, or "none — pure mirror") · **Disjoint?** (can it fan out on the skeleton and run in parallel, or must it chain — and on what) · **User stories / AC covered**. Ask:
+Present the breakdown as a numbered list. For each slice show: **Title** · **Kind** (skeleton/delta) · **AFK/HITL** · **Agent** (the `<AGENT:>` routing when configured — `<frontendAgent>` or "any") · **Stacked on** (predecessor) · **Novel decision** (the one it introduces, or "none — pure mirror") · **Disjoint?** (can it fan out on the skeleton and run in parallel, or must it chain — and on what) · **User stories / AC covered**. Ask:
 
 - Is the granularity right? (too coarse / too fine — and would any PR be too big to review?)
 - Does the skeleton really capture ALL the cross-layer decisions — is any delta hiding a second decision?
@@ -114,7 +117,8 @@ Labels per `labels.docPath` — a `<TYPE:>*` **and** `<SKIP>` on every slice, pl
 - **Every slice** → `<SKIP>` — the triage opt-out telling `daily-ticket-manager` this ticket is PRD-pipeline-owned and must not be classified or routed by the daily triage. Routing here belongs to `<NEXT>` + `/work-slice`. Create the label first if the team lacks it (muted grey e.g. `#6b7280`).
 - **HITL slice** → `<HITL>`.
 - **The skeleton slice, if AFK** → `<NEXT>` — the work pointer telling `/work-slice` this is the one to pick up. Create the label first if the team lacks it. Exactly **one** slice carries `<NEXT>` at a time; `/work-slice` advances it down the stack as each slice reaches PR (with fan-out, sibling deltas become unblocked together — the pointer still marks just the one that is up next; the user may hand siblings to parallel worktrees manually).
-- **Downstream AFK slices** → no routing label yet; they receive `<NEXT>` from `/work-slice` when their turn comes.
+- **Downstream AFK slices** → no work-pointer label yet; they receive `<NEXT>` from `/work-slice` when their turn comes.
+- **Frontend-dominant slices** (step 3, only when routing is configured) → `<AGENT:><routing.frontendAgent>` (e.g. `agent:claude`). Create the label first if the team lacks it. Skeleton and mixed slices get no `<AGENT:>` label.
 - **Never `<AGENT-READY>`** on any slice or on the parent — it is the autonomous-loop trigger and stays off the PRD pipeline.
 
 If the skeleton slice is HITL, no slice starts with `<NEXT>` — tell the user the first slice needs a human before any agent can start.
@@ -174,7 +178,7 @@ Avoid specific code snippets — they go stale. Exception: a prototype snippet t
 
 ## Done when
 
-Exactly one slice is the walking skeleton and every delta names its novel decision (or "none — pure mirror"). Every slice is a sub-issue of the PRD parent, carries acceptance criteria + code-layer pointers + a Convention contract (+ for UI: Figma nodes + tokens), names what it stacks on via a blocked-by relation, and is labelled `<TYPE:>*` + `<SKIP>` (plus `<HITL>` for HITL); the skeleton AFK slice also carries `<NEXT>`. No slice carries `<AGENT-READY>`. Any newly-pinned exemplars are written back to `goldenPaths` in `repo-config.md`. Tell the user to run `/work-slice` to start the skeleton slice.
+Exactly one slice is the walking skeleton and every delta names its novel decision (or "none — pure mirror"). Every slice is a sub-issue of the PRD parent, carries acceptance criteria + code-layer pointers + a Convention contract (+ for UI: Figma nodes + tokens), names what it stacks on via a blocked-by relation, and is labelled `<TYPE:>*` + `<SKIP>` (plus `<HITL>` for HITL, plus `<AGENT:><frontendAgent>` on frontend-dominant slices when routing is configured); the skeleton AFK slice also carries `<NEXT>`. No slice carries `<AGENT-READY>`. Any newly-pinned exemplars are written back to `goldenPaths` in `repo-config.md`. Tell the user to run `/work-slice` to start the skeleton slice.
 
 ---
 
