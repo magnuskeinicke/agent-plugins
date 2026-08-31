@@ -179,17 +179,49 @@ One invocation does three things, then ends at the usual boundaries:
      (`<NN>-<issue-id>`). Agent: the slice's `<AGENT:>` label when present —
      in cloud mode the routing label picks the workspace's agent and
      `routing.delegate` is never consulted — else this runtime's own agent.
-     First prompt exactly `/work-slice <slice-id>`. Work-slice runs
-     **verbatim** there: a cloud workspace IS the virgin per-slice Conductor
-     workspace it expects, so its Step 2 branch-rename applies unchanged
-     (none of local mode's Step-2 substitution).
+   - **Bootstrap the sandbox (session 1).** A cloud sandbox is fresh: this
+     plugin is NOT installed there, and skills load only at session start —
+     so the first session installs, and a second session works. The first
+     prompt is the bootstrap block, verbatim:
+
+     > Bootstrap this workspace: install the agent plugin for your own CLI,
+     > verify, and reply with exactly `BOOTSTRAP OK` or
+     > `BOOTSTRAP FAILED: <reason>` — change nothing else in the repo.
+     > Claude Code: `claude plugin marketplace add magnuskeinicke/agent-plugins
+     > && claude plugin install magnus@magnus-skills`, verify with
+     > `claude plugin list`. Codex: `codex plugin marketplace add
+     > https://github.com/magnuskeinicke/agent-plugins.git &&
+     > codex plugin add magnus@magnus-skills`.
+
+     Wait for the session to go idle — bootstrap is the **one bounded
+     in-dispatch wait** (a few `get_session_status` checks over ~3 minutes;
+     an install is seconds, not a slice), then read its last message:
+     - `BOOTSTRAP OK` → **`create_session`** in the same workspace, prompt
+       exactly `/work-slice <slice-id>`. The fresh session loads the
+       just-installed plugin, and work-slice runs **verbatim** there: a
+       cloud workspace IS the virgin per-slice Conductor workspace it
+       expects, so its Step 2 branch-rename applies unchanged (none of
+       local mode's Step-2 substitution).
+     - `BOOTSTRAP FAILED` or still not idle → stamp the marker with
+       `bootstrap: failed|pending` and move on; the monitor step (or the
+       next invocation) picks it up. A failed bootstrap is a needs-human
+       blocker (usual cause: the sandbox's GitHub token can't read the
+       private plugin repo) — never a reason to paste slice instructions
+       inline.
    - **Stamp the dispatch marker.** Post a `## Cloud dispatch` comment on the
-     slice ticket: workspace deep link, session id, dispatched-by note.
+     slice ticket: workspace deep link, bootstrap + work session ids,
+     bootstrap status, dispatched-by note.
      Idempotent — update an existing one, never add a second. This comment is
      the cross-machine double-dispatch guard: a slice carrying it is never
      dispatched again and never implemented inline.
-2. **Check the in-flight slices.** For each dispatched slice with no PR yet,
-   `get_session_status` once: `working` → leave it alone. `idle` → re-read
+2. **Check the in-flight slices.** For each dispatched slice with no PR yet:
+   marker still `bootstrap: pending|failed` → check the bootstrap session
+   first: it now reads `BOOTSTRAP OK` → `create_session` with
+   `/work-slice <slice-id>` and update the marker; `BOOTSTRAP FAILED`, or
+   idle without OK for a second invocation running → flag it needs-human
+   with the deep link and the failure reason. Otherwise
+   `get_session_status` on the **work session** once: `working` → leave it
+   alone. `idle` → re-read
    the durable markers (branch on the remote, `gh pr list`): PR up → it
    finished; still nothing → **nudge**: `send_message` with
    `/work-slice <slice-id>` (work-slice is re-entrant; the session resumes
@@ -304,7 +336,8 @@ every PR, watch/fix CI, address + resolve review threads, restack after fixes.
 in cloud workspaces (fixing them here would hit the held-branch hazard), and
 babysit's cross-pass state must live in one workspace's `.context/` — so the
 babysit home is the **skeleton slice's cloud workspace**. `send_message`
-there: `/babysit-stack <ISSUE>`; when `get_session_status` goes idle, read
+to its **work session** (its bootstrap already installed the plugin):
+`/babysit-stack <ISSUE>`; when `get_session_status` goes idle, read
 the verdict block from its transcript (`list_messages`, after-cursor) plus
 live PR state, then handle it exactly like the local verdicts below (another
 pass = send again to the same session). Local mode runs the pass in this
@@ -365,7 +398,7 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
 
 **This skill orchestrates the feature pipeline as a re-entrant stage machine — it sequences the constituent skills, never re-implements them.**
 
-- **DOES**: detect the stage from durable markers, run `/to-prd` and `/to-issues` at their gates, dispatch slices to Conductor cloud workspaces (`<DISPATCH>` = `cloud`: `create_workspace` per slice, `## Cloud dispatch` markers, monitor/nudge sessions) or walk the local slice loop (work-slice verbatim, Step 2 substituted), delegate `<AGENT:>`-routed slices (cloud: workspace agent; local: `routing.delegate`), run `/babysit-stack` passes (cloud: sent to the skeleton's workspace), keep `.context/<ISSUE>/pipeline-state.md`, end every run with the resume line.
+- **DOES**: detect the stage from durable markers, run `/to-prd` and `/to-issues` at their gates, dispatch slices to Conductor cloud workspaces (`<DISPATCH>` = `cloud`: `create_workspace` per slice, a bootstrap session that installs this plugin in the sandbox then a fresh work session, `## Cloud dispatch` markers, monitor/nudge sessions) or walk the local slice loop (work-slice verbatim, Step 2 substituted), delegate `<AGENT:>`-routed slices (cloud: workspace agent; local: `routing.delegate`), run `/babysit-stack` passes (cloud: sent to the skeleton's workspace), keep `.context/<ISSUE>/pipeline-state.md`, end every run with the resume line.
 - **DOES NOT**: grill (the human runs `/grill-with-docs`), own review-loop internals (the engine CLI does), own CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, create extra worktrees locally, implement a cloud-dispatched slice inline, or relocate the venue-neutral standalone commands (`/work-issue`, `/solve-ready-tickets`, `/daily-ticket-manager` run wherever the user starts them).
 
 ## Red Flags — STOP
@@ -378,6 +411,8 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
 - About to run `gh stack submit` or `gh stack link --open` — stop: submit opens auto-titled PRs, `--open` un-drafts.
 - About to implement a slice inline that carries a `## Cloud dispatch` comment — stop: resume or nudge its session; the cloud workspace owns it.
 - About to `create_workspace` for a slice that already has a dispatch marker or a live workspace — stop: one workspace per slice, ever; check the marker first.
+- About to send `/work-slice` as a cloud workspace's **first** session prompt — stop: the fresh sandbox has no plugin and skills load only at session start; bootstrap session first, then a fresh work session.
+- About to paste slice instructions inline into a cloud session because bootstrap failed — stop: a failed bootstrap is a needs-human blocker (deep link + reason), not a workaround invitation.
 - About to dispatch a slice whose predecessor has no open/merged PR, or a `<HITL>` slice — stop: blocked and human-gated slices wait.
 - About to spin-poll `get_session_status` inside one invocation — stop: one check (plus at most one nudge) per slice per invocation, then end with the resume line.
 - About to create a second worktree in local mode — stop: the whole pipeline walks this one, switching branches; cloud workspaces come only from the Conductor MCP.
@@ -388,7 +423,7 @@ It ends with a `VERDICT: GOAL MET | NOT MET` block:
 Before reporting done:
 
 - [ ] `.context/<ISSUE>/pipeline-state.md` rewritten to the current stage, dispatch mode, slice cursor, nudges, and last babysit verdict.
-- [ ] Cloud mode: every dispatched slice's ticket carries exactly one `## Cloud dispatch` comment with the workspace deep link; no slice has two workspaces; a local fallback was announced once.
+- [ ] Cloud mode: every dispatched slice's ticket carries exactly one `## Cloud dispatch` comment with the workspace deep link, both session ids, and the bootstrap status; no slice has two workspaces; a local fallback was announced once.
 - [ ] The reported stage matches live markers (`# PRD` comment, sub-issues, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
 - [ ] Planning docs (`CONTEXT.md`, `docs/adr/**`, `docs/agents/**`) were committed before the first slice, so work-slice's clean-tree preflight passes.
 - [ ] Every completed slice has a draft PR, and `<NEXT>` has exactly one carrier (or the report names the HITL/complete reason for none).
