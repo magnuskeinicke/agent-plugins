@@ -73,12 +73,27 @@ export const REPO_CONFIG_DEFAULTS = {
   // reported/skipped, never delegated. dispatch: where feature-goal's slice
   // loop runs — 'cloud' (one Conductor cloud workspace per slice, via the
   // Conductor MCP; falls back to local when the MCP is unreachable) or
-  // 'local' (the sequential single-worktree loop).
+  // 'local' (the sequential single-worktree loop). cloudModels: per-agent
+  // Conductor model/effort passed on every cloud session feature-goal
+  // creates; an agent key set to {} (or absent) → Conductor's own default.
+  // A host's per-agent object replaces the default one wholesale.
   routing: {
     labelPrefix: '',
     frontendAgent: '',
     delegate: {},
     dispatch: 'cloud',
+    cloudModels: {
+      claude: { model: 'opus-5-1m', effort: 'xhigh' },
+      codex: { model: 'gpt-5.6-sol', effort: 'xhigh' },
+    },
+    // Roster files pin reviewer models with Claude alias names (`sonnet`,
+    // `opus`); a Codex runtime maps an emitted alias through this table for
+    // its `codex exec` children. Unmapped alias → child runs on the session
+    // model (disclosed, not fatal).
+    codexModelAliases: {
+      sonnet: 'gpt-5.6-terra',
+      opus: 'gpt-5.6-sol',
+    },
   },
   // area → path patterns (regex sources; object form `{re, flags}` carries
   // flags). Language-generic on purpose — a host repo replaces these wholesale.

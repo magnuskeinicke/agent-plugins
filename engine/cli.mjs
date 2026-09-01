@@ -187,6 +187,12 @@ function agentModel(id) {
   return m && m[1] !== 'inherit' ? m[1] : '';
 }
 
+function agentEffort(id) {
+  const p = join(PLUGIN_ROOT, 'agents', `${id}.md`);
+  const m = /^effort:\s*(\S+)/m.exec(readFileSync(p, 'utf8'));
+  return m ? m[1] : '';
+}
+
 function reuseFingerprint(addedFiles, provenance) {
   return createHash('sha1')
     .update(JSON.stringify([[...addedFiles].sort(), provenance || []]))
@@ -340,6 +346,7 @@ function cmdPlan(args) {
       id: r.id,
       agentFile: join(PLUGIN_ROOT, 'agents', `${r.id}.md`),
       model: agentModel(r.id),
+      effort: agentEffort(r.id),
       promptFile,
       outputFile,
     };
@@ -484,6 +491,7 @@ function cmdCollect(args) {
       id: 'pr-relevance-validator',
       agentFile: join(PLUGIN_ROOT, 'agents', 'pr-relevance-validator.md'),
       model: agentModel('pr-relevance-validator'),
+      effort: agentEffort('pr-relevance-validator'),
       promptFile,
       outputFile,
     };

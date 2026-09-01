@@ -1,7 +1,8 @@
 ---
 name: data-reviewer
 description: Use this agent to review code for cryptographic misuse, information disclosure, and denial-of-service vulnerabilities. Checks for proper use of cryptographic primitives, prevention of sensitive data leaks, and protection against resource exhaustion.
-model: inherit
+model: sonnet
+effort: high
 color: red
 ---
 

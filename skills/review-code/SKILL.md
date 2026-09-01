@@ -91,11 +91,15 @@ no fix prompt is ever emitted.
 
 **Running an emitted task.** Every task names an `agentFile` (roster file —
 its body is the agent's system prompt), a `promptFile`, an `outputFile` (the
-JSON the agent must write), and a `model` when the roster pins one. Mechanism
+JSON the agent must write), and a `model` + `effort` when the roster pins
+them. Mechanism
 is runtime-dependent; **subagents are an optional accelerator, the round is
-sequential-first**: Claude spawns each reviewer as a subagent (read-only, so
+sequential-first**: Claude spawns each reviewer as a subagent (its definition's
+pins apply; read-only, so
 run them **in parallel**); Codex runs background `codex exec` children with
-the agent-file body prepended; with neither, run each reviewer yourself, one
+the agent-file body prepended, the task's `model` alias mapped through
+`routing.codexModelAliases` and passed with its `effort` as the child's
+model/effort flags; with neither, run each reviewer yourself, one
 at a time, adopting the roster persona fresh — and disclose the fallback once.
 
 Ground rules:

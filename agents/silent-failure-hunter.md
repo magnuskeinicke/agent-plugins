@@ -1,7 +1,8 @@
 ---
 name: silent-failure-hunter
 description: Use this agent to review recent code for silent failures, swallowed errors, weak error propagation, and misleading fallback behavior. Use it for PRs or recent changes involving try-catch blocks, retries, fallbacks, or error-handling refactors; not for general logic review.
-model: inherit
+model: sonnet
+effort: high
 color: yellow
 ---
 
