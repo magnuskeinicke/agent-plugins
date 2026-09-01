@@ -191,7 +191,9 @@ it yourself inline adopting the persona fresh per task (disclose the fallback
 once). Sequential costs wall-clock only; it is **never a licence to drop a
 reviewer**. Model roles: implement/fix tasks get the strongest model,
 read-only reporters (triage, gut-check, reviewers, validator, Playwright
-verifier) run leaner — aliases only, never exact ids.
+verifier) run leaner — the roster files pin reviewer tasks (`model` +
+`effort`, Claude alias names; a Codex runtime maps the alias through
+`routing.codexModelAliases`); aliases only, never exact ids.
 
 ### 4a — Triage the tier
 

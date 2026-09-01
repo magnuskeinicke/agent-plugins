@@ -41,10 +41,12 @@ cross-workspace. This is the map.
 
 With `routing.dispatch` = `cloud` (the default), `/feature-goal` creates the
 workspace-per-slice layout above **remotely**: the Conductor MCP's
-`create_workspace` makes one isolated cloud workspace + first session per
-slice, first prompt `/work-slice <slice-id>` — so slices keep running while
+`create_workspace` makes one isolated cloud workspace per slice, a
+**bootstrap session** installs the plugin in the fresh sandbox, then a
+second session runs `/work-slice <slice-id>` — so slices keep running while
 the user is away. The durable dispatch marker is a `## Cloud dispatch`
-comment on the slice ticket (workspace deep link + session id); it is the
+comment on the slice ticket (workspace deep link, both session ids,
+bootstrap status); it is the
 cross-machine double-dispatch guard, and a slice carrying it is cloud-owned —
 resume or nudge that session, never implement it elsewhere. In cloud mode
 the babysit home is the **skeleton slice's cloud workspace**, and the
@@ -54,6 +56,32 @@ hold the stack's branches.
 The standalone commands (`/work-issue`, `/solve-ready-tickets`,
 `/daily-ticket-manager`) are venue-neutral by design — the user starts them
 locally or in a cloud workspace, and no skill relocates them.
+
+## Getting the plugin into a workspace
+
+- **Local (Mac) workspace** — nothing to do. Plugins are user-scoped
+  (`~/.claude`, `~/.codex`), shared by every worktree on the machine; install
+  once per machine (README), not per workspace.
+- **Cloud workspace via `/feature-goal`** — automatic: its dispatch runs the
+  bootstrap session before the work session.
+- **Cloud workspace created by hand** (Mac app, iOS, MCP outside
+  feature-goal) — the sandbox is fresh and has no plugin. Paste this as the
+  **first message**, then start a **new session** (skills load only at
+  session start; the install never appears mid-session):
+
+  > Bootstrap this workspace: install the agent plugin for your own CLI,
+  > verify, and reply with exactly `BOOTSTRAP OK` or
+  > `BOOTSTRAP FAILED: <reason>` — change nothing else in the repo.
+  > Claude Code: `claude plugin marketplace add magnuskeinicke/agent-plugins
+  > && claude plugin install magnus@magnus-skills`, verify with
+  > `claude plugin list`. Codex: `codex plugin marketplace add
+  > https://github.com/magnuskeinicke/agent-plugins.git &&
+  > codex plugin add magnus@magnus-skills`.
+
+  Never put the install in a host repo's shared `.conductor/settings.toml`
+  setup script — it would run (and fail, private repo) for every colleague's
+  workspace. The plugin stays personal: bootstrap message or feature-goal's
+  automatic equivalent, nothing repo-shared.
 
 ## Which agent takes a slice
 

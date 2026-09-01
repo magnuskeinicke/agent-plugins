@@ -1,7 +1,8 @@
 ---
 name: auth-reviewer
 description: Use this agent to review code for authentication, authorization, CSRF, and session management vulnerabilities. Checks that protected operations have proper auth checks, access control is enforced, and sessions are securely managed.
-model: inherit
+model: sonnet
+effort: high
 color: red
 ---
 

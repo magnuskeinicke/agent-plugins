@@ -1,7 +1,8 @@
 ---
 name: type-design-analyzer
 description: Use this agent to review new or changed types for encapsulation, invariant expression, usefulness, and enforcement. Best for PRs that add data models, domain types, or type-heavy refactors; not for general code review when type design is not the main concern.
-model: inherit
+model: sonnet
+effort: high
 color: pink
 ---
 

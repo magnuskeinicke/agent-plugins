@@ -211,8 +211,8 @@ node "$engine" report --slice <id>
 
 **Running an emitted task.** Every task names an `agentFile` (the roster file — its body is the agent's system prompt), a `promptFile` (the task), an `outputFile` (the JSON the agent must write — path and schema are in the prompt), and a `model` when the roster file pins one. Mechanism is runtime-dependent; **subagents are an optional accelerator, the loop is sequential-first**:
 
-- **Claude:** spawn each reviewer as a subagent from its agent definition; reviewers are read-only, so run a round's reviewers **in parallel**.
-- **Codex:** background `codex exec` children, the agent-file body prepended to the task prompt.
+- **Claude:** spawn each reviewer as a subagent from its agent definition (the definition's `model`/`effort` pins apply); reviewers are read-only, so run a round's reviewers **in parallel**.
+- **Codex:** background `codex exec` children, the agent-file body prepended to the task prompt; map the task's `model` alias through `routing.codexModelAliases` and pass it with the task's `effort` as the child's model/effort flags (unmapped alias → session model, disclose once).
 - **Neither:** run each reviewer yourself, one at a time, adopting the roster file's persona fresh per reviewer — and disclose the fallback once. Sequential costs wall-clock only; it is **never a licence to drop a reviewer**.
 
 Ground rules, regardless of mechanism:

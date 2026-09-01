@@ -49,6 +49,7 @@ once, in your first message.
 | `<STACK>` | `pr.stackTool` | plain branches; every PR targets `<BASE>` |
 | `<AGENT:>` | `routing.labelPrefix` (with `routing.delegate`) | no agent routing — this runtime works every slice |
 | `<DISPATCH>` | `routing.dispatch` (`cloud` \| `local`) | `cloud` — dispatch slices to Conductor cloud workspaces |
+| `<CLOUD-MODEL>` | `routing.cloudModels` — the `{model, effort}` for the workspace's agent | claude → `opus-5-1m`/`xhigh`, codex → `gpt-5.6-sol`/`xhigh`; agent key `{}` → omit both params, Conductor's default |
 
 Also read the prose docs the config points at when they exist:
 `tracker.docPath`, `labels.docPath`, and `docs/agents/README.md`.
@@ -179,6 +180,9 @@ One invocation does three things, then ends at the usual boundaries:
      (`<NN>-<issue-id>`). Agent: the slice's `<AGENT:>` label when present —
      in cloud mode the routing label picks the workspace's agent and
      `routing.delegate` is never consulted — else this runtime's own agent.
+     Pass the chosen agent's `<CLOUD-MODEL>` as `model` + `effort` (omit both
+     when its entry is `{}`); the same pair goes on **every** later
+     `create_session` in the workspace.
    - **Bootstrap the sandbox (session 1).** A cloud sandbox is fresh: this
      plugin is NOT installed there, and skills load only at session start —
      so the first session installs, and a second session works. The first
@@ -196,7 +200,8 @@ One invocation does three things, then ends at the usual boundaries:
      Wait for the session to go idle — bootstrap is the **one bounded
      in-dispatch wait** (a few `get_session_status` checks over ~3 minutes;
      an install is seconds, not a slice), then read its last message:
-     - `BOOTSTRAP OK` → **`create_session`** in the same workspace, prompt
+     - `BOOTSTRAP OK` → **`create_session`** in the same workspace
+       (same agent, `<CLOUD-MODEL>`'s `model` + `effort`), prompt
        exactly `/work-slice <slice-id>`. The fresh session loads the
        just-installed plugin, and work-slice runs **verbatim** there: a
        cloud workspace IS the virgin per-slice Conductor workspace it
@@ -216,7 +221,8 @@ One invocation does three things, then ends at the usual boundaries:
      dispatched again and never implemented inline.
 2. **Check the in-flight slices.** For each dispatched slice with no PR yet:
    marker still `bootstrap: pending|failed` → check the bootstrap session
-   first: it now reads `BOOTSTRAP OK` → `create_session` with
+   first: it now reads `BOOTSTRAP OK` → `create_session` (same agent,
+   `<CLOUD-MODEL>`'s `model` + `effort`) with
    `/work-slice <slice-id>` and update the marker; `BOOTSTRAP FAILED`, or
    idle without OK for a second invocation running → flag it needs-human
    with the deep link and the failure reason. Otherwise

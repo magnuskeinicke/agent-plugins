@@ -1,7 +1,8 @@
 ---
 name: removal-planner
 description: "Use this agent to identify dead code, unused dependencies, deprecated paths, and leftover migration artifacts that can be removed safely. It produces structured removal plans with verification steps; not for broad refactors where the code still serves an active purpose."
-model: inherit
+model: sonnet
+effort: high
 color: red
 ---
 
