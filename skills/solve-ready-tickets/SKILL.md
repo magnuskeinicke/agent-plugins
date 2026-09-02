@@ -46,6 +46,7 @@ which key is missing and end the run.
 | `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<START-SKILL>` | `skills.startWork` | create the worktree with plain `git worktree add` off `<BASE>` |
 | `<PR-SKILL>` | `skills.createPr` | `gh pr create --base <BASE> --draft`, title per `pr.titleRule` |
+| `<MEDIA-BRANCH>` | `pr.mediaBranch` | `pr-media` — created as an orphan branch on first publish |
 | `<E2E-DIR>` | `e2eDir` | the repo's e2e project, if any |
 
 Also read the prose rules at `tracker.docPath` (workspace ids, how to fetch /
@@ -308,7 +309,9 @@ the CLI's JSON), with these lean mappings:
   (comment), leave it `<IN-PROGRESS>` flagged for a human in the report, and
   move to the next ticket. Never open a PR on red tests; implementers prove
   green via `testEvidence` (commands + summary lines run in-session), never
-  assert it.
+  assert it — every gate run also lands as a row in
+  `.context/<issue-id>/evidence/verification.jsonl`, the source of the PR's
+  `## Verification` table (`../work-slice/references/pr-evidence.md`).
 - A **gut-check `hard-stop`** (out-of-scope work detected) is handled like a
   red gate: no PR, note it on the ticket, flag for a human, next ticket.
 
@@ -320,6 +323,11 @@ pass, one re-verify. `devServerCommand` empty → skip entirely and say so.
 Capture a screenshot per acceptance criterion — PASS and FAIL alike — plus the
 run video; "couldn't verify" is a FAIL. Criteria still failing after the cap
 ride into the draft PR and the QA table as FAIL — evidence of what broke.
+In the same run capture the PR scenes (`<scene>-after@2x.png` per changed
+surface, `<scene>@2x.png` for a new one, a flow GIF) and write `media.json`
+per `../work-slice/references/pr-evidence.md`; before shots come from
+work-slice 3.1's pre-capture, taken before the implement pass — missing →
+`Before not captured — <reason>`, never manufactured by switching branches.
 Clean up before leaving: scrub the throwaway spec; only gitignored
 screenshots/video stay. `trivial` tickets skip this entirely.
 
@@ -354,19 +362,33 @@ Only when the solve shipped a real change (not declined, tests green):
    let it. It opens a *ready* PR and does not mark it draft.
 2. **Flip it to draft** immediately so it can't be merged without me:
    `gh pr ready <number> --undo`. The draft state IS the review gate.
-3. **Upload QA evidence first (when the Playwright check ran).** Upload the
-   proof files (per-AC screenshots + video) to the ticket with `<TRACKER>`'s
-   attachment flow (Linear: `prepare_attachment_upload` → PUT the file to the
-   returned URL → `create_attachment_from_upload`), so QA can verify each criterion from
-   the ticket without pulling the branch. Failed criteria are uploaded too —
-   evidence of what broke, not just what works.
-4. **Comment on the ticket** with the solve summary — use this block:
+   Then publish `.context/<issue-id>/evidence/media/` to `<MEDIA-BRANCH>` under
+   `pr/<n>/` and write `## Verification` + `## Visual verification` into the
+   body per `../work-slice/references/pr-evidence.md` — handed to `<PR-SKILL>`
+   where it has a slot, else one `gh pr edit --body-file` insert, before any
+   bot is requested. Rows and captures from this run only; a `trivial` ticket
+   that skipped 4c gets the one-line visual form.
+3. **`## QA handoff` on the ticket** — the ticket's one suite-authored
+   comment, per `../work-slice/references/qa-handoff.md`. A standalone ticket
+   is QA-visible, so: per acceptance criterion (the ticket's own, verbatim, or
+   user-facing ones distilled from the description — never a separate
+   `## Acceptance criteria` comment) the steps in user terms, the expected
+   result, and the evidence — one video *or* screenshot per logical group of
+   criteria (group criteria one walk-through covers; never both for the same
+   thing; aim 1–3 artifacts), uploaded with `<TRACKER>`'s attachment flow (Linear:
+   `prepare_attachment_upload` → PUT the file → `create_attachment_from_upload`),
+   never a GitHub raw URL. Failed criteria get their evidence and a **Not
+   working yet** line in user terms. One `Engineering reference:` PR link at
+   the bottom. Idempotent. When 4c didn't run (trivial tier, no dev server), a
+   one-paragraph handoff says there is nothing for QA to see and why.
+4. **Comment on the PR** with the solve summary — dev material never goes on
+   the ticket. `gh pr comment <n> --body` with this block:
 
    ```md
    ## Autonomous solve
 
    Tier: trivial | standard
-   PR: <draft PR url> (draft — awaiting your review)
+   Ticket: <ticket url>
 
    Shipped:
    <1–2 lines: what was built.>
@@ -379,10 +401,8 @@ Only when the solve shipped a real change (not declined, tests green):
    | --- | --- |
    | <path> | <mirroredFrom exemplar, or [deviation: reason]> |
 
-   QA evidence:
-   | AC | Result | Proof |
-   | --- | --- | --- |
-   | <criterion> | PASS/FAIL | <uploaded screenshot link> |
+   Acceptance criteria: <n> verified / <m> failed — QA handoff on the ticket
+   (visual evidence); developer evidence in the PR body's `## Verification`.
 
    Consolidation follow-ups (not fixed in this PR — candidates for their own tickets):
    - <consolidation title — targetLib — detail>
@@ -393,12 +413,12 @@ Only when the solve shipped a real change (not declined, tests green):
    _Solved by solve-ready-tickets. Not merged, not marked done — review the draft PR._
    ```
 
-   Omit the QA evidence table when the Playwright check didn't run, the
+   Omit the acceptance-criteria line when the Playwright check didn't run, the
    provenance table when no files were added, and the consolidation section
    when the reuse audit returned none. Consolidations are surfaced for me to
    decide — this skill does NOT file follow-up tickets (unlike `/work-slice`);
-   it never creates tickets. Make it idempotent: if a comment already starts
-   with `## Autonomous solve`, update it rather than adding a second.
+   it never creates tickets. Make it idempotent: if a PR comment already starts
+   with `## Autonomous solve`, edit it rather than adding a second.
 5. **Stalled verdict?** Post the outstanding findings as a
    `## Outstanding review findings` PR comment (the verdict line verbatim,
    then the open/deferred/disputed `CR-NNN` entries) so they surface on the
@@ -451,7 +471,7 @@ never running compliance.
 
 **This skill drains the agent-ready queue: claims stamped tickets, solves each in an isolated worktree via the engine CLI, and stops at a draft PR.**
 
-- **DOES**: resume in-flight tickets from durable markers, claim (clear `<AGENT-READY>` + move to `<IN-PROGRESS>`), branch one worktree per ticket off `<BASE>`, drive the engine-CLI loop (`--max-rounds 2`), run the lean Playwright check, open a **draft** PR + ticket comment, report the run
+- **DOES**: resume in-flight tickets from durable markers, claim (clear `<AGENT-READY>` + move to `<IN-PROGRESS>`), branch one worktree per ticket off `<BASE>`, drive the engine-CLI loop (`--max-rounds 2`), run the lean Playwright check, open a **draft** PR (with `## Verification` + `## Visual verification` in its body) + ticket comment, report the run
 - **DOES NOT**: merge, mark PRs ready, approve, mark issues done, run compliance, create or close tickets, file consolidation follow-up tickets (surfaced for the human — unlike `/work-slice`), make routing calls on escalations (`daily-ticket-manager` re-classifies), or write/review code itself (the engine CLI's emitted tasks own that)
 
 ## Red Flags — STOP
@@ -471,7 +491,8 @@ Before reporting done:
 
 - [ ] Every picked-up ticket was claimed both ways: `<AGENT-READY>` cleared with all other labels intact, and status moved to `<IN-PROGRESS>`.
 - [ ] Every shipped PR is **draft** (`gh pr ready <n> --undo` ran), tests proven green via `testEvidence`, and the worktree is clean of untracked scaffolding.
-- [ ] Every touched ticket carries its terminal comment (`## Autonomous solve` or `## Autonomous solve — declined`), updated idempotently, with QA evidence uploaded when the Playwright check ran.
+- [ ] Every shipped PR body carries `## Verification` (rows from `evidence/verification.jsonl` only) and `## Visual verification` (scenes on `<MEDIA-BRANCH>` by sha, or the one-line form) — one body write, before any bot request.
+- [ ] Every shipped ticket carries exactly one suite-authored comment — `## QA handoff` (user-terms criteria, one visual artifact per criteria group, no dev material) — and its PR carries the `## Autonomous solve` comment; declined tickets carry `## Autonomous solve — declined`. All idempotent.
 - [ ] Declined tickets: `<RISK:>*` cleared, no routing label added, status back in `<READY>`, worktree and branch removed.
 - [ ] The Step 6 report accounts for every queue ticket — drafted, declined, skipped-for-routing, or flagged — plus every resumed in-flight one.
 - [ ] Nothing in the run merged, marked ready, marked done, or initiated compliance.

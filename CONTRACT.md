@@ -82,8 +82,41 @@ so.
 | `pr.titleRule` | string | `''` | title format, e.g. `<type>[(<scope>)]: SER-XX <subject>` |
 | `pr.scopes` | string[] | `[]` | allowed scopes in that rule |
 | `pr.stackTool` | string | `''` → plain branches | stacking CLI (`gh-stack`) |
-| `pr.botReviewer` | string | `''` → skip | PR review bot; gets exactly **one** review round per PR |
-| `pr.cliReviewer` | string | `''` → skip | review CLI; joins only the **first** reviewer round of a loop |
+| `pr.botReviewer` | string | `''` → phase skipped | the **review-request** bot (e.g. `Copilot`); `magnus:babysit-stack` requests it and runs request → wait → fix → re-request rounds until it is satisfied (cap 5 rounds per PR) |
+| `pr.commentReviewer` | `{login, command}` | both `''` → phase skipped | the **comment-summoned** bot, run after `botReviewer` is satisfied — e.g. `{"login": "coderabbitai[bot]", "command": "@coderabbitai review"}`; babysit posts `command` as a PR comment, waits for a review by `login`, fixes, re-summons, until satisfied (same cap) |
+| `pr.mediaBranch` | string | `'pr-media'` | orphan branch the suite commits PR evidence media to (`pr/<n>/…`), referenced from PR bodies by commit sha; created on first publish, never merged, carries no workflows |
+
+Bot reviews happen **on GitHub only**. There is no review-CLI lane in the review
+loop; a bot's findings reach the suite as PR review threads, which
+`magnus:babysit-stack` addresses with fresh fix agents.
+
+### PR evidence
+
+Every PR the suite opens carries two sections **in its body**, after the PR
+skill's own summary and before any trailer — the spec is
+`skills/work-slice/references/pr-evidence.md`:
+
+- **`## Verification`** — a `Check | Result` table of every terminal check run
+  against the head (tests, builds, typecheck, lint, manual runs), commands
+  verbatim, results from the actual output; a second table lists checks left to
+  CI. Rows are appended to `.context/<run-id>/evidence/verification.jsonl` as
+  the gates run — a row exists only for a command that ran.
+- **`## Visual verification`** — one sentence on how the captures were made
+  (stack, Playwright, viewport, seeded user, fake data), then one scene per
+  changed surface: before/after pair for a changed surface, single image for a
+  new one, GIF for a flow — each captioned with surface, route and viewport
+  width. Before shots are taken at the base before the implement pass; after
+  shots in the final Playwright round. Media is committed to `pr.mediaBranch`
+  under `pr/<n>/` and referenced by commit sha. Internal-only changes and
+  uncapturable surfaces get a one-line section saying so — never an omission,
+  never a substitute image presented as the real surface.
+
+The host's `skills.createPr` receives the rendered sections as its
+verification content; when it has no slot for them the suite makes exactly one
+`gh pr edit --body-file` insert before any bot is requested. `magnus:iterate-pr`
+and `magnus:babysit-stack` refresh the `## Verification` block for the head they
+push. Everything else the suite reports (provenance, review ledger,
+assumptions, consolidation links) stays a PR comment.
 
 ### `skills`
 
@@ -126,7 +159,7 @@ during the Playwright verify rounds on UI slices. The contract:
 | `routing.labelPrefix` | string | `''` → routing disabled | tracker-label prefix for reserving a slice to an agent (`agent:` → `agent:claude`) |
 | `routing.frontendAgent` | string | `''` → no stamping | agent name `magnus:to-issues` stamps on frontend-dominant slices (paths judged by `areaPaths.frontend`) |
 | `routing.delegate` | agent → command template | `{}` → report/skip, never delegate | headless invocation per agent, e.g. `{"claude": "claude -p \"<prompt>\" --permission-mode acceptEdits", "codex": "codex exec \"<prompt>\""}` — local-mode machinery |
-| `routing.dispatch` | string | `'cloud'` | where `magnus:feature-goal` runs the slice loop: `cloud` → one Conductor cloud workspace per slice via the Conductor MCP (falls back to `local` when the MCP is unreachable); `local` → the sequential single-worktree loop |
+| `routing.dispatch` | string | `'cloud'` | where `magnus:feature-goal` runs everything after planning (slice loop + babysit): `cloud` → one Conductor cloud workspace per slice via the Conductor MCP — a **fresh agent per PR** — and babysit in the skeleton's workspace (falls back to `local` when the MCP is unreachable); `local` (opt-in) → the sequential single-worktree loop, one fresh subagent per slice |
 | `routing.cloudModels` | agent → `{model, effort}` | `{"claude": {"model": "opus-5-1m", "effort": "xhigh"}, "codex": {"model": "gpt-5.6-sol", "effort": "xhigh"}}` | Conductor model + effort `magnus:feature-goal` passes on every cloud session it creates (`create_workspace` and `create_session`), keyed by the workspace's agent; an agent key set to `{}` → Conductor's own default for that agent. A host's per-agent object replaces the default one wholesale. Implementer-side only — reviewer subagents use the roster files' own pins |
 | `routing.codexModelAliases` | alias → codex model | `{"sonnet": "gpt-5.6-terra", "opus": "gpt-5.6-sol"}` | roster files pin reviewer models with Claude alias names; a Codex runtime maps each task's emitted alias through this table for its `codex exec` children (the task's `effort` passes through unchanged). Unmapped alias → the child runs on the session model, disclosed once |
 
@@ -140,17 +173,59 @@ invocation naming which agent the slice waits on. Routing is **slice-granular
 only** — never per-step or per-file. The suite's durable markers (checkpoint
 files, ledger, PR state) are what make a slice resumable by any agent.
 
-`routing.dispatch` decides the venue, not the agent: with the default
-`cloud`, `magnus:feature-goal` creates one Conductor **cloud** workspace per
-slice (Conductor MCP `create_workspace`) and the `<AGENT:>` label picks that
-workspace's agent — `routing.delegate` is only consulted in `local` mode.
+`routing.dispatch` decides the venue, not the agent: by default (`cloud`)
+`magnus:feature-goal` leaves the machine once planning is done — one Conductor
+**cloud** workspace per slice (Conductor MCP `create_workspace`), the
+`<AGENT:>` label picking that workspace's agent, and babysit running in the
+skeleton slice's workspace. Opting into `local` runs the sequential
+single-worktree loop with a fresh subagent per slice and consults
+`routing.delegate` for slices reserved for another agent (no delegate → it
+works the slice itself and discloses that on the PR — the pipeline never waits
+on a human after the grill).
 Each cloud workspace self-bootstraps: its first session installs this plugin
 in the fresh sandbox, then a second session runs `/work-slice` (skills load
 only at session start). The host repo's shared Conductor settings are never
 touched, so the plugin stays personal to the dispatching user.
-Only `feature-goal` auto-dispatches; the standalone commands (`work-issue`,
+Only `feature-goal` dispatches to the cloud; the standalone commands (`work-issue`,
 `solve-ready-tickets`, `daily-ticket-manager`) are venue-neutral and run
 wherever the user starts them.
+
+### Tracker audiences
+
+The tracker is documentation for the user + AI **and** the handoff surface for
+QA, who has no code access — never a dev log
+(`skills/work-slice/references/qa-handoff.md`):
+
+- **Parent / PRD ticket** — the `# PRD` comment (with its implementation
+  deltas) and, once the stack is GOAL MET, exactly one **`## QA handoff`**
+  comment: per acceptance criterion (grouped where one walk-through covers
+  several) the steps in user terms, the expected result, and one visual
+  artifact per group uploaded to the tracker. Nothing else
+  suite-authored.
+- **Slice sub-issues** — internal to the user + AI; the machinery writes what
+  it needs there (skeleton map, dispatch markers, assumptions, dev-form QA
+  evidence).
+- **Standalone tickets** (`magnus:work-issue`, `magnus:solve-ready-tickets`) —
+  QA-visible: one `## QA handoff` comment; assumptions, leanness concerns,
+  verdicts, provenance, verification and consolidation lists go to the PR.
+
+Evidence on the tracker is **visual only** (video for behaviour, a still for
+appearance, never both of the same thing, as few as prove it — embedded
+via the tracker's attachment flow — never GitHub raw URLs). Test runs and gate
+output are developer evidence and live in the PR body's `## Verification`.
+
+### Human gates
+
+The pipeline has exactly **one** human gate: the grilling session at the top
+of `magnus:feature-goal`. `magnus:to-prd` and `magnus:to-issues` run in
+*pipeline mode* under it (no seam confirmation, no breakdown quiz, no `<HITL>`
+slices — undecided points become `## Assumptions` on the PRD / slice / PR).
+`magnus:work-slice` and `magnus:work-issue` have no human gates at all: a
+`labels.needsHuman` label is a decision to make and record, not a stop. Every
+PR-producing skill ends by running `magnus:babysit-stack` to a terminal
+verdict; the only things that end a run early are safety stops (dirty
+worktree, no diff, gut-check hard-stop) and `needs-human` escalations —
+judgement-call review threads, a stuck bot, an exhausted fix cap.
 
 ### Review targeting
 
@@ -201,10 +276,9 @@ finding(s)` verdict; magnus:review-code), `--max-rounds <1..5>` (a
 user-supplied cap under the hard cap; magnus:iterate-pr), and
 `--inspect '<cmd>'` (the diff command every prompt cites when the target is
 not a committed branch diff — `git diff HEAD` for uncommitted work,
-`gh pr diff <n>` for a PR reviewed without a checkout). `plan` accepts
-`--coderabbit-cmd '<cmd>'` / `--no-coderabbit` to match the CLI-reviewer
-invocation to the target, and `collect` lists reviewers whose output file is
-`missing` (re-run once, re-collect, or state degraded coverage).
+`gh pr diff <n>` for a PR reviewed without a checkout). `collect` lists
+reviewers whose output file is `missing` (re-run once, re-collect, or state
+degraded coverage).
 
 Run state lives in the host repo's gitignored `.context/<slice-id>/`:
 `ledger.json` (the ledger + loop state), `contract.md` (the run contract),
@@ -220,3 +294,15 @@ body as the system prompt, and inline-sequential is the disclosed fallback.
 Either way every reviewer writes its findings JSON to the `outputFile` the
 manifest names, and `collect` ingests them identically. Losing parallelism is
 never a licence to drop a reviewer.
+
+**Writers are one fresh agent per pass.** The same ladder carries every
+code-editing pass — the implement pass, each gate-fix, each round's fix, the
+closeout adjudicator, and a skill's own fix passes (Playwright rounds,
+`magnus:babysit-stack`'s CI and thread fixes). The CLI holds no agent handles:
+it emits a prompt file, the host spawns something to run it, and the result
+comes back as JSON. Hosts must keep it that way — never continue, re-prompt or
+resume a spent pass's agent, so round N never inherits round N-1's reasoning.
+Handoff between passes is files only (`contract.md`, the emitted prompt, prior
+result JSONs). With no spawn mechanism at all, inline is the disclosed
+fallback: each pass re-reads its prompt as a fresh persona, and the degraded
+isolation is stated once.

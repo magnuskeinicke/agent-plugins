@@ -6,13 +6,13 @@ argument-hint: "[PR number | issue id | nothing = current branch's PR]"
 
 # Iterate PR
 
-Take an **existing PR** and run the same bounded **review ⇄ fix loop** `/work-slice` uses — the plugin's **engine CLI** drives gut-check, the roster reviewers, the relevance validator, the finding ledger (stable `CR-NNN` ids), test-first fix passes, and the stop conditions — without any of the pipeline around it. No PRD, no slice claim, no Playwright. The loop converges (or stalls), the fixes are pushed to the PR branch, and a `/babysit-stack` finish stage drives the PR the rest of the way to "in order" (CI green, threads resolved) — one bounded pass at a time; **run the skill again to resume**.
+Take an **existing PR** and run the same bounded **review ⇄ fix loop** `/work-slice` uses — the plugin's **engine CLI** drives gut-check, the roster reviewers, the relevance validator, the finding ledger (stable `CR-NNN` ids), test-first fix passes, and the stop conditions — without any of the pipeline around it. No PRD, no slice claim, no Playwright. The loop converges (or stalls), the fixes are pushed to the PR branch, and a `/babysit-stack` finish stage babysits the PR the rest of the way to "in order" — CI green, the GitHub review bots satisfied in order, threads resolved — waiting for each bot round itself. **Run the skill again to resume** after a Blocked stop.
 
 Division of labour with the siblings:
 
 - **`/review-code`** — one read-only round, report only. Use it when nothing should be changed.
 - **`/iterate-pr`** (this) — review ⇄ fix rounds with **our** reviewers on a PR, then babysit that PR to done.
-- **`/babysit-stack`** — CI, the review bot, and **existing review threads**. This skill's own loop never touches threads — it delegates all of that to babysit passes in Step 5.
+- **`/babysit-stack`** — CI, the GitHub review bots (`<BOT>` then `<COMMENT-BOT>`), and **existing review threads**. This skill's own loop never touches threads — it delegates all of that to babysit in Step 5.
 
 ## Repo contract — resolve this first
 
@@ -25,9 +25,8 @@ defaults apply and you say so once.
 | --- | --- | --- |
 | `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123`) |
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
-| `<BOT>` | `pr.botReviewer` | no bot review round to request or wait on |
-| `<CLI-REVIEWER>` | `pr.cliReviewer` | that reviewer lane is skipped |
-| `<CONVENTIONS>` | `conventionsFile` | `CLAUDE.md` |
+| `<BOT>` | `pr.botReviewer` | babysit skips the review-request bot phase |
+| `<COMMENT-BOT>` | `pr.commentReviewer` | babysit skips the comment-summoned bot phase |
 | `<STACK>` | `pr.stackTool` | plain branches; nothing to restack |
 
 Which reviewers exist and when they trigger: `../work-slice/references/reviewer-roster.md`
@@ -75,9 +74,9 @@ Also capture:
 
 ## Resume — run again to continue
 
-There is no stop-hook: **persistence is re-invocation.** One invocation advances as far as live state allows, then ends with a report naming where the PR stands, what (if anything) it is waiting on, and that `/iterate-pr <n>` resumes it. For unattended pacing, wrap the re-invocation in whatever cadence the runtime offers (`/loop 15m "/iterate-pr <n>"`, a scheduler, or re-running by hand).
+There is no stop-hook: **persistence is re-invocation.** One invocation runs to GOAL MET or to a Blocked boundary (only `needs-human` items left), then ends with a report naming where the PR stands and that `/iterate-pr <n>` resumes it. Pending CI and bot rounds are waited on by babysit, never a reason to end.
 
-**Re-entry is stage detection from durable markers, not memory:** `node <ENGINE> status --slice pr-<n>` names the loop's phase. Phase `done` with fixes pushed (branch not ahead of `origin/<headRefName>`) → skip to Step 5's babysit pass; phase `done` with unpushed commits → Step 4; any other phase → resume the loop at the pending step. Never re-`init` a finished run — one engine run per PR, ever; everything after `done` is babysit passes.
+**Re-entry is stage detection from durable markers, not memory:** `node <ENGINE> status --slice pr-<n>` names the loop's phase. Phase `done` with fixes pushed (branch not ahead of `origin/<headRefName>`) → skip to Step 5's babysit; phase `done` with unpushed commits → Step 4; any other phase → resume the loop at the pending step. Never re-`init` a finished run — one engine run per PR, ever; everything after `done` is babysit.
 
 ## Step 3 — Run the loop (engine CLI)
 
@@ -107,10 +106,9 @@ node "$engine" init --slice pr-<n> --base origin/<baseRefName> \
 ```bash
 node "$engine" plan --slice pr-<n> --changed-files <csv> --added-files <csv> --deleted-files <csv> \
   --insertions <n> --user-facing <bool> [--declared-areas <csv>] --head <head> \
-  --commit-rule '<commitPrefix> …; never push' \
-  [--coderabbit-cmd 'coderabbit review --agent --committed --base-commit "$(git merge-base origin/<base> HEAD)" -c <CONVENTIONS>']
+  --commit-rule '<commitPrefix> …; never push'
 # → gate-fix (red CI: run ONE fix implementer with the emitted prompt, then apply-fix), or
-# → the round's task manifest: prePass (round 1), coderabbit (round 1, when configured), reviewers[]
+# → the round's task manifest: prePass (round 1), reviewers[]
 node "$engine" collect --slice pr-<n>
 # → validator task when findings survived suppression; run it, then
 node "$engine" decide --slice pr-<n> --verdicts <verdicts.json> --commit-rule '<commitPrefix> …; never push'
@@ -124,12 +122,14 @@ node "$engine" report --slice pr-<n>
 
 **Running an emitted task.** Every task names an `agentFile` (the roster file — its body is the agent's system prompt), a `promptFile` (the task), an `outputFile` (the JSON the agent must write), and a `model` + `effort` when the roster file pins them. Mechanism is runtime-dependent; **subagents are an optional accelerator, the loop is sequential-first**: Claude spawns each reviewer as a subagent from its agent definition (the definition's pins apply; read-only, so run a round's reviewers **in parallel**); Codex runs background `codex exec` children with the agent-file body prepended to the task prompt, the task's `model` alias mapped through `routing.codexModelAliases` and passed with its `effort` as the child's model/effort flags; with neither, run each reviewer yourself, one at a time, adopting the roster persona fresh per reviewer — and disclose the fallback once. Sequential costs wall-clock only; it is **never a licence to drop a reviewer**.
 
+**Writers spawn the same way — one fresh agent per pass** (each gate-fix, each round's fix, the adjudicator): Claude a subagent per pass, Codex a `codex exec` child per pass, neither → inline as a fresh persona, disclosed once. Never continue, re-prompt, or resume a previous pass's agent — no `SendMessage`, no "same subagent, round 2"; state travels as files (the emitted `promptFile`, the prior result JSONs), never as a live context.
+
 Ground rules, regardless of mechanism:
 
 - **Gut-check runs first** (round 1). If its JSON contains any `"disposition": "block"` observation — work outside the PR's stated scope — skip the reviewers and run `collect` immediately: it hard-stops for the human before any reviewer spend.
 - **Every emitted reviewer must report before `collect` settles.** `collect` lists `missing` and `invalid` reports: re-run each dead reviewer once, then run `collect` again; still dead → proceed, but state the degraded coverage explicitly (it rides into the Step 4 report as such) — zero findings only counts when every reviewer actually reported.
-- **Reviewers are read-only** — only fix agents edit code. Fix and adjudicator agents are always **fresh**.
-- **Model roles:** fix passes and the adjudicator get the strongest model; reporters (reviewers, gut-check, CodeRabbit wrapper, validator) run leaner. Aliases only, never exact model ids; honor a task's `model` field when present.
+- **Reviewers are read-only** — only fix agents edit code. Every writer pass is a **freshly spawned agent**: each gate-fix, each round's fix, and the adjudicator (never the fix implementer's context).
+- **Model roles:** fix passes and the adjudicator get the strongest model; reporters (reviewers, gut-check, validator) run leaner. Aliases only, never exact model ids; honor a task's `model` field when present.
 - `--head` on the **first** `plan` only; `apply-fix` records each fix head itself. After each `apply-fix`, recompute the next `plan`'s file flags from the **fix range** (`<prevHead>..<newHead>`).
 - Fix commits stay local — the commit rule forbids pushing; Step 4 pushes once.
 - Never hand-edit `.context/pr-<n>/ledger.json` or a findings file — findings enter through reviewer output files, decisions exit through the CLI.
@@ -140,7 +140,7 @@ The stop conditions live in the CLI (convergence, two-round stall, per-fingerpri
 
 If the loop landed fix commits (`git rev-list --count origin/<headRefName>..HEAD` > 0):
 
-1. `git push` the branch (plain push — commits were appended, no history rewrite).
+1. `git push` the branch (plain push — commits were appended, no history rewrite) and, in the same moment, refresh the body's `## Verification` block for the new head from the gate runs the fix passes reported (`testEvidence` → rows in `.context/pr-<n>/evidence/verification.jsonl`; mechanics in `../work-slice/references/pr-evidence.md`): replace the text between the `magnus:verification` markers, add the block once if the PR predates it, never a second copy, never a row for a command not run. Leave `## Visual verification` alone unless a fix changed a captured surface — then recapture or mark the scene stale; never present an old image as current.
 2. **Stack awareness:** if other open PRs base on this branch (`gh pr list --state open --json number,baseRefName` filtered on `headRefName`), tell the user the upstack branches need restacking — the mechanics live in `babysit-stack` ("Branch switching & restacking"); don't restack other worktrees' branches unasked.
 3. If the loop **stalled** (or dead reviewers blocked convergence), post the leftovers on the PR: `gh pr comment <n> --body` with the verdict line verbatim, then a `## Review ledger` section from `report`'s `report` text (open/deferred/disputed entries with their `CR-NNN` ids, dispute evidence, and adjudication rulings), plus advisory notes worth a human glance.
 
@@ -154,27 +154,23 @@ Then print, from `report`'s output plus the findings/fix files:
 
 If round 1 was already clean, say so and push nothing.
 
-## Step 5 — Drive the PR to "in order" (babysit passes)
+## Step 5 — Babysit the PR to "in order"
 
-The review loop only proves **our** reviewers are satisfied. "Everything in order" additionally means CI green and every review thread resolved — that machinery already exists, so delegate: run **`/babysit-stack <PR number>`** (it accepts explicit PR numbers; pass the whole stack's numbers when this PR has stacked siblings that need restacking after the push). Each pass ends with a `VERDICT: GOAL MET | NOT MET` block — handle it exactly like `/feature-goal`'s BABYSIT stage:
+The review loop only proves **our** reviewers are satisfied. "Everything in order" additionally means CI green, the GitHub review bots satisfied, and every review thread resolved — that machinery already exists, so delegate: run **`/babysit-stack <PR number>`** (it accepts explicit PR numbers; pass the whole stack's numbers when this PR has stacked siblings that need restacking after the push). It is a babysitting mode: CI green first, then `<BOT>` rounds (request → wait → fix → re-request) until satisfied, then `<COMMENT-BOT>` rounds (comment-summoned) until satisfied, threads resolved — each round waited for with bounded polls, each fix a fresh agent. It returns only with a terminal verdict:
 
-- **NOT MET, actionable items remain** → run another pass now (respecting babysit's per-item caps).
-- **NOT MET, only pending CI / an awaited `<BOT>` review** → nothing to do but wait: end the invocation, naming what's pending — babysit's bounded `--watch` is the only in-pass wait; a re-invocation re-checks.
-- **NOT MET, only `needs-human` blockers** (including this skill's own stalled-verdict ledger posted in Step 4) → report them clearly as the stop reason and end the invocation; the human unblocks, then re-invokes.
 - **GOAL MET** → done. Report the final state and stop.
+- **NOT MET** → nothing actionable is left: `needs-human` threads (including this skill's own stalled-verdict ledger posted in Step 4), a stuck bot, or a capped fix signature. Report them verbatim as the stop reason and end; the human unblocks, then re-invokes — babysit resumes from its state file. Never re-run babysit back-to-back on the same NOT MET state.
 
-**Bot-review judgement call:** babysit-stack requests `<BOT>` once per PR. On a PR that already had its bot round (check `gh api repos/{owner}/{repo}/pulls/<n>/reviews` for the bot's login — `copilot-pull-request-reviewer[bot]` for Copilot), babysit's own once-per-PR gate already prevents a re-request — never work around it.
-
-Every invocation runs at least **one** pass here (so the report ends on live CI/thread state) — but never spin passes back-to-back when only external state is pending; end and let the re-invocation cadence pace it.
+A PR that already had bot rounds before this skill ran is fine — babysit's per-bot round counter lives in its state file and its 5-rounds-per-bot cap still applies; never work around it.
 
 ## Boundaries
 
 - **Never merge, approve, mark ready, or close** — a draft stays a draft; state changes are the human's.
-- The review loop never touches existing review threads (reply/resolve) — thread work happens only inside the Step 5 `/babysit-stack` passes, under that skill's rules and caps.
+- The review loop never touches existing review threads (reply/resolve) — thread work happens only inside Step 5's `/babysit-stack`, under that skill's rules and caps. Bot reviews happen on GitHub only; never run a review CLI.
 - **The CLI owns the loop.** Reviewer selection, suppression, the relevance gate's thresholds, gate injection, stall/cap stops, dispute adjudication flow, and the verdict all come from `<ENGINE>`'s JSON output — never re-derive them in prose, never hand-edit `.context/pr-<n>/ledger.json` or a findings file, and never skip a command because you "know" what it will say.
-- **One engine run per PR — including across re-invocations.** A finished run (`status` phase `done`) is never re-`init`ed into more rounds; a stalled verdict's ledger goes onto the PR as a comment. Persistence after the loop is babysit passes, not more review rounds.
+- **One engine run per PR — including across re-invocations.** A finished run (`status` phase `done`) is never re-`init`ed into more rounds; a stalled verdict's ledger goes onto the PR as a comment. Persistence after the loop is babysit, not more review rounds.
 - **Fan-out is mechanism-agnostic; subagents are an optional accelerator.** Parallel subagents, `codex exec` children, or inline-sequential all satisfy the same contract: every emitted task's `outputFile` written before `collect` settles. A dead reviewer (missing/invalid output after one re-run) means degraded coverage stated explicitly, never silent convergence.
-- **Persistence is re-invocation, never a stop-hook.** End the invocation with the resume report instead of spinning on external state; a `needs-human` blocker is reported as the stop reason, not worked around.
+- **Persistence is re-invocation, never a stop-hook.** A run ends at GOAL MET or Blocked (`needs-human` only), with the resume report; pending CI / bot rounds are waited on by babysit, never a reason to end.
 - Fixes stay inside the PR's existing scope; consolidations become proposals, not code. TDD discipline is carried in the fix prompts (red-green where behaviour changes).
 - Model roles fixed, aliases only: reporters leaner, fixers + the closeout adjudicator the strongest — never pin exact ids or effort.
 - The roster in `agents/` is the lane source; the host's `reviewers.*` config is an additive focus overlay the CLI applies. Tune `docs/agents/repo-config.md`, never fork lanes inline.
@@ -190,19 +186,19 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 
 **This skill runs the bounded review ⇄ fix loop on one existing PR, then babysits that PR to "in order".**
 
-- **DOES**: resolve + check out the PR branch, compute the diff vs `origin/<baseRefName>`, drive the engine CLI (`init → plan → collect → decide → apply-fix → adjudicate → report`), push fixes once, post a stalled ledger as a PR comment, run `/babysit-stack <n>` passes.
-- **DOES NOT**: touch review threads (Step 5's babysit passes own reply/resolve), run Playwright (`/work-slice` / `/work-issue`), open/merge/approve/ready/close PRs, re-`init` a finished engine run, restack other worktrees' branches unasked.
+- **DOES**: resolve + check out the PR branch, compute the diff vs `origin/<baseRefName>`, drive the engine CLI (`init → plan → collect → decide → apply-fix → adjudicate → report`), push fixes once, post a stalled ledger as a PR comment, run `/babysit-stack <n>` to its terminal verdict.
+- **DOES NOT**: touch review threads (Step 5's babysit owns reply/resolve), run Playwright (`/work-slice` / `/work-issue`), open/merge/approve/ready/close PRs, re-`init` a finished engine run, restack other worktrees' branches unasked.
 
 ## Red Flags — STOP
 
 - About to review or fix in the main session — stop: emitted tasks own that; you only run the CLI and the tasks it names.
-- About to re-`init` a run whose `status` phase is `done` — stop: one engine run per PR, ever; everything after is babysit passes.
-- About to reply to or resolve a review thread from this loop — stop: thread work happens only inside the Step 5 `/babysit-stack` passes.
+- About to re-`init` a run whose `status` phase is `done` — stop: one engine run per PR, ever; everything after is babysit.
+- About to reply to or resolve a review thread from this loop, or run a review CLI — stop: thread and bot work happens only inside Step 5's `/babysit-stack`, on GitHub.
 - About to push mid-loop — stop: the commit rule forbids it; fix commits stay local and Step 4 pushes once, plain (never force).
 - About to check out a branch held by another worktree — stop and name the worktree.
 - About to hand-edit `.context/pr-<n>/ledger.json` / a findings file, or skip a CLI command you "know" the output of — stop: the CLI owns the loop.
 - About to push to a fork you lack rights on — stop and tell the user.
-- About to spin another babysit pass when only CI / an awaited `<BOT>` review is pending — stop: end with the resume report; re-invocation re-checks.
+- About to end because CI or a bot review is pending, or to re-run babysit on an unchanged NOT MET state — stop: babysit waits; NOT MET is Blocked — report and end.
 
 ## Verification
 
@@ -212,5 +208,5 @@ Before reporting done:
 - [ ] Fix commits (if any) are pushed exactly once and the branch is no longer ahead of `origin/<headRefName>`.
 - [ ] A stalled or degraded-coverage run left a `## Review ledger` PR comment with the verdict line and `CR-NNN` entries.
 - [ ] Upstack PRs basing on this branch are named as needing restack (mechanics deferred to babysit-stack, not done unasked).
-- [ ] At least one `/babysit-stack` pass ran and its `VERDICT` block is handled — the report names what the PR still waits on.
+- [ ] `/babysit-stack` ran to a terminal verdict — GOAL MET, or NOT MET with only `needs-human` items, named in the report.
 - [ ] The PR is still open and still a draft if it was one — nothing merged, approved, readied, or closed.

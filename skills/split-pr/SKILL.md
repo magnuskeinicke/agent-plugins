@@ -24,8 +24,9 @@ so once.
 | `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123`) |
 | `<PR-SKILL>` | `skills.createPr` | write the PR title/body inline, following `pr.titleRule` |
+| `<MEDIA-BRANCH>` | `pr.mediaBranch` | `pr-media` — only used when the top layer inherits an existing PR's visual section |
 | `<TITLE-RULE>` | `pr.titleRule` | `<type>: <subject>` |
-| `<BOT>` | `pr.botReviewer` | no bot review round |
+| `<BOT>` | `pr.botReviewer` | babysit skips the review-request bot phase |
 | `<STACK>` | `pr.stackTool` | **stop** — splitting into a stack needs a stack tool; say so |
 | `<GATE>` | `gates.all` | discover the repo's build/lint commands and name which you used |
 
@@ -72,13 +73,16 @@ The **top layer** takes every remaining path. Safety net (mandatory): `git diff 
 Run `<GATE>` against the predecessor branch as the base, plus whatever narrower
 typecheck the repo needs for the files this layer touched. Apply `gates.traps`
 first — they name the ways these commands lie (stale build caches, exit codes
-masked by a pipe, interactive test runners).
+masked by a pipe, interactive test runners). Record every command + result per
+layer in `.context/<issue-slug>/evidence/<NN>-verification.jsonl` (row format in
+`../work-slice/references/pr-evidence.md`) — Step 3 renders it into that
+layer's `## Verification` table.
 
 A red layer means the plan violated import direction — move the offending file down (amend the lower layer, rebase the ones above) rather than patching around it.
 
 ## Step 3 — Open the PRs and link the stack
 
-Bottom → top, per layer: `git push -u origin <branch>` → **`<PR-SKILL>`** verbatim (each layer gets its own title per `<TITLE-RULE>`, with the layer's subject; the same issue id across the stack is fine) → `gh pr ready <n> --undo` (the suite ships drafts). Never `gh stack submit` — its auto-titles glitch and `<PR-SKILL>` owns titles.
+Bottom → top, per layer: `git push -u origin <branch>` → **`<PR-SKILL>`** verbatim (each layer gets its own title per `<TITLE-RULE>`, with the layer's subject; the same issue id across the stack is fine) → `gh pr ready <n> --undo` (the suite ships drafts) → the evidence sections per `../work-slice/references/pr-evidence.md`: `## Verification` rendered from that layer's own validation rows, `## Visual verification` as one line (`Split layer — code identical to <original-branch>; no new surface captured`); the top layer in existing-PR mode keeps the original PR's visual section instead. One body write per PR, before any bot is requested. Never `gh stack submit` — its auto-titles glitch and `<PR-SKILL>` owns titles.
 
 Then link, by PR number, never `--open`:
 
@@ -92,7 +96,7 @@ gh stack link --base <BASE> <pr-01> <pr-02> … <pr-top>
 
 Report: the layer table (PR number, branch, purpose, diff stat), the empty-diff verification line, and per-layer validation results.
 
-Same finish as the rest of the suite: run **`/babysit-stack <pr-01> … <pr-top>`** passes until the verdict reads GOAL MET (CI green, `<BOT>` requested, threads resolved), handling verdicts exactly like `/feature-goal`'s BABYSIT stage — actionable items → another pass now; only pending CI / an awaited `<BOT>` review → end the invocation naming what's pending (re-invoking `/babysit-stack <pr-01> … <pr-top>` resumes; `/loop` or a scheduler paces unattended re-checks); `needs-human` blockers → report them as the stop reason.
+Same finish as the rest of the suite: run **`/babysit-stack <pr-01> … <pr-top>`**. It babysits the stack to a terminal verdict itself — CI green, the GitHub review bots satisfied in order, threads resolved, waiting for each bot round with bounded polls. GOAL MET → done. NOT MET → only `needs-human` items remain (judgement-call threads, a stuck bot, a capped fix); report them as the stop reason and end — re-invoking `/babysit-stack <pr-01> … <pr-top>` resumes once the human has acted.
 
 ## Boundaries
 
@@ -133,7 +137,8 @@ Before reporting done:
 - [ ] Empty-diff check ran and returned empty: the top layer reproduces the original tree exactly.
 - [ ] Every layer validated green bottom→top with `<GATE>` against its predecessor base, `gates.traps` applied first.
 - [ ] Each layer is a draft PR with its own `<TITLE-RULE>` title, opened via `<PR-SKILL>` verbatim.
+- [ ] Each layer PR body carries `## Verification` from its own validation rows and the one-line `## Visual verification` (the top layer keeps the original's in existing-PR mode).
 - [ ] Stack linked by PR number: `gh stack link --base <BASE> <pr-01> … <pr-top>`.
 - [ ] Existing-PR mode: original PR retargeted to the top layer with number/threads intact and body refreshed. Pre-PR mode: stale remote branch cleaned up, checked out on the top layer.
 - [ ] Report shows the layer table, the empty-diff verification line, and per-layer validation results.
-- [ ] `/babysit-stack` passes run until GOAL MET, or the pending/needs-human stop reason named.
+- [ ] `/babysit-stack` ran to GOAL MET, or the `needs-human` stop reason is named.

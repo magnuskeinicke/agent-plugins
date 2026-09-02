@@ -89,26 +89,6 @@ Reuse audit scope — every function/component/hook/util/type ADDED by the diff,
   }`;
 }
 
-// The CodeRabbit wrapper — one extra reviewer, first round only (rate-limited
-// external service). No roster file: the task prompt is self-contained.
-export function coderabbitPrompt(contractText, crCmd, outputFile) {
-  return `You are the CodeRabbit reviewer for this change — a READ-ONLY wrapper around the CodeRabbit CLI. ${READ_ONLY}
-
-${contractText}
-
-Run the CodeRabbit CLI review via Bash (long-running — use a generous timeout, up to 10 minutes):
-\`${crCmd}\`
-
-Then translate its output into the findings file:
-- VERIFY each CodeRabbit finding against the actual code (open the cited file/line) before reporting it — drop anything that does not hold up.
-- blockingFindings: verified correctness bugs, security vulnerabilities, data-loss/race/resource-leak risks, or broken error handling — each with a concrete suggestedFix and a rootCause (a short stable slug of the underlying cause — reuse the exact slug when re-raising a prior finding).
-- notes: style/naming/docs/nit-level suggestions worth a human glance — never blocking.
-- If the CLI is missing, unauthenticated, rate-limited, or errors out: return an empty blockingFindings array plus a single note "CodeRabbit CLI unavailable: <reason>". Do NOT fall back to reviewing the code yourself — the roster lanes cover that.
-Set "reviewer" to "coderabbit".
-
-${outputContract(outputFile)}`;
-}
-
 // Gut-check pre-pass — rubric-free first read, round 1 only, BEFORE the
 // roster lanes; a `block` observation stops the run before any reviewer spend.
 export function gutCheckPrompt(contractText, inspect, outputFile) {

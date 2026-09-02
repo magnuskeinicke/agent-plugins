@@ -30,17 +30,18 @@ cross-workspace. This is the map.
   (the `/to-issues` depth-2 topology) can run in parallel workspaces
   simultaneously. Chained slices cannot — each needs its predecessor's branch
   pushed first.
-- **Babysitting has one home.** `/babysit-stack` keeps its cross-pass state
-  (attempt counters, failure signatures, bot-request flags) in
-  `.context/babysit-<parent>.json` — run every babysit pass for a given stack
-  from the **same workspace**, or the caps reset and the bot-request
-  once-ever gate loses its memory. Pick one (e.g. the skeleton's) and stick
-  with it.
+- **Babysitting has one home.** `/babysit-stack` keeps its cross-run state
+  (attempt counters, failure signatures, per-bot round counters) in
+  `.context/babysit-<parent>.json` — run every babysit for a given stack
+  from the **same workspace**, or the caps reset and the per-bot round cap
+  loses its memory. Pick one (e.g. the skeleton's) and stick with it.
 
-## Cloud dispatch — the full pipeline's default
+## Cloud dispatch — the full pipeline's default after planning
 
-With `routing.dispatch` = `cloud` (the default), `/feature-goal` creates the
-workspace-per-slice layout above **remotely**: the Conductor MCP's
+With `routing.dispatch` = `cloud` (the default), `/feature-goal` keeps
+planning (grill → PRD → slices) in your session and then creates the
+workspace-per-slice layout above **remotely** (opt-in `local` keeps it in
+your worktree — `feature-goal/references/local-loop.md`): the Conductor MCP's
 `create_workspace` makes one isolated cloud workspace per slice, a
 **bootstrap session** installs the plugin in the fresh sandbox, then a
 second session runs `/work-slice <slice-id>` — so slices keep running while
@@ -151,13 +152,13 @@ Consequences:
 **This skill maps and plans Conductor workspace usage for the suite — it never provisions anything.**
 
 - **DOES**: plan the workspace-per-slice layout, match labelled slices to agent-matched workspaces, explain what state travels (tracker/remote) vs what doesn't (`.context/`), pick the babysit home, name the cross-workspace hazards
-- **DOES NOT**: create workspaces (the user's or Conductor MCP's act), create branches or worktrees (`/work-slice` renames in place; single-worktree mode is `/feature-goal`'s), or run babysit passes itself (`/babysit-stack`)
+- **DOES NOT**: create workspaces (the user's or Conductor MCP's act), create branches or worktrees (`/work-slice` renames in place; single-worktree mode is `/feature-goal`'s), or babysit PRs itself (`/babysit-stack`)
 
 ## Red Flags — STOP
 
 - About to `git worktree add` and call it a workspace — stop; bootstrap scripts wouldn't run; workspace creation is the user's (or the Conductor MCP's) act.
 - About to start a labelled slice under a different agent — stop; the routing gate bounces it; never "just this once" elsewhere.
-- About to run a babysit pass for a stack from a new workspace — stop; use the stack's one babysit home or the caps and once-ever gate reset.
+- About to run `/babysit-stack` for a stack from a new workspace — stop; use the stack's one babysit home or the caps and per-bot round counters reset.
 - About to `gh stack sync --prune` while sibling branches are checked out in other workspaces — stop; it deletes branches under live worktrees; plain `--remote origin` sync only.
 - About to check out or fix a branch held by another workspace — stop; git refuses; fix it in the owning workspace or hand it to that workspace's agent.
 - About to reuse a slice's workspace for the next slice — stop; start a fresh workspace per slice.

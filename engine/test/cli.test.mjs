@@ -37,7 +37,6 @@ test('full loop: findings → fix → clean re-review → converged', () => {
   const plan = run('plan', '--changed-files', 'components/Widget.tsx,server/widget.ts', '--added-files', 'components/Widget.tsx', '--user-facing', 'true', '--head', 'aaa111');
   assert.equal(plan.round, 1);
   assert.ok(plan.prePass, 'round 1 has the gut-check pre-pass');
-  assert.equal(plan.coderabbit, null, 'no cliReviewer configured');
   const rIds = plan.reviewers.map((r) => r.id);
   assert.ok(rIds.includes('code-reviewer') && rIds.includes('a11y-auditor') && rIds.includes('auth-reviewer'));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
@@ -273,20 +272,6 @@ test('collect names reviewers that never wrote their outputFile, and is re-runna
   const collect2 = run('collect');
   assert.deepEqual(collect2.missing, []);
   assert.equal(run('decide').action, 'converged');
-});
-
-test('coderabbit: --coderabbit-cmd emits the lane with the given command, --no-coderabbit suppresses it', () => {
-  const a = makeRun();
-  a.run('init', '--base', 'origin/main');
-  const planA = a.run('plan', '--changed-files', 'src/a.ts', '--coderabbit-cmd', 'coderabbit review --agent --uncommitted');
-  assert.ok(planA.coderabbit, 'override enables the lane without repo config');
-  assert.match(readFileSync(planA.coderabbit.promptFile, 'utf8'), /coderabbit review --agent --uncommitted/);
-
-  const b = makeRun();
-  writeFileSync(join(b.dir, 'repo-config.md'), '## Config\n```json\n{"pr": {"cliReviewer": "coderabbit review --agent"}}\n```\n');
-  b.run('init', '--base', 'origin/main');
-  const planB = b.run('plan', '--changed-files', 'src/a.ts', '--config', join(b.dir, 'repo-config.md'), '--no-coderabbit');
-  assert.equal(planB.coderabbit, null, '--no-coderabbit wins over the config value');
 });
 
 test('findings validation requires rootCause on blocking findings', async () => {

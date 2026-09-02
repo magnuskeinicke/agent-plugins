@@ -53,8 +53,6 @@ The implementer's `touchedAreas` declaration adds areas paths alone would miss.
 - **gut-check pre-pass** — round 1 only, runs BEFORE the roster (a `block`
   observation hard-stops the run before any reviewer spend). Self-contained
   prompt, no roster file.
-- **CodeRabbit wrapper** (`pr.cliReviewer`) — round 1 only (rate-limited
-  external service). Self-contained prompt, no roster file.
 - **`pr-relevance-validator`** — the validate stage, never a lane.
 - `architecture-strategist`, `design-iterator`, `product-reviewer`,
   `ux-reviewer`, `visual-reviewer` — vendored for other skills' flows; never
@@ -77,7 +75,7 @@ Role-based, aliases only — never pin exact model ids or effort levels:
   (code-review and Playwright), and the closeout adjudicator (it overrules
   both sides, so it gets the strongest judgement).
 - **Reporters run leaner**: every roster reviewer, the gut-check pre-pass, the
-  CodeRabbit wrapper, the relevance validator, and the read-only Playwright
+  relevance validator, and the read-only Playwright
   verifier (browser transcripts are token-heavy).
 
 A roster file may name its own `model:` in frontmatter; the CLI surfaces it in

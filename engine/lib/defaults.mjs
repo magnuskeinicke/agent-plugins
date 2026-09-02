@@ -40,12 +40,20 @@ export const REPO_CONFIG_DEFAULTS = {
     typePrefix: 'type:',
     riskPrefix: 'risk:',
   },
+  // PR review bots, driven by babysit-stack in order: botReviewer (requested
+  // via the reviewers API, e.g. Copilot) runs rounds until it is satisfied,
+  // then commentReviewer (triggered by a PR comment, e.g. CodeRabbit's
+  // `@coderabbitai review`) does the same. '' → that phase is skipped. Bot
+  // reviews happen on GitHub only — there is no review-CLI lane in the loop.
   pr: {
     titleRule: '',
     scopes: [],
     stackTool: '',
     botReviewer: '',
-    cliReviewer: '',
+    commentReviewer: { login: '', command: '' },
+    // Orphan branch PR evidence media is committed to (pr/<n>/…) and linked
+    // from PR bodies by commit sha. Created on first publish; never merged.
+    mediaBranch: 'pr-media',
   },
   // Repo-owned skills the suite hands off to. '' → no handoff; do it inline.
   skills: {
@@ -70,10 +78,12 @@ export const REPO_CONFIG_DEFAULTS = {
   // Slice agent routing (e.g. frontend slices reserved for a stronger-at-UI
   // agent). labelPrefix '' → routing disabled everywhere. delegate maps an
   // agent name to a headless command template; {} → mismatched slices are
-  // reported/skipped, never delegated. dispatch: where feature-goal's slice
-  // loop runs — 'cloud' (one Conductor cloud workspace per slice, via the
-  // Conductor MCP; falls back to local when the MCP is unreachable) or
-  // 'local' (the sequential single-worktree loop). cloudModels: per-agent
+  // reported/skipped, never delegated. dispatch: where feature-goal runs
+  // everything after planning (slice loop + babysit) — 'cloud' (default: one
+  // Conductor cloud workspace per slice via the Conductor MCP, babysit in the
+  // skeleton's workspace; falls back to local when the MCP is unreachable) or
+  // 'local' (opt-in: the sequential single-worktree loop, one fresh subagent
+  // per slice). cloudModels: per-agent
   // Conductor model/effort passed on every cloud session feature-goal
   // creates; an agent key set to {} (or absent) → Conductor's own default.
   // A host's per-agent object replaces the default one wholesale.

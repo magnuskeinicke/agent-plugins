@@ -39,7 +39,7 @@ Either way you end with exactly one parent ticket id carrying the PRD in a comme
 
 2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can.
 
-Check with the user that these seams match their expectations.
+**Standalone:** check with the user that these seams match their expectations. **As a stage of `/feature-goal` (pipeline mode):** do not ask — the grilling session is the pipeline's only human gate. Pick the seams the grill transcript implies, write them into Testing Decisions, and list anything you had to assume under a `## Assumptions` section at the end of the PRD.
 
 3. Write the PRD using the template below.
 
@@ -50,7 +50,9 @@ Check with the user that these seams match their expectations.
    - Do NOT apply any routing label. The parent is a container, never a unit of agent work, so it must never carry `<AGENT-READY>` (the autonomous-loop trigger) or the `<NEXT>` work pointer. `/to-issues` puts the work pointer on the first slice instead.
    - Do NOT create sub-issues, change status, or reassign. That's the next step's job.
 
-5. Report the parent ticket id + URL and tell the user to run `/to-issues` to slice it.
+5. Report the parent ticket id + URL, then hand off **by caller**:
+   - **Standalone** (the user invoked `/to-prd` directly) → tell them to run `/to-issues` to slice it.
+   - **As a stage of `/feature-goal`** → say nothing about next commands: return control to the orchestrator, which runs the slice split itself in the same invocation. Do not end the run on a "now run `/to-issues`" line.
 
 <prd-template>
 
@@ -135,7 +137,7 @@ Before reporting done:
 
 - [ ] PRD published as a comment under a `# PRD` heading with every template section: Problem Statement, Solution, User Stories, Implementation Decisions, Testing Decisions, Design, Out of Scope, Further Notes.
 - [ ] Ticket description untouched, and the PRD duplicates nothing it already says.
-- [ ] Test seams confirmed with the user before the PRD was written.
+- [ ] Test seams confirmed with the user (standalone) — or, in pipeline mode, chosen from the grill and any assumption listed under `## Assumptions`; no question was put to the user.
 - [ ] `<TYPE:>*` and `<SKIP>` applied, existing labels preserved, no routing label on the parent.
 - [ ] Design section records the Figma file key + per-screen deep-links, or states there is no design yet.
-- [ ] Parent ticket id + URL reported, with the pointer to run `/to-issues`.
+- [ ] Parent ticket id + URL reported — with the pointer to run `/to-issues` when invoked standalone, and **without** it when running as a `/feature-goal` stage (control returns to the orchestrator).

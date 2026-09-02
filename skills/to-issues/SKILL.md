@@ -79,7 +79,7 @@ Break the PRD into **one walking-skeleton slice + N behaviour-delta slices**. Ne
 
 **Agent routing** (only when `<AGENT:>` *and* `routing.frontendAgent` are configured): mark each slice **frontend-dominant** or not, from the code-layer map — a delta whose "Where to look" rows predominantly match the repo's `areaPaths.frontend` patterns (UI components, views, styling) is frontend-dominant and will carry `<AGENT:><routing.frontendAgent>` at publish time, reserving it for the agent that's strongest at UI. The **skeleton and mixed slices carry no routing label** — they're cross-layer by construction and any agent may work them. Routing is slice-granular, never per-file.
 
-Mark each slice **AFK** (an agent can implement and open a PR unattended) or **HITL** (needs a human decision/design review first). Prefer AFK for deltas — they carry ≤1 decision by construction. The **skeleton** leans HITL (or at least a flagged, careful review): it makes every decision the rest of the stack inherits, so a wrong skeleton is N wrong slices. HITL slices get the `<HITL>` label. AFK slices carry **no routing label of their own** — the `<NEXT>` work pointer (step 6) marks only the one slice that is up next. **No slice ever gets `<AGENT-READY>`**: that label is the autonomous-loop trigger, reserved for `daily-ticket-manager` on standalone tickets, and must stay off the PRD pipeline (see `labels.docPath`).
+Mark each slice **AFK** (an agent can implement and open a PR unattended) or **HITL** (needs a human decision/design review first). Prefer AFK for deltas — they carry ≤1 decision by construction. **Standalone**, the skeleton leans HITL (or at least a flagged, careful review): it makes every decision the rest of the stack inherits, so a wrong skeleton is N wrong slices; HITL slices get the `<HITL>` label. **As a stage of `/feature-goal` (pipeline mode): every slice is AFK and no slice gets `<HITL>`** — the grilling session was the pipeline's only human gate and is where those decisions were settled. A decision the PRD does not settle is made here (the option most consistent with the PRD and the codebase) and written into the slice body under `## Assumptions`, so the implementer inherits it and the reviewer sees it. AFK slices carry **no routing label of their own** — the `<NEXT>` work pointer (step 6) marks only the one slice that is up next. **No slice ever gets `<AGENT-READY>`**: that label is the autonomous-loop trigger, reserved for `daily-ticket-manager` on standalone tickets, and must stay off the PRD pipeline (see `labels.docPath`).
 
 ### 4. Define the stack (delivery topology)
 
@@ -106,7 +106,7 @@ Present the breakdown as a numbered list. For each slice show: **Title** · **Ki
 - Should any slices merge or split further?
 - Are AFK/HITL right?
 
-Iterate until the user approves.
+Iterate until the user approves. **Pipeline mode (`/feature-goal`): skip the quiz** — walk the same five questions yourself against the breakdown, fix what fails, and publish; no approval prompt, no next-command pointer.
 
 ### 6. Publish the sub-issues
 
@@ -121,7 +121,7 @@ Labels per `labels.docPath` — a `<TYPE:>*` **and** `<SKIP>` on every slice, pl
 - **Frontend-dominant slices** (step 3, only when routing is configured) → `<AGENT:><routing.frontendAgent>` (e.g. `agent:claude`). Create the label first if the team lacks it. Skeleton and mixed slices get no `<AGENT:>` label.
 - **Never `<AGENT-READY>`** on any slice or on the parent — it is the autonomous-loop trigger and stays off the PRD pipeline.
 
-If the skeleton slice is HITL, no slice starts with `<NEXT>` — tell the user the first slice needs a human before any agent can start.
+If the skeleton slice is HITL (standalone only), no slice starts with `<NEXT>` — tell the user the first slice needs a human before any agent can start. In pipeline mode the skeleton is always AFK and carries `<NEXT>`.
 
 Do NOT modify the parent ticket's body, status, or assignee.
 
@@ -178,7 +178,9 @@ Avoid specific code snippets — they go stale. Exception: a prototype snippet t
 
 ## Done when
 
-Exactly one slice is the walking skeleton and every delta names its novel decision (or "none — pure mirror"). Every slice is a sub-issue of the PRD parent, carries acceptance criteria + code-layer pointers + a Convention contract (+ for UI: Figma nodes + tokens), names what it stacks on via a blocked-by relation, and is labelled `<TYPE:>*` + `<SKIP>` (plus `<HITL>` for HITL, plus `<AGENT:><frontendAgent>` on frontend-dominant slices when routing is configured); the skeleton AFK slice also carries `<NEXT>`. No slice carries `<AGENT-READY>`. Any newly-pinned exemplars are written back to `goldenPaths` in `repo-config.md`. Tell the user to run `/work-slice` to start the skeleton slice.
+Exactly one slice is the walking skeleton and every delta names its novel decision (or "none — pure mirror"). Every slice is a sub-issue of the PRD parent, carries acceptance criteria + code-layer pointers + a Convention contract (+ for UI: Figma nodes + tokens), names what it stacks on via a blocked-by relation, and is labelled `<TYPE:>*` + `<SKIP>` (plus `<HITL>` for HITL, plus `<AGENT:><frontendAgent>` on frontend-dominant slices when routing is configured); the skeleton AFK slice also carries `<NEXT>`. No slice carries `<AGENT-READY>`. Any newly-pinned exemplars are written back to `goldenPaths` in `repo-config.md`.
+
+Then hand off **by caller**: invoked **standalone**, tell the user to run `/work-slice` to start the skeleton slice. Running as a stage of **`/feature-goal`**, name no next command — return control to the orchestrator, which commits the planning docs and dispatches the slices itself in the same invocation.
 
 ---
 
@@ -198,7 +200,7 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 - About to stamp `<AGENT-READY>` on a slice or the parent — stop; that is `daily-ticket-manager`'s autonomous-loop trigger and stays off the PRD pipeline.
 - About to modify the parent ticket's body, status, or assignee — stop; the parent is read-only here.
 - The stack exceeds 4–5 PRs — stop; apply the escape hatches in order (merge adjacent, second stack, fan out disjoint deltas, question scope) first.
-- About to publish before the user approves the step-5 breakdown — stop; iterate until approved.
+- About to publish before the user approves the step-5 breakdown (standalone) — stop; iterate until approved. In pipeline mode the opposite: about to ask the user anything, or stamp `<HITL>` — stop; decide, record under `## Assumptions`, publish.
 - A UI slice lacks Figma file key + node deep-links — stop; add them, or flag the access blocker loudly at the top of the slice.
 - About to inline a code snippet in a slice body — stop; `file:line` pointers only (exception: a decision-rich prototype snippet, noted as such).
 
@@ -209,7 +211,7 @@ Before reporting done:
 - [ ] Exactly one slice is the walking skeleton; every delta names its novel decision or "none — pure mirror".
 - [ ] Every slice is a sub-issue of the PRD parent with acceptance criteria, code-layer pointers, and a Convention contract (+ Figma nodes and tokens for UI slices).
 - [ ] Every slice carries `<TYPE:>*` + `<SKIP>`; HITL slices carry `<HITL>`; frontend-dominant slices carry `<AGENT:><frontendAgent>` when routing is configured; none carries `<AGENT-READY>`.
-- [ ] Exactly one slice carries `<NEXT>` (the AFK skeleton) — or none, with the user told the skeleton needs a human first.
+- [ ] Exactly one slice carries `<NEXT>` (the AFK skeleton) — or none, with the user told the skeleton needs a human first (standalone only; pipeline mode always has an AFK skeleton and no `<HITL>`).
 - [ ] Every slice's blocked-by relation and "Stacked on" line name its predecessor (skeleton: base = `<BASE>`).
 - [ ] Newly-pinned exemplars written back to `goldenPaths` in `docs/agents/repo-config.md`.
-- [ ] User pointed at `/work-slice` to start the skeleton.
+- [ ] Standalone: user pointed at `/work-slice` to start the skeleton. As a `/feature-goal` stage: no next command named — control returned to the orchestrator.

@@ -96,28 +96,42 @@ machine (run it again to resume) that chains:
 1. `/grill-with-docs` — grill the plan until shared understanding
 2. `/to-prd` — write the PRD into the parent ticket
 3. `/to-issues` — slice it into stacked, agent-ready sub-issues
-4. `/work-slice` per slice — **dispatched to one Conductor cloud workspace per slice by default**
-   (`routing.dispatch`, Conductor MCP), so implementation keeps running unattended; pass `local`
-   for the in-worktree sequential loop. Each workspace bootstraps itself: session 1 installs this
-   plugin in the fresh sandbox, then a new session runs the slice (skills load only at session
-   start). Nothing goes in the host repo's shared Conductor settings, so colleagues' workspaces
-   are untouched. Each slice: test-first implementation inside the bounded
-   engine-CLI review-fix loop, ending in a stacked draft PR
-5. `/babysit-stack` — bot review, CI fixes, and comment resolution until the stack is green
-   (cloud mode: passes run in the skeleton slice's cloud workspace)
+4. `/work-slice` per slice — **in the cloud by default** (`routing.dispatch: cloud`): one
+   Conductor cloud workspace per slice, a fresh agent per PR (the workspace bootstraps this
+   plugin itself, then a new session runs the slice), walking up the stack: test-first
+   implementation inside the bounded engine-CLI review-fix loop, ending in a stacked draft PR
+   whose body carries `## Verification` (every check actually run) and `## Visual verification`
+   (the fewest scenes that prove it — video for behaviour, before/after for appearance — published to `pr.mediaBranch`, sha-pinned — see
+   `skills/work-slice/references/pr-evidence.md`).
+   Opt-in `local` runs the loop in this worktree with a fresh subagent per slice
+   (`skills/feature-goal/references/local-loop.md`)
+5. `/babysit-stack` — a fresh session in the skeleton slice's cloud workspace babysits the stack
+   to a terminal verdict: CI green, then Copilot review rounds until satisfied, then CodeRabbit
+   rounds (summoned by `@coderabbitai review`) until satisfied, every thread resolved. Bot
+   reviews happen on GitHub only — no review CLI
+6. QA handoff — one `## QA handoff` comment on the parent ticket for QA (user-terms steps +
+   one visual artifact per group of criteria, no dev material — see
+   `skills/work-slice/references/qa-handoff.md`); slice tickets stay internal, standalone tickets
+   get the same single comment from `/work-issue` / `/solve-ready-tickets`
+
+Planning (steps 1–3) happens in your session; everything after it leaves the machine. The
+grilling session is the pipeline's **only human gate**. Everything after it runs without
+asking: `/to-prd` and `/to-issues` run in pipeline mode (no confirmations, no HITL slices —
+undecided points become recorded `## Assumptions`), and every PR-producing skill ends by
+babysitting its PR. Runs end at GOAL MET or when only `needs-human` items remain.
 
 Standalone entry points onto the same machinery:
 
 | Command | Use for |
 | --- | --- |
-| `/magnus:work-issue <id>` | a lean ticket straight to a reviewed draft PR — skips PRD/slicing |
+| `/magnus:work-issue <id>` | a lean ticket straight to a babysat draft PR — skips PRD/slicing, no human gates |
 | `/magnus:solve-ready-tickets apply` | autonomously drain the `agentReady`-labeled queue; built for a scheduler |
 | `/magnus:review-code` | one read-only reviewer round on any diff, PR, or working tree |
 | `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
-| `/magnus:babysit-stack` | one idempotent green-the-stack pass; loop it from outside |
+| `/magnus:babysit-stack` | babysit a PR or stack to GOAL MET: CI, Copilot rounds, CodeRabbit rounds, threads |
 
 The standalone commands are **venue-neutral**: run them locally or in a Conductor cloud
-workspace — only `/feature-goal` auto-dispatches to the cloud.
+workspace — only `/feature-goal` dispatches to the cloud.
 
 Under all of them sits the engine CLI (next section): skills run it from the host repo root, obey
 its JSON output, and resume from durable markers — `## Workflow State` checkpoints, the ledger in
@@ -161,4 +175,11 @@ watch, failure-signature caps, no `git add -A`). PR6 added the
 (`agent:<name>` labels), and the `conductor-workspace` skill. PR7 was the
 conventions sweep: every SKILL.md ≤500 lines with Workflow Boundaries /
 Red Flags / Verification epilogues, descriptions within Codex's 1024-char
-limit. 18 skills, 25 roster agents.
+limit. 18 skills, 25 roster agents. The 2026-09 autonomy pass made the grill
+the pipeline's only human gate (pipeline-mode `to-prd`/`to-issues`, no HITL
+stops in `work-slice`/`work-issue`), made `feature-goal` run everything after
+planning in the cloud (a fresh workspace + session per slice, babysit in the
+skeleton's workspace; `local` opt-in), turned `babysit-stack` into a babysitting
+mode that runs Copilot then CodeRabbit rounds on GitHub until satisfied, and
+removed the CodeRabbit CLI lane from the engine (`pr.cliReviewer` →
+`pr.commentReviewer`).

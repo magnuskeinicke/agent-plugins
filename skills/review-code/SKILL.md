@@ -5,7 +5,7 @@ description: Run the shared reviewer roster (engine CLI, review-only mode) on an
 
 # Review Code
 
-Run the **same reviewer roster** the feature-dev loops (`/work-slice`, `/iterate-pr`) use — gut-check pre-pass, always-on + mechanically-triggered roster lanes, the reuse audit, the CodeRabbit wrapper when configured — on **any** code, standalone, through the plugin's **engine CLI in review-only mode**. One read-only round; the relevance validator classifies every finding before it reaches the report, so the human sees **blocking** (≥80 confidence, diff-caused), **advisory** (60–79, or confident-but-pre-existing), and **unverified** (<60) findings separately, each under a stable `CR-NNN` id. No implementer, no fix loop, no Playwright, no ticket: the human decides what to do with the findings.
+Run the **same reviewer roster** the feature-dev loops (`/work-slice`, `/iterate-pr`) use — gut-check pre-pass, always-on + mechanically-triggered roster lanes, the reuse audit — on **any** code, standalone, through the plugin's **engine CLI in review-only mode**. One read-only round; the relevance validator classifies every finding before it reaches the report, so the human sees **blocking** (≥80 confidence, diff-caused), **advisory** (60–79, or confident-but-pre-existing), and **unverified** (<60) findings separately, each under a stable `CR-NNN` id. No implementer, no fix loop, no Playwright, no ticket: the human decides what to do with the findings.
 
 ## Repo contract — resolve this first
 
@@ -17,8 +17,6 @@ defaults apply and you say so once.
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
 | `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
-| `<CLI-REVIEWER>` | `pr.cliReviewer` | that reviewer lane is skipped |
-| `<CONVENTIONS>` | `conventionsFile` | `CLAUDE.md` |
 
 Which reviewers exist and when they trigger: `../work-slice/references/reviewer-roster.md`
 (documentation; `engine/lib/roster.mjs` is the source of truth). The host's
@@ -42,7 +40,6 @@ Also capture:
 - `insertions` — inserted-line count from `git diff --shortstat` on the same range (0 when unknown).
 - `declaredAreas` (optional, from `frontend|backend|database|i18n|security|performance`) when the change touches an area its paths don't reveal — e.g. an auth-relevant change in a neutral path → declare `security`.
 - `userFacing` — biases **true**; false only for clearly internal-only changes.
-- The `<CLI-REVIEWER>` invocation matching the target (for `coderabbit`): uncommitted work → `coderabbit review --agent --uncommitted -c <CONVENTIONS>` (append `--include-untracked` when untracked files exist); branch vs base → `coderabbit review --agent --committed --base-commit "$(git merge-base <base> HEAD)" -c <CONVENTIONS>`; PR reviewed diff-only → none (the CLI needs a checkout — pass `--no-coderabbit`).
 
 ## Step 2 — Run the review round (engine CLI)
 
@@ -76,9 +73,8 @@ the local checkout does not contain the change.
 node "$engine" init --slice <run-id> --base <base-or-HEAD> --review-only \
   [--inspect '<inspect cmd from Step 1>']        # omit for a plain branch-vs-base review
 node "$engine" plan --slice <run-id> --changed-files <csv> --added-files <csv> --deleted-files <csv> \
-  --insertions <n> --user-facing <bool> [--declared-areas <csv>] \
-  [--coderabbit-cmd '<Step 1 command>' | --no-coderabbit]
-# → the round's task manifest: prePass (gut-check), coderabbit?, reviewers[]
+  --insertions <n> --user-facing <bool> [--declared-areas <csv>]
+# → the round's task manifest: prePass (gut-check), reviewers[]
 node "$engine" collect --slice <run-id>
 # → validator task when findings survived; run it, then
 node "$engine" decide --slice <run-id> --verdicts <verdicts.json>
@@ -132,7 +128,7 @@ Then **stop** — findings are the deliverable. Do not fix anything unless the u
 - The roster in `agents/` is the lane source; the host's `reviewers.*` config is an additive focus overlay the CLI applies. Tune `docs/agents/repo-config.md`, never fork lanes inline.
 - The relevance validator classifies findings — it never adds its own; a dead validator means findings pass through unclassified (reported as blocking), never silently dropped.
 - The reuse audit runs without a provenance table here (ad-hoc code has none) — it hunts lib duplicates and consolidation candidates only.
-- The CodeRabbit wrapper only relays **verified** CLI findings; if the CLI is unavailable it reports that as a note instead of reviewing itself. Single round, so the once-only rule is trivially satisfied.
+- No review CLI runs here (or anywhere in the suite) — bot reviews such as CodeRabbit happen on GitHub PRs only, via `/babysit-stack`.
 
 ---
 
@@ -152,7 +148,7 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 - About to call the round `clean` while a reviewer is dead — stop: re-run it once; still dead → degraded coverage, verdict NOT clean.
 - Gut-check returned a `"disposition": "block"` — stop the reviewers and run `collect` immediately; it hard-stops for the human.
 - About to hand-edit `.context/<run-id>/ledger.json` / a findings file, or re-derive the classification thresholds — stop: the CLI owns the round.
-- About to run CodeRabbit against a PR-diff-only target — stop: it needs a checkout; pass `--no-coderabbit`.
+- About to run a review CLI (CodeRabbit or similar) as a lane — stop: bot reviews live on GitHub PRs, not in this round.
 
 ## Verification
 

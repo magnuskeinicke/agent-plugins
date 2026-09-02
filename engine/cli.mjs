@@ -352,26 +352,14 @@ function cmdPlan(args) {
     };
   });
 
-  // Round-1 one-shots: the gut-check pre-pass (must run BEFORE the reviewers —
-  // a `block` stops the run before any lane spend) and the CodeRabbit wrapper.
-  // `--coderabbit-cmd` overrides the config value with a target-matched
-  // invocation (uncommitted vs committed flags); `--no-coderabbit` skips the
-  // lane when the CLI cannot run against this target (e.g. no checkout).
+  // Round-1 one-shot: the gut-check pre-pass (must run BEFORE the reviewers —
+  // a `block` stops the run before any lane spend).
   let prePass = null;
-  let coderabbit = null;
   if (state.round === 1) {
     const gutOut = join(findingsDir, 'gut-check.json');
     const gutPrompt = join(promptsDir, 'gut-check.md');
     writeFileSync(gutPrompt, prompts.gutCheckPrompt(contract, inspect, gutOut));
     prePass = { id: 'gut-check', promptFile: gutPrompt, outputFile: gutOut };
-    const crCmd =
-      typeof args['coderabbit-cmd'] === 'string' ? args['coderabbit-cmd'] : cfg.pr.cliReviewer;
-    if (crCmd && !args['no-coderabbit']) {
-      const crOut = join(findingsDir, 'coderabbit.json');
-      const crPrompt = join(promptsDir, 'coderabbit.md');
-      writeFileSync(crPrompt, prompts.coderabbitPrompt(contract, crCmd, crOut));
-      coderabbit = { id: 'coderabbit', promptFile: crPrompt, outputFile: crOut };
-    }
   }
 
   if (args.head) state.headHistory.push(args.head);
@@ -382,7 +370,6 @@ function cmdPlan(args) {
     round: state.round,
     areas,
     prePass,
-    coderabbit,
     reviewers,
     skipped,
     next: 'run the pre-pass first (round 1), then the reviewers in parallel if the runtime allows; every agent writes its JSON to its outputFile, then run `collect`',

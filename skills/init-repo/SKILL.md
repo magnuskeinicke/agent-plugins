@@ -51,7 +51,8 @@ generic default, which is always better than a wrong guess.
 | `labels.*` | list the tracker's labels and match them to the roles in `CONTRACT.md` (agent-ready, needs-human, slice pointer, triage opt-out, type/risk prefixes). **Do not create labels here** — record only what exists; the owning skill creates what it needs |
 | `pr.titleRule` / `pr.scopes` | the CI title-check regex, or the shape of the last ~20 merged PR titles |
 | `pr.stackTool` | `gh extension list`; a `.git/av` or similar tool dir; else empty |
-| `pr.botReviewer` / `pr.cliReviewer` | which bot has reviewed recent PRs; which review CLI is installed |
+| `pr.botReviewer` / `pr.commentReviewer` | which review-request bot (e.g. Copilot) has reviewed recent PRs; which comment-summoned bot (e.g. CodeRabbit — `login` `coderabbitai[bot]`, `command` `@coderabbitai review`) has posted reviews. Bots run on GitHub only; no review CLI is configured |
+| `pr.mediaBranch` | an existing orphan branch holding `pr/<n>/` media (`git ls-remote --heads origin \| grep -i media`); none → keep the default `pr-media` — the suite creates it on first publish |
 | `skills.*` | `ls .claude/skills/` (and `.codex/skills/`) — map each role to a skill that actually exists; leave empty otherwise |
 | `devServerCommand` / `e2eDir` / `browserGuidePath` | the dev script in the package manifest; a Playwright/Cypress project dir; any existing browser-testing guide |
 | `areaPaths` | the repo's real layout — replace the generic patterns wholesale rather than appending to them |

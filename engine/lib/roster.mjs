@@ -18,7 +18,7 @@ export const CONVENTION_DRIFT_FILE_GATE = 10;
 export const SCOPE_LANE_INSERTION_GATE = 150;
 
 // input: {round, areas, changedFiles, addedFiles, deletedFiles, insertions,
-// userFacing, hints, openSources, reuseClean, cliReviewer}
+// userFacing, hints, openSources, reuseClean}
 // Every rule below must be a pure function of that input — selection is
 // deterministic CLI output, never prose discipline.
 export const ROSTER = [
