@@ -97,15 +97,17 @@ machine (run it again to resume) that chains:
 2. `/to-prd` — write the PRD into the parent ticket
 3. `/to-issues` — slice it into stacked, agent-ready sub-issues
 4. `/work-slice` per slice — **in the cloud by default** (`routing.dispatch: cloud`): one
-   Conductor cloud workspace per slice, a fresh agent per PR (the workspace bootstraps this
-   plugin itself, then a new session runs the slice), walking up the stack: test-first
+   Conductor cloud **pipeline workspace** for the stack and a **fresh session per PR** — a
+   relay: each session works one slice, opens its stacked draft PR, starts the next session and
+   ends, so no agent's context ever holds more than one PR (the workspace bootstraps this
+   plugin + `gh-stack` once, first). Walking up the stack in order: test-first
    implementation inside the bounded engine-CLI review-fix loop, ending in a stacked draft PR
-   whose body carries `## Verification` (every check actually run) and `## Visual verification`
+   (one linear GitHub stack via `gh stack`) whose body carries `## Verification` (every check actually run) and `## Visual verification`
    (the fewest scenes that prove it — video for behaviour, before/after for appearance — published to `pr.mediaBranch`, sha-pinned — see
    `skills/work-slice/references/pr-evidence.md`).
    Opt-in `local` runs the loop in this worktree with a fresh subagent per slice
    (`skills/feature-goal/references/local-loop.md`)
-5. `/babysit-stack` — a fresh session in the skeleton slice's cloud workspace babysits the stack
+5. `/babysit-stack` — the last PR session starts a fresh babysit session in the pipeline workspace; it babysits the stack
    to a terminal verdict: CI green, then Copilot review rounds until satisfied, then CodeRabbit
    rounds (summoned by `@coderabbitai review`) until satisfied, every thread resolved. Bot
    reviews happen on GitHub only — no review CLI
@@ -114,7 +116,8 @@ machine (run it again to resume) that chains:
    `skills/work-slice/references/qa-handoff.md`); slice tickets stay internal, standalone tickets
    get the same single comment from `/work-issue` / `/solve-ready-tickets`
 
-Planning (steps 1–3) happens in your session; everything after it leaves the machine. The
+Planning (steps 1–3) happens in your session (local, or a cloud workspace you handed the grill
+off to); everything after it runs as fresh one-PR sessions in the pipeline workspace. The
 grilling session is the pipeline's **only human gate**. Everything after it runs without
 asking: `/to-prd` and `/to-issues` run in pipeline mode (no confirmations, no HITL slices —
 undecided points become recorded `## Assumptions`), and every PR-producing skill ends by
@@ -178,8 +181,10 @@ Red Flags / Verification epilogues, descriptions within Codex's 1024-char
 limit. 18 skills, 25 roster agents. The 2026-09 autonomy pass made the grill
 the pipeline's only human gate (pipeline-mode `to-prd`/`to-issues`, no HITL
 stops in `work-slice`/`work-issue`), made `feature-goal` run everything after
-planning in the cloud (a fresh workspace + session per slice, babysit in the
-skeleton's workspace; `local` opt-in), turned `babysit-stack` into a babysitting
+planning in the cloud — first a workspace per slice, then (2026-09-02) a
+**relay**: one pipeline workspace, a fresh session per PR that opens its
+stacked draft PR (one linear `gh stack` chain), starts the next session and
+ends, the last starting the babysit session (`local` opt-in) — turned `babysit-stack` into a babysitting
 mode that runs Copilot then CodeRabbit rounds on GitHub until satisfied, and
 removed the CodeRabbit CLI lane from the engine (`pr.cliReviewer` →
 `pr.commentReviewer`).
