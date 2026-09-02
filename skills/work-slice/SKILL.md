@@ -109,7 +109,7 @@ git config rerere.enabled true
 git config remote.pushDefault origin
 ```
 
-`gh stack` keeps **no local tracking state until PRs exist** in this flow — the branch is plain git here, and Step 5 links it into the stack after `<PR-SKILL>` opens the PR. That is deliberate: it makes the flow safe across Conductor's one-worktree-per-slice layout, where the predecessor's branch is checked out in a *different* worktree and cannot be checked out here.
+`gh stack` keeps **no local tracking state until PRs exist** in this flow — the branch is plain git here, and Step 5 links it into the stack after `<PR-SKILL>` opens the PR. That is deliberate: it makes the flow safe across Conductor's one-worktree-per-slice layout, where the predecessor's branch is checked out in a *different* worktree and cannot be checked out here. (`/feature-goal` runs the whole stack in **one** worktree — its pipeline workspace, one session per PR — and there it substitutes this step: it cuts the branch with `gh stack init` / `gh stack add` on top of the predecessor and hands in at Step 3, so local tracking exists and Step 5 pushes with `gh stack push`. See `feature-goal/references/pr-session.md`.)
 
 The slice's branch is **whatever Conductor checked out** (a `start-work` slug like `proj-1234-…`, or a Conductor-generated name) — you will **rename it in place** to the stack branch name below. `git branch -m` only renames the branch already checked out; it does not create a branch or a worktree. Before renaming, sanity-check you're in the slice's intended worktree (HEAD should be fresh off the base, not carrying another slice's commits).
 

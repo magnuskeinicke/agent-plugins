@@ -24,8 +24,10 @@ cross-workspace. This is the map.
 - **`/work-slice` expects a virgin Conductor workspace per slice**: it renames
   the checked-out branch in place and re-points it at the predecessor — it
   never creates worktrees or branches. Start a fresh workspace per slice;
-  never reuse a slice's workspace for the next slice (that's `/feature-goal`'s
-  single-worktree mode, which substitutes work-slice Step 2).
+  never reuse a slice's workspace for the next slice when running work-slice
+  by hand. `/feature-goal` is the exception by design: it runs the whole
+  stack in **one pipeline workspace**, one fresh *session* per PR, and
+  substitutes work-slice Step 2 (`feature-goal/references/pr-session.md`).
 - **Fan-out parallelism is real**: file-disjoint deltas stacked on the skeleton
   (the `/to-issues` depth-2 topology) can run in parallel workspaces
   simultaneously. Chained slices cannot — each needs its predecessor's branch
@@ -34,25 +36,29 @@ cross-workspace. This is the map.
   (attempt counters, failure signatures, per-bot round counters) in
   `.context/babysit-<parent>.json` — run every babysit for a given stack
   from the **same workspace**, or the caps reset and the per-bot round cap
-  loses its memory. Pick one (e.g. the skeleton's) and stick with it.
+  loses its memory. Pick one and stick with it — for a `/feature-goal` stack
+  that is its pipeline workspace; for hand-run stacks, e.g. the skeleton's.
 
 ## Cloud dispatch — the full pipeline's default after planning
 
 With `routing.dispatch` = `cloud` (the default), `/feature-goal` keeps
-planning (grill → PRD → slices) in your session and then creates the
-workspace-per-slice layout above **remotely** (opt-in `local` keeps it in
-your worktree — `feature-goal/references/local-loop.md`): the Conductor MCP's
-`create_workspace` makes one isolated cloud workspace per slice, a
-**bootstrap session** installs the plugin in the fresh sandbox, then a
-second session runs `/work-slice <slice-id>` — so slices keep running while
-the user is away. The durable dispatch marker is a `## Cloud dispatch`
-comment on the slice ticket (workspace deep link, both session ids,
-bootstrap status); it is the
-cross-machine double-dispatch guard, and a slice carrying it is cloud-owned —
-resume or nudge that session, never implement it elsewhere. In cloud mode
-the babysit home is the **skeleton slice's cloud workspace**, and the
-held-branch hazard applies to your local checkout too: the cloud workspaces
-hold the stack's branches.
+planning (grill → PRD → slices) in your session — local, or a cloud workspace
+the grilling session was handed off to — and then runs the stack as a
+**relay of fresh sessions in one pipeline workspace** (opt-in `local` keeps
+it in your worktree — `feature-goal/references/local-loop.md`): the workspace
+is created via the Conductor MCP (`create_workspace`, then a **bootstrap
+session** installs the plugin + `gh-stack` in the fresh sandbox) or is simply
+the handed-off one; then every PR gets its **own session** (`create_session`
+from a local session, `/conductor/bin/conductor session create` from inside
+the sandbox) that works one slice to a linked draft PR, starts the next
+session and ends — no session outlives one PR, so no agent's context fills
+up. The last PR session starts the babysit session. The durable marker is a
+`## Cloud dispatch` comment on the slice ticket (workspace deep link, the
+session that worked it, docs branch); a slice carrying it is relay-owned —
+resume the relay, never implement it elsewhere. All stack branches live in
+the pipeline workspace (so `gh stack` has local tracking and babysit has its
+home there), and the held-branch hazard applies to your local checkout: that
+workspace holds the stack's branches.
 
 The standalone commands (`/work-issue`, `/solve-ready-tickets`,
 `/daily-ticket-manager`) are venue-neutral by design — the user starts them
@@ -144,8 +150,9 @@ Consequences:
   a workspace (bootstrap scripts wouldn't run; the suite's assumptions break).
 - Routing labels are honoured here exactly as in work-slice: a labelled slice
   goes to a workspace running that agent, never "just this once" elsewhere.
-- One babysit home per stack; one workspace per slice; one agent per
-  workspace at a time.
+- One babysit home per stack; one workspace per slice for hand-run
+  work-slice (one pipeline workspace, one session per PR, for
+  `/feature-goal`); one agent per workspace at a time.
 
 ## Workflow Boundaries
 
@@ -161,7 +168,7 @@ Consequences:
 - About to run `/babysit-stack` for a stack from a new workspace — stop; use the stack's one babysit home or the caps and per-bot round counters reset.
 - About to `gh stack sync --prune` while sibling branches are checked out in other workspaces — stop; it deletes branches under live worktrees; plain `--remote origin` sync only.
 - About to check out or fix a branch held by another workspace — stop; git refuses; fix it in the owning workspace or hand it to that workspace's agent.
-- About to reuse a slice's workspace for the next slice — stop; start a fresh workspace per slice.
+- About to reuse a slice's workspace for the next slice when running work-slice by hand — stop; start a fresh workspace per slice (only `/feature-goal`'s pipeline workspace hosts a whole stack, one fresh session per PR).
 - About to re-`init` an engine loop because the finished ledger lives in another workspace — stop; one engine run per PR, ever.
 - About to rename a workspace directory or commit `.context/` — stop; paths are load-bearing and `.context/` stays in `.git/info/exclude`.
 
@@ -169,7 +176,7 @@ Consequences:
 
 Before reporting done:
 
-- [ ] One workspace per slice — none planned to host two slices, or two agents at once
+- [ ] Hand-run: one workspace per slice — none planned to host two slices, or two agents at once. `/feature-goal`: one pipeline workspace, sessions strictly sequential, one per PR
 - [ ] Every labelled slice is matched to a workspace running that agent; unlabelled slices marked any-agent
 - [ ] Only file-disjoint skeleton deltas run in parallel; each chained slice waits for its predecessor's push
 - [ ] Exactly one babysit home named per stack

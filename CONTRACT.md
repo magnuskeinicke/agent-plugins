@@ -159,8 +159,8 @@ during the Playwright verify rounds on UI slices. The contract:
 | `routing.labelPrefix` | string | `''` → routing disabled | tracker-label prefix for reserving a slice to an agent (`agent:` → `agent:claude`) |
 | `routing.frontendAgent` | string | `''` → no stamping | agent name `magnus:to-issues` stamps on frontend-dominant slices (paths judged by `areaPaths.frontend`) |
 | `routing.delegate` | agent → command template | `{}` → report/skip, never delegate | headless invocation per agent, e.g. `{"claude": "claude -p \"<prompt>\" --permission-mode acceptEdits", "codex": "codex exec \"<prompt>\""}` — local-mode machinery |
-| `routing.dispatch` | string | `'cloud'` | where `magnus:feature-goal` runs everything after planning (slice loop + babysit): `cloud` → one Conductor cloud workspace per slice via the Conductor MCP — a **fresh agent per PR** — and babysit in the skeleton's workspace (falls back to `local` when the MCP is unreachable); `local` (opt-in) → the sequential single-worktree loop, one fresh subagent per slice |
-| `routing.cloudModels` | agent → `{model, effort}` | `{"claude": {"model": "opus-5-1m", "effort": "xhigh"}, "codex": {"model": "gpt-5.6-sol", "effort": "xhigh"}}` | Conductor model + effort `magnus:feature-goal` passes on every cloud session it creates (`create_workspace` and `create_session`), keyed by the workspace's agent; an agent key set to `{}` → Conductor's own default for that agent. A host's per-agent object replaces the default one wholesale. Implementer-side only — reviewer subagents use the roster files' own pins |
+| `routing.dispatch` | string | `'cloud'` | where `magnus:feature-goal` runs everything after planning (slice loop + babysit): `cloud` → **one** Conductor cloud pipeline workspace for the stack and a **fresh session per PR** (a relay: each session works one slice to a linked draft PR, starts the next session and ends; the last starts the babysit session), created via the Conductor MCP or the `conductor` CLI (falls back to `local` when neither is reachable); `local` (opt-in) → the sequential single-worktree loop, one fresh subagent per slice |
+| `routing.cloudModels` | agent → `{model, effort}` | `{"claude": {"model": "opus-5-1m", "effort": "xhigh"}, "codex": {"model": "gpt-5.6-sol", "effort": "xhigh"}}` | Conductor model + effort `magnus:feature-goal` passes on every cloud session it creates (`create_workspace` and every relay `create_session`), keyed by the session's agent; an agent key set to `{}` → Conductor's own default for that agent. A host's per-agent object replaces the default one wholesale. Implementer-side only — reviewer subagents use the roster files' own pins |
 | `routing.codexModelAliases` | alias → codex model | `{"sonnet": "gpt-5.6-terra", "opus": "gpt-5.6-sol"}` | roster files pin reviewer models with Claude alias names; a Codex runtime maps each task's emitted alias through this table for its `codex exec` children (the task's `effort` passes through unchanged). Unmapped alias → the child runs on the session model, disclosed once |
 
 Different agents have different strengths (e.g. Claude at frontend). With
@@ -174,18 +174,24 @@ only** — never per-step or per-file. The suite's durable markers (checkpoint
 files, ledger, PR state) are what make a slice resumable by any agent.
 
 `routing.dispatch` decides the venue, not the agent: by default (`cloud`)
-`magnus:feature-goal` leaves the machine once planning is done — one Conductor
-**cloud** workspace per slice (Conductor MCP `create_workspace`), the
-`<AGENT:>` label picking that workspace's agent, and babysit running in the
-skeleton slice's workspace. Opting into `local` runs the sequential
-single-worktree loop with a fresh subagent per slice and consults
-`routing.delegate` for slices reserved for another agent (no delegate → it
-works the slice itself and discloses that on the PR — the pipeline never waits
-on a human after the grill).
-Each cloud workspace self-bootstraps: its first session installs this plugin
-in the fresh sandbox, then a second session runs `/work-slice` (skills load
-only at session start). The host repo's shared Conductor settings are never
-touched, so the plugin stays personal to the dispatching user.
+`magnus:feature-goal` leaves the planning session once planning is done —
+**one** Conductor cloud pipeline workspace for the stack (Conductor MCP
+`create_workspace`, or the workspace the grilling session was handed off to),
+then a **relay of fresh sessions**: each session works exactly one slice to a
+stacked draft PR (`gh stack` branch on the predecessor, PR by the repo's PR
+skill, `gh stack link` by number — one linear GitHub stack in stack order),
+starts the next session (`create_session` / `conductor session create`, the
+`<AGENT:>` label picking that session's agent) and ends; the last PR session
+starts the babysit session in the same workspace. No session ever outlives
+one PR. Opting into `local` runs the sequential single-worktree loop with a
+fresh subagent per slice and consults `routing.delegate` for slices reserved
+for another agent (no delegate → it works the slice itself and discloses that
+on the PR — the pipeline never waits on a human after the grill).
+The pipeline workspace bootstraps once: its first session installs this
+plugin and `gh-stack` in the fresh sandbox (skills load only at session
+start), then the relay sessions run `/feature-goal <ISSUE>` and re-detect the
+stage. The host repo's shared Conductor settings are never touched, so the
+plugin stays personal to the dispatching user.
 Only `feature-goal` dispatches to the cloud; the standalone commands (`work-issue`,
 `solve-ready-tickets`, `daily-ticket-manager`) are venue-neutral and run
 wherever the user starts them.
