@@ -90,12 +90,13 @@ Two phases: a one-time setup, then the daily pipeline.
 
 ### Daily workflow
 
-The full pipeline is one command: **`/magnus:feature-goal <parent issue>`** — a re-entrant stage
+The full pipeline is one command: **`/magnus:feature-goal <feature issue>`** — a re-entrant stage
 machine (run it again to resume) that chains:
 
 1. `/grill-with-docs` — grill the plan until shared understanding
-2. `/to-prd` — write the PRD into the parent ticket
-3. `/to-issues` — slice it into stacked, agent-ready sub-issues
+2. `/to-prd` — write the PRD as a dedicated `PRD: …` sub-ticket of the feature ticket (the
+   human's ticket stays clean — PM, designers and QA read it)
+3. `/to-issues` — slice the PRD into stacked, agent-ready sub-issues of the PRD ticket
 4. `/work-slice` per slice — **in the cloud by default** (`routing.dispatch: cloud`): one
    Conductor cloud **pipeline workspace** for the stack and a **fresh session per PR** — a
    relay: each session works one slice, opens its stacked draft PR, **babysits it to GOAL MET**
@@ -114,7 +115,7 @@ machine (run it again to resume) that chains:
    verdict: CI green, then Copilot review rounds until satisfied, then CodeRabbit
    rounds (summoned by `@coderabbitai review`) until satisfied, every thread resolved. Bot
    reviews happen on GitHub only — no review CLI
-6. QA handoff — one `## QA handoff` comment on the parent ticket for QA (user-terms steps +
+6. QA handoff — one `## QA handoff` comment on the feature ticket for QA (user-terms steps +
    one visual artifact per group of criteria, no dev material — see
    `skills/work-slice/references/qa-handoff.md`); slice tickets stay internal, standalone tickets
    get the same single comment from `/work-issue` / `/solve-ready-tickets`

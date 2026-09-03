@@ -28,7 +28,7 @@ work-slice verbatim.
 
 1. **Select + claim** (work-slice Step 1) — pick the `<NEXT>` carrier
    (fallback: earliest slice in stack order whose predecessor has an open or
-   merged PR and that is not done / in progress), fetch slice + parent PRD +
+   merged PR and that is not done / in progress), fetch slice + PRD ticket +
    Skeleton-map comment, clear `<NEXT>` (additive label write), set status
    **`<IN-PROGRESS>`**. A `<HITL>` label is **not a gate**: note the decision
    text — the subagent gets it as an assumption to make and record.
@@ -60,8 +60,8 @@ work-slice verbatim.
    `BRANCH_READY` (full OIDs).
 3. **Spawn the slice subagent** — one fresh writer, strongest model, prompt:
 
-   > Run the `magnus:work-slice` skill for slice `<slice-id>` (parent
-   > `<ISSUE>`), **starting at Step 3**. Steps 1–2 are done: the slice is
+   > Run the `magnus:work-slice` skill for slice `<slice-id>` (PRD ticket
+   > `<PRD-ISSUE>`, feature ticket `<ISSUE>`), **starting at Step 3**. Steps 1–2 are done: the slice is
    > claimed (status `<IN-PROGRESS>`, `<NEXT>` cleared) and branch
    > `<stack-name>` is checked out via `gh stack`, based on
    > `<predecessor-branch | BASE>` @ `<oid>`, checkpoint `BRANCH_READY`. Do
@@ -100,7 +100,7 @@ commands, each PR simply targets `<BASE>` and nothing is linked.
 
 ## BABYSIT in local mode
 
-Run **`/babysit-stack <ISSUE>`** in this worktree — the stack-wide sweep over
+Run **`/babysit-stack <PRD-ISSUE>`** in this worktree — the stack-wide sweep over
 PRs that were each already babysat to GOAL MET on their own. It runs to its
 terminal verdict here (it waits for CI and bot rounds itself); handle GOAL
 MET / NOT MET exactly as SKILL.md's BABYSIT stage describes.

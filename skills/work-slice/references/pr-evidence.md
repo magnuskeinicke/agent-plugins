@@ -177,7 +177,7 @@ git worktree remove --force "$tmp"
 ```
 
 Publish only `.png` / `.gif` / small `.webm` plus `media.json` from `media/` —
-the manifest is what lets `/feature-goal` compose the parent's QA handoff from
+the manifest is what lets `/feature-goal` compose the feature ticket's QA handoff from
 the stack later (`qa-handoff.md`). Never the per-AC QA shots (those go to the
 ticket), never a spec, never anything outside `media/`. Re-publishing after a recapture is a new commit on the same branch
 under the same `pr/<n>/`; update the URLs to the new sha.

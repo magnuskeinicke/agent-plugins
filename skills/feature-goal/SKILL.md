@@ -15,7 +15,7 @@ description: >
   I say "run the feature pipeline", "take this ticket to a green stack",
   "resume the feature pipeline", "/feature-goal", or after a grill when I want
   the feature driven to green, stacked PRs.
-argument-hint: "[parent issue id] [local]"
+argument-hint: "[feature issue id | PRD issue id] [local]"
 ---
 
 # Feature Goal
@@ -58,7 +58,8 @@ once, in your first message.
 
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
-| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123` for GitHub Issues) |
+| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) — the **feature ticket**, the human's | the tracker's own id form (`#123` for GitHub Issues) |
+| `<PRD-ISSUE>` | derived — the sub-issue of `<ISSUE>` titled `PRD: …`; its description is the PRD, every slice hangs off it | none → stage GRILL / PRD creates it |
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
 | `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<IN-PROGRESS>` | `tracker.statuses.inProgress` | leave the status untouched |
@@ -73,6 +74,17 @@ once, in your first message.
 | `<AGENT:>` | `routing.labelPrefix` | no agent routing — this runtime's agent works every slice |
 | `<DISPATCH>` | `routing.dispatch` (`cloud` \| `local`) | `cloud` — one pipeline workspace, a fresh session per PR |
 | `<CLOUD-MODEL>` | `routing.cloudModels` — `{model, effort}` per session agent | claude → `opus-5-1m`/`xhigh`, codex → `gpt-5.6-sol`/`xhigh`; agent key `{}` → omit both, Conductor's default |
+
+**Ticket tree** (`../work-slice/references/qa-handoff.md`): the **feature
+ticket** `<ISSUE>` is the human's — PM, designers and QA read it; the suite
+writes nothing on it but labels and, at the end, one `## QA handoff`
+comment. `/to-prd` creates the **PRD ticket** `<PRD-ISSUE>` under it
+(`PRD: <feature title>`, description = the PRD, dev-owned: implementation
+deltas live there). `/to-issues` hangs every **slice** off the PRD ticket.
+Given a `PRD:` ticket as the argument, `<ISSUE>` is its parent; given the
+feature ticket, `<PRD-ISSUE>` is its `PRD:` sub-issue. Legacy pipelines
+(before 2026-09-03) carried the PRD as a `# PRD` comment on the feature ticket
+with slices directly beneath it — for those, treat the feature ticket as both.
 
 Also read the prose docs the config points at when they exist:
 `tracker.docPath`, `labels.docPath`, and `docs/agents/README.md`.
@@ -120,7 +132,8 @@ wrote:
 ## Workflow State
 - Stage: GRILL/PRD | SLICE-SPLIT | SLICE-LOOP | BABYSIT | QA-HANDOFF | DONE
 - Dispatch: cloud | local
-- Parent: PROJ-1200
+- Feature ticket: PROJ-1200
+- PRD ticket: (none | PROJ-1201)
 - Docs branch: <pushed planning-docs branch>
 - Pipeline workspace: (none | <workspace deep link> / <workspace id>)
 - Slice cursor: PROJ-1234 (03 of 05) | (none)
@@ -138,12 +151,13 @@ below always wins**.
 ## Stage detection — run this at every (re)entry
 
 Detect the stage from observable state, never from conversation memory alone.
-With the parent issue id `<ISSUE>` (from the argument or the conversation; if
-there is no parent ticket yet, that's stage 0/1):
+With the feature ticket id `<ISSUE>` (from the argument or the conversation —
+a `PRD:` id resolves to its parent; if there is no feature ticket yet, that's
+stage 0/1):
 
-1. **No parent ticket / no `# PRD` comment on it** → stage GRILL / PRD.
-2. **PRD comment exists, no sub-issues** → stage SLICE-SPLIT.
-3. **Sub-issues exist, at least one slice with neither an open nor a merged
+1. **No feature ticket / no `PRD:` sub-issue under it** → stage GRILL / PRD.
+2. **PRD ticket exists, no slice sub-issues under it** → stage SLICE-SPLIT.
+3. **Slices exist, at least one slice with neither an open nor a merged
    PR** → stage SLICE-LOOP. Check PRs with `gh pr list --state all` — a
    **merged** PR means that slice is done; never re-detect it as needing the
    slice loop. Within SLICE-LOOP the first thing owed is any **open PR not
@@ -153,9 +167,9 @@ there is no parent ticket yet, that's stage 0/1):
 4. **Every slice has an open or merged PR** → stage BABYSIT (merged slices
    impose no babysit work). An open PR still short of `babysit: GOAL MET` is
    handled by the stack-wide babysit here, not by another PR session.
-5. **Stack-wide `/babysit-stack` verdict = GOAL MET, parent has no
+5. **Stack-wide `/babysit-stack` verdict = GOAL MET, feature ticket has no
    `## QA handoff` comment** → stage QA-HANDOFF.
-6. **`## QA handoff` comment on the parent** → done; report and stop.
+6. **`## QA handoff` comment on the feature ticket** → done; report and stop.
 
 ### Which session am I? (cloud mode, stages SLICE-LOOP / BABYSIT)
 
@@ -199,16 +213,20 @@ standalone-capable skills with their own user checks and "run the next
 command" handoffs. Run as a stage of this skill, they operate in **pipeline
 mode**: no seam confirmation, no approval prompt, no next-command pointer —
 each decides from the grill transcript, records anything it had to assume
-(`## Assumptions` in the PRD comment / slice body), and returns control here.
-So: PRD comment posted → **commit the planning docs (see below) and run
-SLICE-SPLIT now**.
+(`## Assumptions` in the PRD / slice body), and returns control here. `/to-prd`
+creates the PRD ticket as a sub-issue of the feature ticket (or, with no seed
+ticket, the feature ticket first, then the PRD ticket) — the feature ticket's
+description and comments are never written. Record `<PRD-ISSUE>` in the
+checkpoint. So: PRD ticket posted → **commit the planning docs (see below) and
+run SLICE-SPLIT now**.
 
 ## Stage SLICE-SPLIT
 
-Run **`/to-issues`** on the parent, pipeline mode: it builds the code-layer
-map, gathers the Figma design context, splits into walking skeleton +
-behaviour deltas (≤1 novel decision each, small reviewable PRs), creates the
-sub-issues stacked via `blockedBy`, stamps `<NEXT>` on the skeleton — and
+Run **`/to-issues <PRD-ISSUE>`**, pipeline mode: it builds the code-layer
+map, gathers the Figma design context (PRD Design section + the feature
+ticket's links), splits into walking skeleton + behaviour deltas (≤1 novel
+decision each, small reviewable PRs), creates the slices as sub-issues **of the
+PRD ticket** stacked via `blockedBy`, stamps `<NEXT>` on the skeleton — and
 **skips its user quiz**: it self-reviews the breakdown against its own
 checklist and publishes. It stamps **no `<HITL>`** — a decision it cannot
 settle from the PRD becomes an `## Assumptions` entry in that slice's body.
@@ -350,9 +368,10 @@ the one verdict QA-HANDOFF keys on — usually short. The babysit session is
 the last relay leg: the final PR session starts it with `/feature-goal
 <ISSUE>` (a session outside the workspace that finds stage BABYSIT with no
 babysit session recorded starts it the same way). Inside the pipeline
-workspace at stage BABYSIT: run **`/babysit-stack <ISSUE>`** here, now, in
-this session — it is fresh, and this is its one job. Local mode runs
-`/babysit-stack <ISSUE>` in this worktree instead (reference).
+workspace at stage BABYSIT: run **`/babysit-stack <PRD-ISSUE>`** (the PRD
+ticket — its sub-issues are the slices) here, now, in this session — it is
+fresh, and this is its one job. Local mode runs `/babysit-stack <PRD-ISSUE>`
+in this worktree instead (reference).
 
 Babysit is a babysitting mode, not a pass: per PR, bottom → top, it gets CI
 green, runs `<BOT>` rounds until satisfied, then `<COMMENT-BOT>` rounds until
@@ -363,7 +382,8 @@ agents per its own rules. It returns with a terminal verdict:
 
 - **GOAL MET** → go to stage QA-HANDOFF below (in this session), then
   report the stack (PRs, verdict table, the assumptions recorded along the
-  way — those stay in the report and on the PRs, never on the parent), set
+  way — those stay in the report and on the PRs, never on the feature
+  ticket), set
   the checkpoint stage to DONE, and stop.
 - **NOT MET** → by construction nothing actionable is left: only
   `needs-human` threads, a stuck bot, or a capped fix signature remain. That
@@ -379,16 +399,17 @@ fresh babysit session (babysit is re-entrant); a second silent death is
 Blocked. Never start a second babysit session on an unchanged NOT MET state —
 it waited already; only a human changes what it would find.
 
-## Stage QA-HANDOFF — the parent ticket's one comment for QA
+## Stage QA-HANDOFF — the feature ticket's one comment for QA
 
-The parent ticket has two readers: the user + AI (grill, `# PRD`) and then
-**QA**, who has no code access. The suite writes exactly one thing for QA on
-it — a `## QA handoff` comment per
-`../work-slice/references/qa-handoff.md` — and nothing else: no assumptions,
-verification tables, provenance or dispatch markers (those live on the slice
-tickets and the PRs). Compose it in the session that read GOAL MET:
+The feature ticket `<ISSUE>` belongs to humans — PM, designers, and now
+**QA**, who has no code access. The suite writes exactly one thing on it —
+a `## QA handoff` comment per `../work-slice/references/qa-handoff.md` — and
+nothing else: no PRD, no assumptions, verification tables, provenance or
+dispatch markers (those live on the PRD ticket, the slice tickets and the
+PRs). Never post the handoff on the PRD ticket. Compose it in the session that
+read GOAL MET:
 
-1. **Criteria.** The parent's own `- [ ]` criteria verbatim when user-facing;
+1. **Criteria.** The feature ticket's own `- [ ]` criteria verbatim when user-facing;
    otherwise one user-facing criterion per PRD User Story the stack delivered
    (rewrite technical wording into what the user experiences).
 2. **Evidence.** Fetch the stack's media from `<MEDIA-BRANCH>`:
@@ -407,7 +428,7 @@ tickets and the PRs). Compose it in the session that read GOAL MET:
    (its `## QA evidence` on the slice ticket names it), in user terms.
 5. One `Engineering reference:` line with the stack's PR links, then post the
    comment (idempotent — update an existing `## QA handoff`). Checkpoint stage
-   DONE only after it is on the parent.
+   DONE only after it is on the feature ticket.
 
 Local mode does the same from this worktree. A session that died before
 publishing media leaves a criterion without evidence — write that down in the
@@ -463,7 +484,7 @@ handoff rather than substituting a Storybook or design image.
 - Label writes stay additive (Linear's `save_issue.labels` replaces the whole
   set); `<NEXT>` has exactly one carrier; never stamp `labels.agentReady`.
 - Re-entry safe: every invocation re-runs stage detection; never redo a stage
-  whose artifacts exist (PRD comment, sub-issues, dispatch markers, open PRs)
+  whose artifacts exist (PRD ticket, slice sub-issues, dispatch markers, open PRs)
   — repair forward. Durable markers always win over the checkpoint file.
 - **Persistence is re-invocation, never a stop-hook.** A run ends only at the
   grilling gate, baton passed, Blocked, or DONE — always with the resume
@@ -473,12 +494,13 @@ handoff rather than substituting a Storybook or design image.
 
 **This skill orchestrates the feature pipeline as a re-entrant stage machine with the grill as its only human gate — planning here, then a relay of one-PR sessions in one cloud workspace (each babysitting its own PR to GOAL MET before the next is cut), then a stack-wide babysit session — sequencing the constituent skills, never re-implementing them.**
 
-- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` and `/to-issues` in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–7 (link the PR, babysit it to GOAL MET, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict and post the QA handoff; from outside, check / resume the relay; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
-- **DOES NOT**: answer the grill for the human, ask the human anything after the grill, treat `<HITL>` as a stop, work more than one PR in a session, wait for a session it started, implement / fix / review / babysit code outside the pipeline workspace (cloud mode), own review-loop internals (the engine CLI does) or CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, or relocate the venue-neutral standalone commands (`/work-issue`, `/solve-ready-tickets`, `/daily-ticket-manager` run wherever the user starts them).
+- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` (PRD ticket under the feature ticket) and `/to-issues` (slices under the PRD ticket) in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–7 (link the PR, babysit it to GOAL MET, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict and post the QA handoff; from outside, check / resume the relay; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
+- **DOES NOT**: answer the grill for the human, ask the human anything after the grill, write anything but labels and the one `## QA handoff` on the feature ticket, treat `<HITL>` as a stop, work more than one PR in a session, wait for a session it started, implement / fix / review / babysit code outside the pipeline workspace (cloud mode), own review-loop internals (the engine CLI does) or CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, or relocate the venue-neutral standalone commands (`/work-issue`, `/solve-ready-tickets`, `/daily-ticket-manager` run wherever the user starts them).
 
 ## Red Flags — STOP
 
 - About to fabricate a PRD from a bare ticket title with no grilling session in the conversation — stop: run `/grill-with-docs` inline and grill the user for real; end only if they disengage.
+- About to post the PRD, a QA handoff's dev material, or any marker on the feature ticket — or the QA handoff on the PRD ticket — stop: feature ticket = humans (QA handoff only), PRD ticket = the PRD + deltas, slices = machinery.
 - About to ask the human to approve the PRD, the slice breakdown, the test seams, a PR, or "whether to continue" — stop: the grill was the gate; decide, record the assumption, proceed.
 - About to stop on a `<HITL>` slice or a "needs a human decision" line — stop: work it; the PR session makes and records the assumption.
 - About to end the invocation because `/to-prd` said "run `/to-issues`" or `/to-issues` said "run `/work-slice`" — stop: pipeline mode supersedes those; the only command a report ever hands the user is `/feature-goal <ISSUE>`.
@@ -496,15 +518,15 @@ handoff rather than substituting a Storybook or design image.
 - About to work a slice whose predecessor has no open/merged PR — stop: the stack is built bottom → top.
 - About to run `gh stack submit`, `gh stack link --open`, or `gh stack link` by branch name — stop: submit opens auto-titled PRs, `--open` un-drafts, a branch name can duplicate the PR skill's PR.
 - About to start another babysit session on an unchanged NOT MET state — stop: NOT MET is Blocked — report and end.
-- About to redo a stage whose artifacts exist (PRD comment, sub-issues, dispatch markers, open PRs) — stop: repair forward from stage detection.
+- About to redo a stage whose artifacts exist (PRD ticket, slice sub-issues, dispatch markers, open PRs) — stop: repair forward from stage detection.
 - About to dispatch with `CONTEXT.md`, `docs/adr/**`, or `docs/agents/**` uncommitted or unpushed — stop: commit and push; the docs branch is the relay's reference.
 
 ## Verification
 
 Before reporting done:
 
-- [ ] `.context/<ISSUE>/pipeline-state.md` rewritten to the current stage, dispatch mode, docs branch, pipeline workspace, slice cursor, relay session, resumes, assumptions, per-PR babysit verdicts, and the stack babysit verdict.
-- [ ] The reported stage matches live markers (`# PRD` comment, sub-issues, `## Cloud dispatch` comments, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
+- [ ] `.context/<ISSUE>/pipeline-state.md` rewritten to the current stage, dispatch mode, feature + PRD ticket ids, docs branch, pipeline workspace, slice cursor, relay session, resumes, assumptions, per-PR babysit verdicts, and the stack babysit verdict.
+- [ ] The reported stage matches live markers (`PRD:` sub-issue of the feature ticket, slice sub-issues of the PRD ticket, `## Cloud dispatch` comments, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
 - [ ] After the grill, the human was asked nothing: `/to-prd` and `/to-issues` ran in pipeline mode; every assumption made downstream is recorded on its ticket/PR and listed in the report.
 - [ ] Planning docs (`CONTEXT.md`, `docs/adr/**`, `docs/agents/**`) were committed **and pushed** before the relay started; `git status --porcelain` shows none left over; the docs branch is in the checkpoint and every dispatch comment.
 - [ ] Cloud mode: exactly one pipeline workspace for the stack; every worked slice's ticket carries exactly one `## Cloud dispatch` comment (workspace deep link, the session that worked it, docs branch); this session worked at most one PR and, if it did, started exactly one successor session before ending.
@@ -513,4 +535,4 @@ Before reporting done:
 - [ ] The stack-wide babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.
 - [ ] The run did not end by handing the user `/to-prd`, `/to-issues`, `/work-slice`, or `/babysit-stack`: the only next command a report ever names is `/feature-goal <ISSUE>`.
 - [ ] The report ends with the resume line: stage, blocking reason if any, and `/feature-goal <ISSUE>`.
-- [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the parent carries its one `## QA handoff` comment — user-terms criteria, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>`, no dev material — and nothing else suite-authored beyond `# PRD`.
+- [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the feature ticket carries its one `## QA handoff` comment — user-terms criteria, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>`, no dev material — and nothing else suite-authored on it; the PRD and its deltas sit on the PRD ticket.

@@ -43,7 +43,7 @@ Input: an issue id (or infer from conversation; nothing → ask).
 Fetch the issue from `<TRACKER>`. Classify — none of these stops the run or asks the user:
 
 1. **`<HITL>`** (or a "needs a human decision" line) → not a gate. Read the decision, pick the option most consistent with the ticket and the codebase, record it for the PR's `## Assumptions` comment (Step 5) — **not** on the ticket: a standalone ticket is QA-visible and gets only the `## QA handoff` comment (`../work-slice/references/qa-handoff.md`) — and proceed.
-2. **`<SKIP>`** (a pipeline ticket) → wrong tool, right invocation: a **slice** (has a PRD parent) → run **`/work-slice <id>`** now, in this invocation, and stop this skill; a **PRD parent** → run **`/feature-goal <id>`** now instead. Never run the lean loop on pipeline tickets, never send the user off to type the other command.
+2. **`<SKIP>`** (a pipeline ticket) → wrong tool, right invocation: a **slice** (its parent is a `PRD:` ticket) → run **`/work-slice <id>`** now, in this invocation, and stop this skill; a **PRD ticket** or a **feature ticket** with a `PRD:` sub-issue → run **`/feature-goal <id>`** now instead. Never run the lean loop on pipeline tickets, never send the user off to type the other command.
 3. **Leanness.** `<AGENT-READY>` is the ticket manager's verdict that the ticket is lean + low-risk. Without it, judge: lean = **at most one novel decision**, clear scope, no schema/contract redesign, one small reviewable PR. **Not lean → still proceed** (the user chose the lean loop), but say so once in the terminal and post a `## Leanness concern` PR comment naming what would have warranted the full pipeline (extra decisions taken, contract touched), so the reviewer knows where to look.
 
 ## Step 2 — Worktree preflight & claim
@@ -122,7 +122,7 @@ Run **`/babysit-stack <PR number>`**. It is a babysitting mode, not a pass: CI g
 
 - About to stop for a `<HITL>` label or ask the user a decision — stop stopping: decide, record it for the PR's `## Assumptions` comment, proceed.
 - About to post assumptions, acceptance criteria, a PASS/FAIL table, or any dev material on the ticket — stop: the ticket gets one `## QA handoff` comment; everything else is a PR comment.
-- Ticket carries `<SKIP>` — don't run the lean loop and don't bounce the user: run `/work-slice <id>` (slice) or `/feature-goal <id>` (parent) in this invocation.
+- Ticket carries `<SKIP>` — don't run the lean loop and don't bounce the user: run `/work-slice <id>` (slice) or `/feature-goal <id>` (PRD or feature ticket) in this invocation.
 - About to end because the ticket isn't lean — stop: proceed with a `## Leanness concern` PR comment; the user chose this loop.
 - About to end because CI or a bot review is pending, or to wait for it yourself — stop: `/babysit-stack` waits; a run ends only at GOAL MET or Blocked.
 - Worktree dirty, not a worktree, or the branch isn't virgin (`git rev-list --count <BASE>..HEAD` ≠ 0) — stop and tell the user.

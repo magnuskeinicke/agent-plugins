@@ -205,13 +205,17 @@ The tracker is documentation for the user + AI **and** the handoff surface for
 QA, who has no code access — never a dev log
 (`skills/work-slice/references/qa-handoff.md`):
 
-- **Parent / PRD ticket** — the `# PRD` comment (with its implementation
-  deltas) and, once the stack is GOAL MET, exactly one **`## QA handoff`**
-  comment: per acceptance criterion (grouped where one walk-through covers
-  several) the steps in user terms, the expected result, and one visual
-  artifact per group uploaded to the tracker. Nothing else
-  suite-authored.
-- **Slice sub-issues** — internal to the user + AI; the machinery writes what
+- **Feature ticket** — the human's ticket (PM, designers, QA): the suite
+  writes labels and, once the stack is GOAL MET, exactly one **`## QA
+  handoff`** comment: per acceptance criterion (grouped where one
+  walk-through covers several) the steps in user terms, the expected
+  result, and one visual artifact per group uploaded to the tracker.
+  Nothing else suite-authored — never the PRD.
+- **PRD ticket** — a `PRD: <feature title>` sub-issue of the feature ticket
+  created by `magnus:to-prd`; its description is the PRD, its
+  `## Implementation deltas` comment amends it; every slice is its
+  sub-issue. Dev-owned.
+- **Slice sub-issues** — children of the PRD ticket, internal to the user + AI; the machinery writes what
   it needs there (skeleton map, dispatch markers, assumptions, dev-form QA
   evidence).
 - **Standalone tickets** (`magnus:work-issue`, `magnus:solve-ready-tickets`) —

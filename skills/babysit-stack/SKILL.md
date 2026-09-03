@@ -11,7 +11,7 @@ description: >
   say "babysit the stack", "babysit this PR", "watch the PRs", "resolve the
   review comments", "get the stack green", "run copilot then coderabbit", or as
   the finish stage of /feature-goal, /work-slice and /work-issue.
-argument-hint: "[parent issue id | PR numbers…]"
+argument-hint: "[PRD issue id | feature issue id | PR numbers…]"
 ---
 
 # Babysit Stack
@@ -54,10 +54,13 @@ stack command.
 
 ## Step 0 — Discover the stack
 
-Input is a parent PRD ticket id (preferred) or explicit PR numbers.
+Input is the PRD ticket id (preferred — the `PRD: …` sub-issue whose children
+are the slices), the feature ticket id, or explicit PR numbers.
 
-- **Parent issue id** → list its sub-issues (stack order = the `/to-issues`
-  numbering, follow `blockedBy`), then find each slice's PR — search **all**
+- **Issue id** → if its sub-issues are a single `PRD:` ticket, you were given
+  the feature ticket: descend to that PRD ticket. Then list the PRD ticket's
+  sub-issues (stack order = the `/to-issues` numbering, follow `blockedBy`)
+  and find each slice's PR — search **all**
   states so a merged slice reads as done, not missing:
   `gh pr list --state all --search "<ISSUE>" --json number,headRefName,baseRefName,isDraft,state,url`.
 - **PR numbers** → fetch each the same way.
@@ -336,7 +339,7 @@ Fix commits must land on the *owning* PR's branch:
 ## Verdict (every run ends with this)
 
 ```md
-# Babysit — <parent issue id>
+# Babysit — <PRD issue id>
 | PR | Slice | CI | <BOT> | <COMMENT-BOT> | Unresolved threads | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | #123 | <slice-1 id> | green | satisfied (2 rounds) | satisfied (1 round) | 0 | — |

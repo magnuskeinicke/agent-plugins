@@ -5,7 +5,7 @@ description: Pick up the next-slice sub-issue from a PRD, implement it test-firs
 
 # Work Slice
 
-Drive **one** slice from a PRD to a stacked **draft PR**. The slices were produced by `/to-issues` as sub-issues of a parent PRD ticket, ordered into a stack. This skill picks the next one up, implements it test-first inside a bounded **targeted review ⇄ fix loop**, **opens a stacked draft PR automatically**, and then **babysits that PR** (Step 7 — `/babysit-stack`) until CI is green, the review bots are satisfied and every thread is resolved. **There is no human gate anywhere in this skill**: no confirmation before the PR, no stop on a HITL label, no stop on a routing label — the only stops are safety stops (dirty worktree, no committed diff, gut-check hard-stop) and `needs-human` escalations babysit cannot resolve. Run it once per slice; the next run stacks on the last.
+Drive **one** slice from a PRD to a stacked **draft PR**. The slices were produced by `/to-issues` as sub-issues of the **PRD ticket** (the `PRD: …` sub-issue of the human's feature ticket — its description is the PRD), ordered into a stack. This skill picks the next one up, implements it test-first inside a bounded **targeted review ⇄ fix loop**, **opens a stacked draft PR automatically**, and then **babysits that PR** (Step 7 — `/babysit-stack`) until CI is green, the review bots are satisfied and every thread is resolved. **There is no human gate anywhere in this skill**: no confirmation before the PR, no stop on a HITL label, no stop on a routing label — the only stops are safety stops (dirty worktree, no committed diff, gut-check hard-stop) and `needs-human` escalations babysit cannot resolve. Run it once per slice; the next run stacks on the last.
 
 ## Repo contract — resolve this first
 
@@ -17,7 +17,8 @@ say so once.
 
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
-| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123`) |
+| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) — the **feature ticket** (human-facing) | the tracker's own id form (`#123`) |
+| `<PRD-ISSUE>` | derived — the `PRD:`-titled sub-issue of `<ISSUE>`; parent of every slice, its description is the PRD | — |
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
 | `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<IN-PROGRESS>` | `tracker.statuses.inProgress` | leave the status untouched |
@@ -77,17 +78,17 @@ resume belongs to the CLI: `status` prints the phase and the pending step.
 
 **Preflight (before you claim anything):** confirm you're in a clean, dedicated worktree per Step 2. If you're not in a git worktree, or it has uncommitted changes, **STOP and tell the user** — do not claim the slice and do not create a worktree yourself.
 
-Input is a parent PRD ticket id, a specific slice id, or nothing.
+Input is a PRD ticket id (or the feature ticket's — descend to its `PRD:` sub-issue), a specific slice id, or nothing.
 
 - **Specific slice id given** → use it.
-- **Parent id given (or inferable from context)** → list its sub-issues and pick the slice carrying **`<NEXT>`** — the single work pointer that `/to-issues` (skeleton) or a previous `/work-slice` run placed on the slice that is up. That is the one to work. **Fallback** if no slice carries `<NEXT>` (e.g. it was cleared by hand): take the earliest slice in stack order that is **ready** (every predecessor has an open or merged PR — PR state, not the tracker's blocked flag; see Step 6) and **not-done, not-in-progress** (a `<HITL>` label does not exclude it — see below).
-- **Nothing** → ask for the parent id or slice id.
+- **PRD ticket id given (or inferable from context)** → list its sub-issues and pick the slice carrying **`<NEXT>`** — the single work pointer that `/to-issues` (skeleton) or a previous `/work-slice` run placed on the slice that is up. That is the one to work. **Fallback** if no slice carries `<NEXT>` (e.g. it was cleared by hand): take the earliest slice in stack order that is **ready** (every predecessor has an open or merged PR — PR state, not the tracker's blocked flag; see Step 6) and **not-done, not-in-progress** (a `<HITL>` label does not exclude it — see below).
+- **Nothing** → ask for the PRD ticket id or slice id.
 
-**A `<HITL>` label (or a "needs a human decision" line in the body) is not a gate.** Read the decision, pick the option most consistent with the parent PRD and the skeleton's published contract, and record it — one line under a `## Assumptions` comment on the slice ticket (idempotent: update, don't duplicate) and in the Step 5 PR comment. Then implement as if it were AFK. The human reads assumptions at PR review time; they never block a slice.
+**A `<HITL>` label (or a "needs a human decision" line in the body) is not a gate.** Read the decision, pick the option most consistent with the PRD and the skeleton's published contract, and record it — one line under a `## Assumptions` comment on the slice ticket (idempotent: update, don't duplicate) and in the Step 5 PR comment. Then implement as if it were AFK. The human reads assumptions at PR review time; they never block a slice.
 
 **Routing disclosure** (only when `<AGENT:>` is configured): if the chosen slice carries an `<AGENT:><name>` label naming an agent **other than the runtime you are running in** (Claude Code vs Codex — you know which you are), you still work it — the user or orchestrator invoking you here made that call — but say so once in the terminal and in the Step 5 PR comment: `routing label <AGENT:><name> not honoured: worked by <this runtime>`. A matching label, or no `<AGENT:>` label, changes nothing.
 
-Fetch the chosen slice AND its parent PRD (the PRD lives in the parent's `# PRD` comment — read it from there). Read, verbatim: the slice's **Kind** (skeleton vs delta), **Novel decision**, acceptance criteria, "Where to look" code-layer pointers, the **"Convention contract"** section (binding exemplars + must-use libs), "Design" Figma nodes/tokens, and "Stacked on" predecessor. For a **delta**, also read the ticket's **"Skeleton map" comment** (posted by the skeleton's `/work-slice` run — the actual files the skeleton created; the primary mirror). Read the parent PRD for the wider contract.
+Fetch the chosen slice AND the PRD ticket (the PRD is the PRD ticket's **description**; its `## Implementation deltas` comments amend it). Read, verbatim: the slice's **Kind** (skeleton vs delta), **Novel decision**, acceptance criteria, "Where to look" code-layer pointers, the **"Convention contract"** section (binding exemplars + must-use libs), "Design" Figma nodes/tokens, and "Stacked on" predecessor. For a **delta**, also read the ticket's **"Skeleton map" comment** (posted by the skeleton's `/work-slice` run — the actual files the skeleton created; the primary mirror). Read the PRD for the wider contract. The feature ticket (the PRD ticket's parent) is the human's — read it for framing and design links, never write to it.
 
 **Claim the slice.** Remove its `<NEXT>` label and set its status to **`<IN-PROGRESS>`** so it reads as actively worked and no parallel run grabs it. The pointer only moves on to the next slice after the draft PR is opened (Step 6). When removing/adding `<NEXT>`, write back the issue's full existing label set minus/plus only that label — never drop a type label, `<SKIP>`, or any product label (Linear's `save_issue.labels` replaces the whole set; see `labels.docPath`). Checkpoint: `CLAIMED`.
 
@@ -120,7 +121,7 @@ The slice's branch is **whatever Conductor checked out** (a `start-work` slug li
 
 ### Rename the branch to the stack name
 
-Derive `<project-slug>` once per stack: kebab-case the parent PRD's **project name** (e.g. project "Summary feature" → `summary-feature`). If the PRD has no project, fall back to a kebab-case of the parent PRD ticket's short title. The branch name is `<project-slug>/<NN>-<issue-id>` — the project-slug namespace prefix, the zero-padded stack number, then this slice's issue id lower-cased: `summary-feature/01-proj-1234` for the skeleton, `summary-feature/02-proj-1290` for the next in stack order, and so on. The `<project-slug>` segment is the shared namespace prefix that groups the stack's branches under one name (and lets you list them with `git ls-remote --heads origin '<project-slug>/*'`); `NN` keeps the stack readable in order; the id suffix ties each branch to its ticket. Rename in place:
+Derive `<project-slug>` once per stack: kebab-case the PRD ticket's **project name** (e.g. project "Summary feature" → `summary-feature`). If the PRD has no project, fall back to a kebab-case of the feature ticket's short title. The branch name is `<project-slug>/<NN>-<issue-id>` — the project-slug namespace prefix, the zero-padded stack number, then this slice's issue id lower-cased: `summary-feature/01-proj-1234` for the skeleton, `summary-feature/02-proj-1290` for the next in stack order, and so on. The `<project-slug>` segment is the shared namespace prefix that groups the stack's branches under one name (and lets you list them with `git ls-remote --heads origin '<project-slug>/*'`); `NN` keeps the stack readable in order; the id suffix ties each branch to its ticket. Rename in place:
 
 ```bash
 git branch -m "$(git rev-parse --abbrev-ref HEAD)" summary-feature/01-proj-1234
@@ -162,7 +163,7 @@ engine="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/engine/cli.mjs}"
 
 ### 3.0 Write the run contract
 
-`mkdir -p .context/<slice-id>` and write `.context/<slice-id>/contract.md` — the contract text every prompt in the loop (reviewers, validator, fixer, adjudicator) receives. Include, verbatim where the ticket has it: the slice id + title, its **Kind** with the matching guidance below, the acceptance criteria, the one **novel decision**, "Where to look" (for a delta, prepend the Skeleton map comment's file list — the primary mirror), the **Convention contract** (binding exemplars + must-use libs), the Figma node deep-links, the parent PRD's wider contract, and the commit rule (message starts with the slice id; never `git push`).
+`mkdir -p .context/<slice-id>` and write `.context/<slice-id>/contract.md` — the contract text every prompt in the loop (reviewers, validator, fixer, adjudicator) receives. Include, verbatim where the ticket has it: the slice id + title, its **Kind** with the matching guidance below, the acceptance criteria, the one **novel decision**, "Where to look" (for a delta, prepend the Skeleton map comment's file list — the primary mirror), the **Convention contract** (binding exemplars + must-use libs), the Figma node deep-links, the PRD's wider contract, and the commit rule (message starts with the slice id; never `git push`).
 
 - **Skeleton:** this is the stack's WALKING SKELETON — the full end-to-end path with the REAL contract (schema, types, API shape, UI shell, one happy-path behaviour, tests wired) and stubbed/minimal behaviour elsewhere. Every cross-layer decision lands here; downstream deltas mirror this code, so its shape IS the feature's convention. Clone the exemplar's shape; don't invent structure an exemplar settles.
 - **Delta:** a BEHAVIOUR DELTA on the walking skeleton — the skeleton (this feature's earlier slices, already on the base branch) is the primary pattern to mirror; sibling features are the fallback. Prefer APPENDING over modifying, introduce at most the ticket's one named novel decision, and **never alter the skeleton's published contract** (contract freeze — a needed contract change stops the slice and escalates).
@@ -274,7 +275,7 @@ Checkpoint: `VERIFIED`. Before Step 4, run the slice's tests + lint/typecheck gr
 - Any **consolidations** the reuse audit surfaced, and any **ratchet candidates**: a convention finding that showed up in 2+ rounds (or that you recognise from earlier slices) is a candidate for a lint rule / Nx module-boundary tag — name it so the human can move it from review into the tests gate.
 - The branch + its base (the stack position).
 
-**QA evidence → the slice ticket (when the Playwright loop ran).** Slice tickets are internal — the user and AI only (`references/qa-handoff.md`) — so this stays in dev form; the QA-facing `## QA handoff` on the **parent** is composed by `/feature-goal` after babysit, from the stack's published media. Upload the proof files (per-AC screenshots + video) to the **slice ticket** with `<TRACKER>`'s attachment flow (Linear: `prepare_attachment_upload` → PUT the file to the returned URL → `create_attachment_from_upload`), then post/update a ticket comment starting with `## QA evidence`: one row per acceptance criterion — PASS/FAIL + link to its uploaded screenshot (video linked at the bottom). When the `<FIDELITY>` check ran, append a `### Design fidelity` subsection — one row per deviation (severity, screen, description; blocking ones also appear as FAILed criteria above). Failed criteria stay in the table marked FAIL so QA sees exactly what broke. Idempotent: update an existing `## QA evidence` comment rather than adding a second.
+**QA evidence → the slice ticket (when the Playwright loop ran).** Slice tickets are internal — the user and AI only (`references/qa-handoff.md`) — so this stays in dev form; the QA-facing `## QA handoff` on the **feature ticket** is composed by `/feature-goal` after babysit, from the stack's published media. Upload the proof files (per-AC screenshots + video) to the **slice ticket** with `<TRACKER>`'s attachment flow (Linear: `prepare_attachment_upload` → PUT the file to the returned URL → `create_attachment_from_upload`), then post/update a ticket comment starting with `## QA evidence`: one row per acceptance criterion — PASS/FAIL + link to its uploaded screenshot (video linked at the bottom). When the `<FIDELITY>` check ran, append a `### Design fidelity` subsection — one row per deviation (severity, screen, description; blocking ones also appear as FAILed criteria above). Failed criteria stay in the table marked FAIL so QA sees exactly what broke. Idempotent: update an existing `## QA evidence` comment rather than adding a second.
 
 **Consolidation follow-ups → the tracker (when the loop surfaced `consolidations`):** file each as its own ticket on the team (same create flow as `tracker.docPath`): title from the consolidation, body = the detail + targetLib + a link back to this slice's PR, labels = the chore type label + `<SKIP>`. This is the strict boundary that keeps the slice diff small — generalisation happens in its own reviewed change, never by scope-creeping this slice. List the created ticket ids in the terminal summary and in the Step 5 PR comment. Checkpoint: `EVIDENCE_POSTED`.
 
@@ -338,7 +339,7 @@ The PR is open, so this slice is "ready for PR" — hand off:
 
 **If this slice was the skeleton**, first post a **"Skeleton map" comment on every downstream delta ticket**: the list of files the skeleton created/changed, one line each (`path — what it is / which layer`), taken from the final implement/fix result's `changedFiles` + provenance. This refreshes the deltas' "Where to look" with the feature's *actual* shape — a fresh delta agent mirrors these files, not a guess made before the skeleton existed. (Comments only — never edit sibling ticket bodies.) Idempotent: update an existing `Skeleton map` comment rather than adding a second.
 
-**PRD sync-back.** If implementation deviated from the PRD — a disputed finding upheld, a contract clarified, an AC amended in flight — append one line per deviation to an `## Implementation deltas` section of the **`# PRD` comment on the parent ticket** (add the section if missing; extend it, never overwrite the comment's PRD body, and never touch the ticket description — the same additive rule `/to-prd` follows). This keeps `/to-issues` re-runs and `/compliance-check` reading a truthful spec. No deviations → write nothing.
+**PRD sync-back.** If implementation deviated from the PRD — a disputed finding upheld, a contract clarified, an AC amended in flight — append one line per deviation to an **`## Implementation deltas` comment on the PRD ticket** (one comment, idempotent: extend it, never add a second; never rewrite the PRD description itself, and never write on the feature ticket). This keeps `/to-issues` re-runs and `/compliance-check` reading a truthful spec. No deviations → write nothing.
 
 Then advance the work pointer:
 
@@ -346,7 +347,7 @@ Then advance the work pointer:
 - **If there is a next slice** → add **`<NEXT>`** to it — `<HITL>`-labelled or not (HITL is a decision the next run makes and records, not a reason to hold the pointer). That is the signal the next `/work-slice` run reads to pick it up. Only ever one slice carries `<NEXT>`.
 - **If there is no next slice** → do **not** stamp `<NEXT>`; say the stack is complete.
 
-Name the slice that now carries `<NEXT>` (the next `/work-slice <parent-id>` run stacks it on this branch). Checkpoint: `HANDED_OFF`. Then — unless an orchestrator told you to stop here — go straight into Step 7.
+Name the slice that now carries `<NEXT>` (the next `/work-slice <PRD-ISSUE>` run stacks it on this branch). Checkpoint: `HANDED_OFF`. Then — unless an orchestrator told you to stop here — go straight into Step 7.
 
 ## Step 7 — Babysit the PR (no handoff to the human)
 
@@ -378,7 +379,7 @@ The draft PR is the review surface, and this skill stays with it until it is in 
 - TDD discipline is carried in the implement/fix prompts (red-green per criterion); loop agents don't load the `tdd` skill directly.
 - **Checkpoint every stage boundary** (`## Workflow State`, full OIDs). On re-invocation resume from it — but durable markers (branch, ledger, PR state) always win over the checkpoint file.
 - Don't apply `labels.agentReady` to anything — this skill speaks `<NEXT>`, never the autonomous-loop trigger.
-- Don't modify the parent PRD ticket's description or sibling slices' bodies. The only writes beyond this slice's own ticket: moving the `<NEXT>` pointer, posting/updating the "Skeleton map" comment on downstream deltas, and appending to the `## Implementation deltas` section of the parent's `# PRD` comment (Step 6).
+- Don't modify the PRD ticket's description, the feature ticket (anything on it), or sibling slices' bodies. The only writes beyond this slice's own ticket: moving the `<NEXT>` pointer, posting/updating the "Skeleton map" comment on downstream deltas, and extending the `## Implementation deltas` comment on the PRD ticket (Step 6).
 - **Conventions are binding, not advisory:** exemplar mirroring per the slice's Convention contract; every added file carries a provenance row (`mirroredFrom` or a declared `[deviation: reason]`) — silent deviation is a blocking finding; no new helper without a `<SRC>` search.
 - **Contract freeze:** a delta never alters the skeleton's published contract (schema/types/API shape). A needed contract change stops the slice and escalates — the stack gets restructured, not quietly edited.
 - **Consolidation never widens a slice:** in-slice extraction only within this slice's own new code + at most one existing call site; everything wider becomes a filed follow-up ticket (Step 4), linked from the PR comment (Step 5).
@@ -419,7 +420,7 @@ Before reporting done:
 - [ ] `gh pr view <n> --json baseRefName,isDraft` shows the predecessor's branch (`<BASE>` for the skeleton) and `isDraft: true`.
 - [ ] The `## Convention provenance` (+ `## Assumptions`, + `## Review ledger`, + consolidation links) landed as a PR **comment**, not a body edit.
 - [ ] The PR body carries `## Verification` (every row backed by `evidence/verification.jsonl`) and `## Visual verification` (scenes published to `<MEDIA-BRANCH>` by sha, or the one-line internal-only / uncapturable form) — inserted with a single body write, before any bot request.
-- [ ] User-facing slice: `## QA evidence` comment on the **slice** ticket — one PASS/FAIL row + uploaded screenshot per acceptance criterion; nothing suite-authored was written on the parent ticket (its `## QA handoff` is `/feature-goal`'s).
+- [ ] User-facing slice: `## QA evidence` comment on the **slice** ticket — one PASS/FAIL row + uploaded screenshot per acceptance criterion; nothing suite-authored was written on the PRD ticket beyond `## Implementation deltas`, and nothing at all on the feature ticket (its `## QA handoff` is `/feature-goal`'s).
 - [ ] User-facing slice: `evidence/media/` holds the fewest scenes that prove the change (video for behaviour, still for appearance, none duplicated), each listing the criteria it covers in `media.json`, published with the media.
 - [ ] Skeleton slice: "Skeleton map" comment posted/updated on every downstream delta ticket.
 - [ ] Exactly one slice carries `<NEXT>` — or the report says the stack is complete.

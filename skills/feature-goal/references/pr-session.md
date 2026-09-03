@@ -18,8 +18,10 @@ human).
   `gh extension list | grep -q gh-stack || gh extension install github/gh-stack`,
   `git config rerere.enabled true`, `git config remote.pushDefault origin`.
 - Read `.context/<ISSUE>/pipeline-state.md` (the previous session's
-  checkpoint — same workspace, so it is here) and the parent's `# PRD`
-  comment. Planning docs are on the docs branch named there; read them from
+  checkpoint — same workspace, so it is here) and the PRD ticket's
+  description (`<PRD-ISSUE>`, the `PRD:` sub-issue of the feature ticket —
+  its `## Implementation deltas` comments amend it). Never write on the
+  feature ticket. Planning docs are on the docs branch named there; read them from
   `origin/<docs-branch>` (`git show origin/<docs-branch>:CONTEXT.md`), never
   merge that branch into a stack branch.
 
@@ -99,7 +101,7 @@ consolidation tickets, then Step 5 with these readings:
   the predecessor's branch and `true`.
 - **5.4** — the provenance / assumptions / ledger PR comment as written.
 
-Then Step 6 (advance `<NEXT>`, skeleton map, parent deltas) to checkpoint
+Then Step 6 (advance `<NEXT>`, skeleton map, PRD-ticket deltas) to checkpoint
 `HANDED_OFF`, and go straight into §3b.
 
 Safety stops are Blocked, not a reason to improvise: no committed diff,
