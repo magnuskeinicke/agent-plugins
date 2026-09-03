@@ -2,8 +2,8 @@
 
 Every PR the suite opens carries its evidence **in its description**, so a
 reviewer can judge what was actually run and actually seen without pulling the
-branch. Shared by `/work-slice`, `/work-issue`, `/solve-ready-tickets`,
-`/split-pr`; refreshed by `/iterate-pr` and `/babysit-stack` when they push.
+branch. Shared by `/work-slice`, `/work-issue` (including the runs
+`/solve-ready-tickets` dispatches) and `/split-pr`; refreshed by `/iterate-pr` and `/babysit-stack` when they push.
 
 ## The PR body is the suite's only voice on the PR
 

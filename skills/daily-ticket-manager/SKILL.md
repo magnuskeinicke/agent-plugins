@@ -126,8 +126,8 @@ For each in-scope ticket, read the title and full description and decide two thi
 goes in the report, and the report is the only place it goes.
 
 **Read the ticket's comments first.** A ticket back in `<READY>`
-with **no `<RISK:>` label** has usually been bounced back by `solve-ready-tickets` after the autonomous
-solver *declined* it — look for a comment starting with `## Autonomous solve — declined`. That comment
+with **no `<RISK:>` label** has usually been bounced back by `solve-ready-tickets`, whose pre-dispatch
+triage *declined* it — look for a comment starting with `## Autonomous solve — declined`. That comment
 is new triage information the original classification didn't have: the solver dug into the work and
 found it bigger / more ambiguous / higher-blast-radius than `<AGENT-READY>` claimed. **Factor it into both
 axes**, and treat it as a hard signal for routing — see the re-triage rule in 3b. (Ordinary tickets with
@@ -345,7 +345,7 @@ deliver it somewhere I read.
 **This skill triages my `<READY>` queue — it classifies and records, nothing more.**
 
 - **DOES**: resolve the repo contract, fetch my `<READY>` tickets, read any prior solver decline note, classify risk + routing, print the triage report; on `apply`, create missing managed labels and fill label gaps
-- **DOES NOT**: write any comment on any ticket, implement tickets (that's the agent loop via `solve-ready-tickets`), apply `<TYPE:>*` labels (owned by `to-prd` / `to-issues`), change state/assignee/title/description/estimate, create or close tickets, or touch `<SKIP>` or non-`<READY>` tickets
+- **DOES NOT**: write any comment on any ticket, implement tickets (that's `work-issue`, dispatched over the queue by `solve-ready-tickets`), apply `<TYPE:>*` labels (owned by `to-prd` / `to-issues`), change state/assignee/title/description/estimate, create or close tickets, or touch `<SKIP>` or non-`<READY>` tickets
 
 ## Red Flags — STOP
 

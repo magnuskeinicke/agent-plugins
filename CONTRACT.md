@@ -205,9 +205,13 @@ plugin and `gh-stack` in the fresh sandbox (skills load only at session
 start), then the relay sessions run `/feature-goal <ISSUE>` and re-detect the
 stage. The host repo's shared Conductor settings are never touched, so the
 plugin stays personal to the dispatching user.
-Only `feature-goal` dispatches to the cloud; the standalone commands (`work-issue`,
-`solve-ready-tickets`, `daily-ticket-manager`) are venue-neutral and run
-wherever the user starts them.
+`solve-ready-tickets` is the other cloud dispatcher, fanning **out** rather than
+relaying along: one workspace per `agentReady` ticket, named `<ISSUE> <slug>`
+(the name is the ownership marker — there is no dispatch comment on a
+human-facing ticket), bootstrap session, then one session whose entire prompt is
+`/work-issue <ISSUE>`. It dispatches and ends; a re-run sweeps those workspaces.
+`work-issue` and `daily-ticket-manager` stay venue-neutral and run wherever the
+user starts them.
 
 ### Tracker audiences
 
@@ -230,14 +234,15 @@ QA, who has no code access — never a dev log
 - **Slice sub-issues** — children of the PRD ticket, internal to the user + AI; the machinery writes what
   it needs there (skeleton map, dispatch markers, assumptions, dev-form QA
   evidence).
-- **Standalone tickets** (`magnus:work-issue`, `magnus:solve-ready-tickets`) —
-  QA-visible: the same single `## QA handoff`, written after the PR is babysat
-  green (`magnus:solve-ready-tickets` never babysits, so it writes nothing and
-  reports the handoff as owed). The one exception to the single-comment rule is
-  the solver's three-line decline note, which `magnus:daily-ticket-manager`
-  re-triages on. `magnus:daily-ticket-manager` itself writes labels only.
-  Assumptions, leanness concerns, verdicts, provenance, verification and
-  consolidation lists never touch the tracker.
+- **Standalone tickets** (`magnus:work-issue`, and whatever
+  `magnus:solve-ready-tickets` dispatches into a cloud workspace) — QA-visible:
+  the same single `## QA handoff`, written by the `work-issue` run after it has
+  babysat its own PR to GOAL MET. The one exception to the single-comment rule is
+  the dispatcher's three-line decline note on a ticket it refused to dispatch,
+  which `magnus:daily-ticket-manager` re-triages on. The dispatcher writes
+  nothing else on a ticket and never claims one; `magnus:daily-ticket-manager`
+  writes labels only. Assumptions, leanness concerns, verdicts, provenance,
+  verification and consolidation lists never touch the tracker.
 
 Evidence on the tracker is **visual only and embedded inline** (video for
 behaviour, a still for appearance, never both of the same thing, 1–3 per

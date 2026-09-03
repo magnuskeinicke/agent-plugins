@@ -12,7 +12,7 @@ When to use which:
 
 - **`/feature-goal`** — a feature that needs decisions surfaced: grilling → PRD → sliced stack.
 - **`/work-issue`** (this) — a ticket lean enough to implement as-is, interactively, in this worktree.
-- **`/solve-ready-tickets`** — the same idea run unattended over the whole `<AGENT-READY>` queue.
+- **`/solve-ready-tickets`** — the same idea run unattended over the whole `<AGENT-READY>` queue: it triages, then fans out one cloud workspace per ticket, each running **this skill**. A session started that way is an ordinary `/work-issue` invocation — the fresh workspace happens to satisfy the Step 2 preflight exactly.
 
 ## Repo contract — resolve this first
 

@@ -134,7 +134,7 @@ Standalone entry points onto the same machinery:
 | Command | Use for |
 | --- | --- |
 | `/magnus:work-issue <id>` | a lean ticket straight to a babysat draft PR — skips PRD/slicing, no human gates |
-| `/magnus:solve-ready-tickets apply` | autonomously drain the `agentReady`-labeled queue; built for a scheduler |
+| `/magnus:solve-ready-tickets apply` | drain the `agentReady`-labeled queue by fanning it out — one cloud workspace per ticket, each running `/work-issue`; built for a scheduler |
 | `/magnus:review-code` | one read-only reviewer round on any diff, PR, or working tree |
 | `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
 | `/magnus:babysit-stack` | babysit a PR or stack to GOAL MET: CI, Copilot rounds, CodeRabbit rounds, threads |
@@ -176,8 +176,9 @@ the CLI: sequential-first loop (subagents an optional accelerator), a
 (full loop on an existing PR, `--max-rounds`) the same treatment and deleted
 their workflow scripts. PR4 killed the `/goal` stop-hook dependency —
 `feature-goal`, `work-issue` and `solve-ready-tickets` are re-entrant stage
-machines on durable markers ("run again to resume"), and `solve-ready-tickets`
-drives the engine CLI (last workflow script deleted). PR5 adopted the kramme
+machines on durable markers ("run again to resume"). `solve-ready-tickets` has
+since become a pure dispatcher — it fans the queue out to one cloud workspace per
+ticket, each running `/work-issue`, and writes no code itself. PR5 adopted the kramme
 fix-ci CI mechanics into `babysit-stack` (bucket classification, bounded
 watch, failure-signature caps, no `git add -A`). PR6 added the
 `design.fidelityCheck` repo extension point, slice agent routing

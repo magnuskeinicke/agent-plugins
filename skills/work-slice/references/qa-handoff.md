@@ -9,7 +9,7 @@ and a **human-authored ticket gets exactly one suite comment, ever**.
 | Ticket | Audience | The suite may write | Never on this ticket |
 | --- | --- | --- | --- |
 | **Feature ticket** (`<ISSUE>` — the human's ticket, seed of `/feature-goal`) | PM, designers, **QA**, the user | labels, status, and **one** `## QA handoff` comment (this file) | everything else |
-| **Standalone ticket** (`/work-issue`, `/solve-ready-tickets`) | QA (and the user) | labels, status, and **one** suite comment — the `## QA handoff`, or the decline note that the same slot later becomes | everything else |
+| **Standalone ticket** (`/work-issue`, whether run by hand or dispatched by `/solve-ready-tickets`) | QA (and the user) | labels, status, and **one** suite comment — the `## QA handoff`, or the dispatcher's decline note that the same slot later becomes | everything else |
 | **PRD ticket** (`PRD: …` sub-issue of the feature ticket, `/to-prd`) | the user + AI | the PRD as its description; `## Implementation deltas` comment | QA handoff (that is the feature ticket's), per-slice machinery |
 | **Slice sub-issues** (`/to-issues`, children of the PRD ticket) | the user + AI **only** — never shown to anyone else | anything the machinery needs: Skeleton map, `## Cloud dispatch`, `## Assumptions`, dev-form `## QA evidence`, acceptance-criteria notes | — |
 
@@ -35,9 +35,11 @@ not a thread and it is never appended to:
   recapture — all of it *replaces* the body of the existing comment. Never post
   a "v2 supersedes the above" comment; the reader must never have to work out
   which version is current.
-- **The decline note shares the slot.** A ticket the autonomous solver hands
-  back gets a ≤2-line `## Not picked up` note in that slot; if the ticket is
-  later worked, the handoff replaces it.
+- **The decline note shares the slot.** A ticket `/solve-ready-tickets` refuses
+  to dispatch gets a three-line `## Autonomous solve — declined` note in that
+  slot — the one AI-to-AI message on a human ticket, because
+  `/daily-ticket-manager` re-triages on it. If the ticket is later worked, the
+  handoff replaces it.
 
 ## When it is written — after the PR is done, never before
 
@@ -61,8 +63,9 @@ Written in the **language the ticket is written in**. Concise is the point:
 target **under ~150 words of prose** plus 1–3 embedded media. No tables, no
 PASS/FAIL columns, no method notes, no counts.
 
-- **`/work-issue`, `/solve-ready-tickets`** — on the ticket itself, after
-  babysit GOAL MET.
+- **`/work-issue`** — on the ticket itself, after babysit GOAL MET. Same when
+  the run was dispatched into a cloud workspace by `/solve-ready-tickets`; the
+  dispatcher itself never writes a handoff.
 - **`/feature-goal`** — on the **feature ticket** (never the PRD ticket), in the
   QA-HANDOFF stage after babysit reports GOAL MET, composed across the stack.
 

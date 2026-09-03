@@ -61,9 +61,29 @@ the pipeline workspace (so `gh stack` has local tracking and babysit has its
 home there), and the held-branch hazard applies to your local checkout: that
 workspace holds the stack's branches.
 
-The standalone commands (`/work-issue`, `/solve-ready-tickets`,
-`/daily-ticket-manager`) are venue-neutral by design — the user starts them
-locally or in a cloud workspace, and no skill relocates them.
+## Cloud fan-out — the autonomous queue's default
+
+`/solve-ready-tickets` is the other cloud dispatcher, and it fans **out** where
+feature-goal relays **along**: it triages my `<AGENT-READY>` queue and gives each
+surviving ticket **its own cloud workspace**, named `<ISSUE> <slug>`, with a
+bootstrap session and then one session whose entire prompt is
+`/work-issue <ISSUE>`. Those workspaces are independent — different tickets,
+different branches off `<BASE>`, no stack — so they run in parallel. Each session
+owns its ticket end to end: claim, implement, draft PR, `/babysit-stack` to GOAL
+MET, the ticket's one QA handoff.
+
+The dispatcher then **ends**. There is no dispatch comment (a standalone ticket
+is human-facing and takes exactly one suite comment, the handoff), so the
+**workspace name is the ownership marker**: a re-run lists the project's
+workspaces, matches `<ISSUE>` prefixes, and never re-dispatches a ticket that
+already has one — it restarts a dead session inside that same workspace instead.
+Rename such a workspace and the next run will dispatch the ticket twice.
+
+`/work-issue` and `/daily-ticket-manager` stay venue-neutral: the user starts
+them locally or in a cloud workspace, and nothing relocates them — being
+*dispatched into* a fresh cloud workspace is just a normal `/work-issue`
+invocation, which is why its virgin-worktree preflight fits a new workspace
+exactly.
 
 ## Getting the plugin into a workspace
 
