@@ -13,7 +13,7 @@ The domain content this skill writes is also committed **in the repo**: create/u
 
 <what-to-do>
 
-If I seeded this session with an issue-tracker ticket (an id or URL in whatever form `tracker.kind` in `docs/agents/repo-config.md` uses — a Linear `PROJ-1234`, a GitHub issue number, …), fetch it first and treat that ticket as the plan under discussion — read its title, description, acceptance criteria, and any links, and follow the links to their source-of-truth artifacts. The PRD produced next by `/to-prd` is written back into this same ticket, so the ticket id is the through-line for the whole pipeline (grill → PRD → slices). Note the ticket id where it won't get lost.
+If I seeded this session with an issue-tracker ticket (an id or URL in whatever form `tracker.kind` in `docs/agents/repo-config.md` uses — a Linear `PROJ-1234`, a GitHub issue number, …), fetch it first and treat that ticket as the plan under discussion — read its title, description, acceptance criteria, and any links, and follow the links to their source-of-truth artifacts. The PRD produced next by `/to-prd` goes into a dedicated `PRD:` sub-ticket under this ticket — this ticket stays the human's (PM, designers, QA) and is never written to — so its id is the through-line for the whole pipeline (grill → PRD ticket → slices). Note the ticket id where it won't get lost.
 
 Interview me relentlessly about every aspect of this plan until we reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one. For each question, provide your recommended answer.
 
@@ -104,7 +104,7 @@ If any of the three is missing, skip the ADR. Use the format in [ADR-FORMAT.md](
 **This skill interviews the user against the repo's domain docs, updating `CONTEXT.md` and ADRs inline as decisions crystallise.**
 
 - **DOES**: fetch the seed ticket, ask one question at a time with a recommended answer, challenge terms against the glossary, cross-reference claims with code, update `CONTEXT.md` inline, create ADRs when all three criteria hold
-- **DOES NOT**: write the PRD (`/to-prd` does, into the same ticket), create implementation tickets (`/to-issues`), implement code, or put implementation details into `CONTEXT.md`
+- **DOES NOT**: write the PRD (`/to-prd` does, into a `PRD:` sub-ticket of the seed ticket), create implementation tickets (`/to-issues`), implement code, or put implementation details into `CONTEXT.md`
 
 ## Red Flags — STOP
 
@@ -125,4 +125,4 @@ Before reporting done:
 - [ ] Conflicts with the existing glossary called out and settled, not papered over.
 - [ ] Any ADR created meets all three criteria and follows ADR-FORMAT.md.
 - [ ] Claims about system behaviour cross-checked against the code, contradictions surfaced.
-- [ ] The seed ticket id noted where it won't get lost — `/to-prd` writes into that same ticket.
+- [ ] The seed ticket id noted where it won't get lost — `/to-prd` hangs the PRD ticket off it.

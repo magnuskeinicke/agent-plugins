@@ -90,28 +90,32 @@ Two phases: a one-time setup, then the daily pipeline.
 
 ### Daily workflow
 
-The full pipeline is one command: **`/magnus:feature-goal <parent issue>`** — a re-entrant stage
+The full pipeline is one command: **`/magnus:feature-goal <feature issue>`** — a re-entrant stage
 machine (run it again to resume) that chains:
 
 1. `/grill-with-docs` — grill the plan until shared understanding
-2. `/to-prd` — write the PRD into the parent ticket
-3. `/to-issues` — slice it into stacked, agent-ready sub-issues
+2. `/to-prd` — write the PRD as a dedicated `PRD: …` sub-ticket of the feature ticket (the
+   human's ticket stays clean — PM, designers and QA read it)
+3. `/to-issues` — slice the PRD into stacked, agent-ready sub-issues of the PRD ticket
 4. `/work-slice` per slice — **in the cloud by default** (`routing.dispatch: cloud`): one
    Conductor cloud **pipeline workspace** for the stack and a **fresh session per PR** — a
-   relay: each session works one slice, opens its stacked draft PR, starts the next session and
-   ends, so no agent's context ever holds more than one PR (the workspace bootstraps this
-   plugin + `gh-stack` once, first). Walking up the stack in order: test-first
+   relay: each session works one slice, opens its stacked draft PR, **babysits it to GOAL MET**
+   (CI, Copilot rounds, CodeRabbit rounds, threads — on GitHub), starts the next session and
+   ends, so no agent's context ever holds more than one PR and every layer is cut on a
+   bot-reviewed, green predecessor (the workspace bootstraps this plugin + `gh-stack` once,
+   first). Walking up the stack in order: test-first
    implementation inside the bounded engine-CLI review-fix loop, ending in a stacked draft PR
    (one linear GitHub stack via `gh stack`) whose body carries `## Verification` (every check actually run) and `## Visual verification`
    (the fewest scenes that prove it — video for behaviour, before/after for appearance — published to `pr.mediaBranch`, sha-pinned — see
    `skills/work-slice/references/pr-evidence.md`).
    Opt-in `local` runs the loop in this worktree with a fresh subagent per slice
    (`skills/feature-goal/references/local-loop.md`)
-5. `/babysit-stack` — the last PR session starts a fresh babysit session in the pipeline workspace; it babysits the stack
-   to a terminal verdict: CI green, then Copilot review rounds until satisfied, then CodeRabbit
+5. `/babysit-stack` — each PR session runs it on its own PR first (step 4); the last PR session then
+   starts a fresh babysit session in the pipeline workspace for the stack-wide sweep, to a terminal
+   verdict: CI green, then Copilot review rounds until satisfied, then CodeRabbit
    rounds (summoned by `@coderabbitai review`) until satisfied, every thread resolved. Bot
    reviews happen on GitHub only — no review CLI
-6. QA handoff — one `## QA handoff` comment on the parent ticket for QA (user-terms steps +
+6. QA handoff — one `## QA handoff` comment on the feature ticket for QA (user-terms steps +
    one visual artifact per group of criteria, no dev material — see
    `skills/work-slice/references/qa-handoff.md`); slice tickets stay internal, standalone tickets
    get the same single comment from `/work-issue` / `/solve-ready-tickets`
@@ -183,8 +187,9 @@ the pipeline's only human gate (pipeline-mode `to-prd`/`to-issues`, no HITL
 stops in `work-slice`/`work-issue`), made `feature-goal` run everything after
 planning in the cloud — first a workspace per slice, then (2026-09-02) a
 **relay**: one pipeline workspace, a fresh session per PR that opens its
-stacked draft PR (one linear `gh stack` chain), starts the next session and
-ends, the last starting the babysit session (`local` opt-in) — turned `babysit-stack` into a babysitting
+stacked draft PR (one linear `gh stack` chain), babysits it to GOAL MET
+(2026-09-03: per-PR bot review before the next layer is cut), starts the next
+session and ends, the last starting the stack-wide babysit session (`local` opt-in) — turned `babysit-stack` into a babysitting
 mode that runs Copilot then CodeRabbit rounds on GitHub until satisfied, and
 removed the CodeRabbit CLI lane from the engine (`pr.cliReviewer` →
 `pr.commentReviewer`).

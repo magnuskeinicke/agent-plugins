@@ -50,9 +50,10 @@ is created via the Conductor MCP (`create_workspace`, then a **bootstrap
 session** installs the plugin + `gh-stack` in the fresh sandbox) or is simply
 the handed-off one; then every PR gets its **own session** (`create_session`
 from a local session, `/conductor/bin/conductor session create` from inside
-the sandbox) that works one slice to a linked draft PR, starts the next
-session and ends — no session outlives one PR, so no agent's context fills
-up. The last PR session starts the babysit session. The durable marker is a
+the sandbox) that works one slice to a linked draft PR, babysits that PR to
+GOAL MET, starts the next session and ends — no session outlives one PR, so
+no agent's context fills up, and every layer is cut on a reviewed PR. The
+last PR session starts the stack-wide babysit session. The durable marker is a
 `## Cloud dispatch` comment on the slice ticket (workspace deep link, the
 session that worked it, docs branch); a slice carrying it is relay-owned —
 resume the relay, never implement it elsewhere. All stack branches live in

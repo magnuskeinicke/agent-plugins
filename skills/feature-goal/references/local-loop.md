@@ -28,7 +28,7 @@ work-slice verbatim.
 
 1. **Select + claim** (work-slice Step 1) — pick the `<NEXT>` carrier
    (fallback: earliest slice in stack order whose predecessor has an open or
-   merged PR and that is not done / in progress), fetch slice + parent PRD +
+   merged PR and that is not done / in progress), fetch slice + PRD ticket +
    Skeleton-map comment, clear `<NEXT>` (additive label write), set status
    **`<IN-PROGRESS>`**. A `<HITL>` label is **not a gate**: note the decision
    text — the subagent gets it as an assumption to make and record.
@@ -60,44 +60,50 @@ work-slice verbatim.
    `BRANCH_READY` (full OIDs).
 3. **Spawn the slice subagent** — one fresh writer, strongest model, prompt:
 
-   > Run the `magnus:work-slice` skill for slice `<slice-id>` (parent
-   > `<ISSUE>`), **starting at Step 3**. Steps 1–2 are done: the slice is
+   > Run the `magnus:work-slice` skill for slice `<slice-id>` (PRD ticket
+   > `<PRD-ISSUE>`, feature ticket `<ISSUE>`), **starting at Step 3**. Steps 1–2 are done: the slice is
    > claimed (status `<IN-PROGRESS>`, `<NEXT>` cleared) and branch
    > `<stack-name>` is checked out via `gh stack`, based on
    > `<predecessor-branch | BASE>` @ `<oid>`, checkpoint `BRANCH_READY`. Do
-   > NOT rename, reset, or create branches. Run Steps 3–6 verbatim (implement
+   > NOT rename, reset, or create branches. Run Steps 3–7 verbatim (implement
    > + engine-CLI review loop, Playwright loop, evidence + consolidation
    > tickets, draft PR + `gh stack link` by PR number + provenance comment,
    > skeleton map + `<NEXT>` pointer). Step 5.1 does not apply (nothing was
    > renamed); push with `gh stack push --remote origin`. If the slice body
    > names a decision that "needs a human", make the call most consistent
    > with the PRD and record it under `## Assumptions` on the ticket and in
-   > the PR comment — never stop for it. **Stop after Step 6** (checkpoint
-   > `HANDED_OFF`); do not run Step 7 — the orchestrator babysits the stack.
-   > Reply with the PR number, the checkpoint stage, and any assumptions made.
+   > the PR comment — never stop for it. Then run **Step 7**: `/babysit-stack
+   > <PR number>` on this PR to its terminal verdict (CI, `<BOT>` rounds,
+   > `<COMMENT-BOT>` rounds, threads) — checkpoint `COMPLETE` on GOAL MET,
+   > `HANDED_OFF` + the verdict line on NOT MET. Reply with the PR number,
+   > the checkpoint stage, the babysit verdict, and any assumptions made.
 
    Never continue, re-prompt or reuse a previous slice's agent; the handoff
    is the ticket, the PRD, and the files in `.context/<slice-id>/`.
 4. **Verify from durable markers, not the reply**: `.context/<slice-id>/
-   workflow-state.md` reads `HANDED_OFF` (or later), `gh pr view` shows an
-   open draft PR on `<stack-name>` with the predecessor's branch as base,
-   `gh stack view --json` shows the chain, `git status --porcelain` is clean.
-   Markers short of that → the slice is re-entrant: spawn **one more fresh**
-   subagent with the same prompt (work-slice resumes from its checkpoint and
-   the engine's `status`). Still short → **Blocked**: report where it stopped
-   (a gut-check `hard-stop` is always Blocked — no PR is opened for it).
-   Record assumptions in the pipeline checkpoint.
-5. **Advance** the slice cursor in the checkpoint and loop. After the last
-   slice, fall through to BABYSIT.
+   workflow-state.md` reads `COMPLETE` (babysit GOAL MET), `gh pr view` shows
+   an open draft PR on `<stack-name>` with the predecessor's branch as base,
+   CI green and no unresolved review threads, `gh stack view --json` shows
+   the chain, `git status --porcelain` is clean. Markers short of that → the
+   slice is re-entrant: spawn **one more fresh** subagent with the same
+   prompt (work-slice resumes from its checkpoint, the engine's `status`, and
+   babysit's state file). Still short → **Blocked**: report where it stopped
+   (a gut-check `hard-stop` is always Blocked — no PR is opened for it; a
+   babysit `NOT MET` is Blocked with its blockers verbatim — the human acts on
+   the PR, then re-invokes, and the loop re-enters this slice at Step 7).
+   Record assumptions and the slice's verdict in the pipeline checkpoint.
+5. **Advance** the slice cursor in the checkpoint and loop — only past a slice
+   whose PR reads GOAL MET. After the last slice, fall through to BABYSIT.
 
 With no `pr.stackTool` configured, `git checkout -b` replaces the `gh stack`
 commands, each PR simply targets `<BASE>` and nothing is linked.
 
 ## BABYSIT in local mode
 
-Run **`/babysit-stack <ISSUE>`** in this worktree. It runs to its terminal
-verdict here (it waits for CI and bot rounds itself); handle GOAL MET / NOT
-MET exactly as SKILL.md's BABYSIT stage describes.
+Run **`/babysit-stack <PRD-ISSUE>`** in this worktree — the stack-wide sweep over
+PRs that were each already babysat to GOAL MET on their own. It runs to its
+terminal verdict here (it waits for CI and bot rounds itself); handle GOAL
+MET / NOT MET exactly as SKILL.md's BABYSIT stage describes.
 
 ## Local-mode red flags
 
@@ -105,4 +111,5 @@ MET exactly as SKILL.md's BABYSIT stage describes.
 - About to spawn a slice subagent with planning docs uncommitted, or a dirty tree — stop: commit the docs; work-slice's preflight refuses a dirty tree.
 - About to create a second worktree — stop: the whole pipeline walks this one, switching branches with `gh stack checkout`.
 - About to branch a slice off the skeleton instead of the previous slice in stack order — stop: one linear stack.
+- About to spawn the next slice while the previous slice's PR is not babysat to GOAL MET — stop: every layer is cut on a bot-reviewed, green, thread-resolved PR; NOT MET is Blocked.
 - About to trust a subagent's or delegated child's reply — stop: verify durable markers.

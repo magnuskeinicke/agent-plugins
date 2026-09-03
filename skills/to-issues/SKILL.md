@@ -21,7 +21,8 @@ owns which label.
 
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
-| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123`) |
+| `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) — the **feature ticket** | the tracker's own id form (`#123`) |
+| `<PRD-ISSUE>` | derived — the sub-issue of `<ISSUE>` whose title starts with `PRD:` (created by `/to-prd`) | none → run `/to-prd` first |
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
 | `<ISSUE-SKILL>` | `skills.createIssue` | create the issue directly with `<TRACKER>` |
 | `<TYPE:>` | `labels.typePrefix` | skip the type label |
@@ -38,9 +39,9 @@ owns which label.
 from the same block. Missing keys just mean you discover exemplars yourself
 (step 1) and should write them back.
 
-## Input: the parent PRD ticket
+## Input: the PRD ticket
 
-Work from the parent ticket that `/to-prd` produced. Take its id from the conversation, or ask. Fetch it **and its comments** — `/to-prd` publishes the PRD as a `# PRD` comment, not in the description, so read the **PRD, acceptance criteria, and links verbatim from that comment** and follow the links to their source-of-truth artifacts. Every slice becomes a **sub-issue of this parent** (`parentId`).
+Work from the **PRD ticket** `<PRD-ISSUE>` that `/to-prd` produced — a `PRD: <feature title>` sub-issue of the feature ticket whose **description is the PRD**. Take an id from the conversation, or ask; given the feature ticket, descend to its `PRD:` sub-issue, given the PRD ticket, its parent is the feature ticket. Read the **PRD, acceptance criteria, and links verbatim from the PRD ticket's description** (plus any `## Implementation deltas` comments on it) and follow the links to their source-of-truth artifacts. Also fetch the **feature ticket**: its description, acceptance criteria and attachments are the human's framing, and designers attach Figma links there. Every slice becomes a **sub-issue of the PRD ticket** (`parentId` = `<PRD-ISSUE>`) — never of the feature ticket, which stays a clean human-facing ticket with exactly one sub-issue: the PRD.
 
 ## Process
 
@@ -56,7 +57,7 @@ Pointers and "mirror X", not edits.
 
 A slice that renders UI is worthless without exact design. For every screen/state any slice touches:
 
-- Resolve the Figma source via `figma-design-url`. Record the **file key + a per-node deep-link** (one per screen/state).
+- Resolve the Figma source via `figma-design-url` — from the PRD's Design section and from the feature ticket's own links and attachments (designers put them there). Record the **file key + a per-node deep-link** (one per screen/state).
 - Pull the **style tokens** that matter (spacing, type, colours, design-system component names) so the implementer reuses design-system values, not magic numbers.
 
 Put the file key + node deep-links + tokens into the slice body. The implementing agent re-fetches the screenshot itself via the Figma MCP at build time, so bodies stay text-only. If Figma can't be reached, **say so loudly at the top of the affected slice** with the blocker and the unblock step — never silently degrade to a vague description. Include the deep-links regardless.
@@ -110,7 +111,7 @@ Iterate until the user approves. **Pipeline mode (`/feature-goal`): skip the qui
 
 ### 6. Publish the sub-issues
 
-Publish in **stack order** (skeleton first) so you can reference real ids in the "Stacked on" / blocked-by fields. For each approved slice create a sub-issue of the parent (`parentId` = PRD ticket) using the body template below. Reuse the repo's create flow (`tracker.docPath`, via `<ISSUE-SKILL>` where one exists: team + assignee). Set the blocked-by relation to the predecessor.
+Publish in **stack order** (skeleton first) so you can reference real ids in the "Stacked on" / blocked-by fields. For each approved slice create a sub-issue of the **PRD ticket** (`parentId` = `<PRD-ISSUE>`, never the feature ticket) using the body template below. Reuse the repo's create flow (`tracker.docPath`, via `<ISSUE-SKILL>` where one exists: team + assignee). Set the blocked-by relation to the predecessor.
 
 Labels per `labels.docPath` — a `<TYPE:>*` **and** `<SKIP>` on every slice, plus:
 
@@ -119,16 +120,16 @@ Labels per `labels.docPath` — a `<TYPE:>*` **and** `<SKIP>` on every slice, pl
 - **The skeleton slice, if AFK** → `<NEXT>` — the work pointer telling `/work-slice` this is the one to pick up. Create the label first if the team lacks it. Exactly **one** slice carries `<NEXT>` at a time; `/work-slice` advances it down the stack as each slice reaches PR (with fan-out, sibling deltas become unblocked together — the pointer still marks just the one that is up next; the user may hand siblings to parallel worktrees manually).
 - **Downstream AFK slices** → no work-pointer label yet; they receive `<NEXT>` from `/work-slice` when their turn comes.
 - **Frontend-dominant slices** (step 3, only when routing is configured) → `<AGENT:><routing.frontendAgent>` (e.g. `agent:claude`). Create the label first if the team lacks it. Skeleton and mixed slices get no `<AGENT:>` label.
-- **Never `<AGENT-READY>`** on any slice or on the parent — it is the autonomous-loop trigger and stays off the PRD pipeline.
+- **Never `<AGENT-READY>`** on any slice, the PRD ticket or the feature ticket — it is the autonomous-loop trigger and stays off the PRD pipeline.
 
 If the skeleton slice is HITL (standalone only), no slice starts with `<NEXT>` — tell the user the first slice needs a human before any agent can start. In pipeline mode the skeleton is always AFK and carries `<NEXT>`.
 
-Do NOT modify the parent ticket's body, status, or assignee.
+Do NOT modify the PRD ticket's or the feature ticket's body, status, or assignee.
 
 <subissue-template>
 ## Parent
 
-[<PARENT-ID>](<parent-url>) — the PRD. Read it for the full picture.
+[<PRD-ISSUE>](<prd-url>) — the PRD (its description). Read it for the full picture. Feature ticket: [<ISSUE>](<feature-url>) — the human's framing; never write there.
 
 ## Kind
 
@@ -178,7 +179,7 @@ Avoid specific code snippets — they go stale. Exception: a prototype snippet t
 
 ## Done when
 
-Exactly one slice is the walking skeleton and every delta names its novel decision (or "none — pure mirror"). Every slice is a sub-issue of the PRD parent, carries acceptance criteria + code-layer pointers + a Convention contract (+ for UI: Figma nodes + tokens), names what it stacks on via a blocked-by relation, and is labelled `<TYPE:>*` + `<SKIP>` (plus `<HITL>` for HITL, plus `<AGENT:><frontendAgent>` on frontend-dominant slices when routing is configured); the skeleton AFK slice also carries `<NEXT>`. No slice carries `<AGENT-READY>`. Any newly-pinned exemplars are written back to `goldenPaths` in `repo-config.md`.
+Exactly one slice is the walking skeleton and every delta names its novel decision (or "none — pure mirror"). Every slice is a sub-issue of the PRD ticket (not the feature ticket), carries acceptance criteria + code-layer pointers + a Convention contract (+ for UI: Figma nodes + tokens), names what it stacks on via a blocked-by relation, and is labelled `<TYPE:>*` + `<SKIP>` (plus `<HITL>` for HITL, plus `<AGENT:><frontendAgent>` on frontend-dominant slices when routing is configured); the skeleton AFK slice also carries `<NEXT>`. No slice carries `<AGENT-READY>`. Any newly-pinned exemplars are written back to `goldenPaths` in `repo-config.md`.
 
 Then hand off **by caller**: invoked **standalone**, tell the user to run `/work-slice` to start the skeleton slice. Running as a stage of **`/feature-goal`**, name no next command — return control to the orchestrator, which commits the planning docs and dispatches the slices itself in the same invocation.
 
@@ -190,15 +191,16 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 
 **This skill turns an approved PRD into a labelled, stacked set of agent-ready sub-issues — nothing more.**
 
-- **DOES**: fetch the PRD comment from the parent, build the code-layer map, gather Figma context for UI slices, draft skeleton + delta slices, quiz the user, publish labelled sub-issues with blocked-by relations, write pinned exemplars back to `goldenPaths`
-- **DOES NOT**: implement code, create branches, or open PRs (`/work-slice` owns that), write or edit the PRD (`/to-prd`), modify the parent ticket's body/status/assignee, or stamp `<AGENT-READY>` anywhere
+- **DOES**: read the PRD from the PRD ticket's description (and the feature ticket for the human's framing + design links), build the code-layer map, gather Figma context for UI slices, draft skeleton + delta slices, quiz the user, publish labelled sub-issues of the PRD ticket with blocked-by relations, write pinned exemplars back to `goldenPaths`
+- **DOES NOT**: implement code, create branches, or open PRs (`/work-slice` owns that), write or edit the PRD (`/to-prd`), modify the PRD or feature ticket's body/status/assignee, hang slices off the feature ticket, or stamp `<AGENT-READY>` anywhere
 
 ## Red Flags — STOP
 
 - About to slice horizontally by layer, per-file, or as temporal "steps" — stop; slice as one walking skeleton + behaviour deltas.
 - A slice carries two novel decisions — stop; two decisions → two slices.
-- About to stamp `<AGENT-READY>` on a slice or the parent — stop; that is `daily-ticket-manager`'s autonomous-loop trigger and stays off the PRD pipeline.
-- About to modify the parent ticket's body, status, or assignee — stop; the parent is read-only here.
+- About to stamp `<AGENT-READY>` on a slice, the PRD ticket or the feature ticket — stop; that is `daily-ticket-manager`'s autonomous-loop trigger and stays off the PRD pipeline.
+- About to modify the PRD or feature ticket's body, status, or assignee — stop; both are read-only here.
+- About to create a slice with `parentId` = the feature ticket — stop; slices hang off the PRD ticket, the feature ticket keeps one sub-issue (the PRD).
 - The stack exceeds 4–5 PRs — stop; apply the escape hatches in order (merge adjacent, second stack, fan out disjoint deltas, question scope) first.
 - About to publish before the user approves the step-5 breakdown (standalone) — stop; iterate until approved. In pipeline mode the opposite: about to ask the user anything, or stamp `<HITL>` — stop; decide, record under `## Assumptions`, publish.
 - A UI slice lacks Figma file key + node deep-links — stop; add them, or flag the access blocker loudly at the top of the slice.
@@ -209,7 +211,7 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 Before reporting done:
 
 - [ ] Exactly one slice is the walking skeleton; every delta names its novel decision or "none — pure mirror".
-- [ ] Every slice is a sub-issue of the PRD parent with acceptance criteria, code-layer pointers, and a Convention contract (+ Figma nodes and tokens for UI slices).
+- [ ] Every slice is a sub-issue of the PRD ticket (`<PRD-ISSUE>`, never `<ISSUE>`) with acceptance criteria, code-layer pointers, and a Convention contract (+ Figma nodes and tokens for UI slices).
 - [ ] Every slice carries `<TYPE:>*` + `<SKIP>`; HITL slices carry `<HITL>`; frontend-dominant slices carry `<AGENT:><frontendAgent>` when routing is configured; none carries `<AGENT-READY>`.
 - [ ] Exactly one slice carries `<NEXT>` (the AFK skeleton) — or none, with the user told the skeleton needs a human first (standalone only; pipeline mode always has an AFK skeleton and no `<HITL>`).
 - [ ] Every slice's blocked-by relation and "Stacked on" line name its predecessor (skeleton: base = `<BASE>`).

@@ -7,8 +7,9 @@ the suite must know which one it is talking to.
 
 | Ticket | Audience | The suite may write | Never on this ticket |
 | --- | --- | --- | --- |
-| **Parent / PRD ticket** (`/feature-goal`) | the user + AI (grill, PRD, slicing docs) — then **QA** | the `# PRD` comment and its `## Implementation deltas`; **one `## QA handoff` comment** (this file) | assumptions, provenance, review ledgers, verification tables, cloud-dispatch markers, per-slice QA evidence |
-| **Slice sub-issues** (`/to-issues`) | the user + AI **only** — never shown to anyone else | anything the machinery needs: Skeleton map, `## Cloud dispatch`, `## Assumptions`, dev-form `## QA evidence`, acceptance-criteria notes | — |
+| **Feature ticket** (`<ISSUE>` — the human's ticket, seed of `/feature-goal`) | PM, designers, **QA**, the user | **one `## QA handoff` comment** (this file); labels | the PRD, assumptions, implementation deltas, provenance, review ledgers, verification tables, cloud-dispatch markers, per-slice QA evidence — anything dev-shaped |
+| **PRD ticket** (`PRD: …` sub-issue of the feature ticket, `/to-prd`) | the user + AI | the PRD as its description; `## Implementation deltas` comment | QA handoff (that is the feature ticket's), per-slice machinery |
+| **Slice sub-issues** (`/to-issues`, children of the PRD ticket) | the user + AI **only** — never shown to anyone else | anything the machinery needs: Skeleton map, `## Cloud dispatch`, `## Assumptions`, dev-form `## QA evidence`, acceptance-criteria notes | — |
 | **Standalone ticket** (`/work-issue`, `/solve-ready-tickets`) | QA (and the user) | **one `## QA handoff` comment**; the triage / declined comments the manager loop already leaves | assumptions, leanness concerns, reviewer rosters, verdicts, provenance, verification tables, consolidation lists — all of that is **PR-comment** material |
 
 Rule of thumb: **evidence on the tracker is visual only.** Test runs, gate
@@ -25,8 +26,9 @@ written in**:
 
 - **`/work-issue`, `/solve-ready-tickets`** — on the ticket itself, right after
   the draft PR opens (the Playwright loop has run by then).
-- **`/feature-goal`** — on the **parent** ticket, in the QA-HANDOFF stage after
-  babysit reports GOAL MET, composed across the whole stack.
+- **`/feature-goal`** — on the **feature ticket** (never the PRD ticket), in the
+  QA-HANDOFF stage after babysit reports GOAL MET, composed across the whole
+  stack.
 
 ```markdown
 ## QA handoff
@@ -55,8 +57,8 @@ Engineering reference: <PR link(s)> — for developers, QA can ignore it.
    **rewritten** as what the user experiences; the original wording is not
    shown.
 3. No criteria on the ticket → **write user-facing ones** from the description
-   (or, for a parent, from the PRD's User Stories — one criterion per story the
-   stack delivered). They live **inside** the handoff; never post a separate
+   (or, for a feature ticket, from the PRD ticket's User Stories — one
+   criterion per story the stack delivered). They live **inside** the handoff; never post a separate
    `## Acceptance criteria` comment on a QA-visible ticket.
 4. Cover every criterion, including ones that failed — a failed one gets its
    evidence and a line under **Not working yet**, in user terms. Silence is a
@@ -82,7 +84,7 @@ Engineering reference: <PR link(s)> — for developers, QA can ignore it.
   criterion is something the user does; a still when it is something the user
   sees. Missing evidence for a criterion → say so on its evidence line.
 - Files come from the run's `.context/<run-id>/evidence/media/` (work-slice
-  3.5). For a parent handoff composed after the fact, fetch them from the
+  3.5). For a feature-ticket handoff composed after the fact, fetch them from the
   media branch: `git fetch origin <MEDIA-BRANCH>` then
   `git show origin/<MEDIA-BRANCH>:pr/<n>/<file> > <file>` for each stack PR —
   `pr/<n>/media.json` names the scenes, routes and captions.
