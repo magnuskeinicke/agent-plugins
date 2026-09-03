@@ -5,16 +5,16 @@ description: >
   exactly ONE human gate — the grilling session. Planning happens here with the
   user: grill → PRD (/to-prd) → sliced PR stack (/to-issues). Everything after
   that runs in ONE Conductor cloud workspace as a RELAY of fresh sessions: each
-  PR gets its own session, which opens the stacked draft PR (gh-stack, one
-  linear GitHub stack), starts the next session and ends — no session ever
-  outlives one PR, so no agent's context fills up. The last PR session starts
-  the babysit session (CI, Copilot, CodeRabbit, threads) ending in GOAL MET +
-  QA handoff. Nothing after the grill asks the user anything. Opt-in `local`
-  runs the loop in this worktree, a fresh subagent per slice. Every
-  invocation re-detects the stage from durable markers — run it again to
-  resume. Use when I say "run the feature pipeline", "take this ticket to a
-  green stack", "resume the feature pipeline", "/feature-goal", or after a
-  grill when I want the feature driven to green, stacked PRs.
+  PR gets its own session, which opens the stacked draft PR (gh-stack),
+  babysits it to GOAL MET (CI, Copilot, CodeRabbit, threads) so the next layer
+  is cut on a reviewed PR, starts the next session and ends. The last PR
+  session starts the stack-wide babysit session ending in GOAL MET + QA
+  handoff. Nothing after the grill asks the user anything. Opt-in `local` runs
+  the loop in this worktree, a fresh subagent per slice. Every invocation
+  re-detects the stage from durable markers — run it again to resume. Use when
+  I say "run the feature pipeline", "take this ticket to a green stack",
+  "resume the feature pipeline", "/feature-goal", or after a grill when I want
+  the feature driven to green, stacked PRs.
 argument-hint: "[parent issue id] [local]"
 ---
 
@@ -32,11 +32,14 @@ alone) and does the next thing.
 session was handed off to. Development and everything after it happens in
 **one Conductor cloud workspace — the pipeline workspace** — as a **relay of
 fresh sessions**: the planning session starts session 1 and ends; session 1
-works exactly one slice to a stacked draft PR, starts session 2 and ends;
-… the last PR session starts the babysit session and ends. **No session ever
-does more than one PR**, so no agent accumulates the whole stack's context,
-and the pipeline keeps running unattended once the user walks away. The
-planning session only plans, dispatches and reports.
+works exactly one slice to a stacked draft PR, **babysits that PR to GOAL
+MET** (CI, every configured review bot, every thread), starts session 2 and
+ends; … the last PR session starts the babysit session (the stack-wide sweep)
+and ends. Each layer is cut on a bot-reviewed, green PR — a finding in slice
+N is fixed before slice N+1 exists, so it never ripples up the stack. **No
+session ever does more than one PR**, so no agent accumulates the whole
+stack's context, and the pipeline keeps running unattended once the user
+walks away. The planning session only plans, dispatches and reports.
 
 **One human gate, ever: the grilling session.** Everything downstream of it is
 autonomous — no approval prompts, no "does this look right?", no HITL slices,
@@ -93,9 +96,10 @@ A run ends at exactly four kinds of boundary:
   first PR session, the next PR session, or the babysit session). Report what
   was done and the session it started, and end. Never wait for, poll, or
   message the session you started — its work is the next invocation's.
-- **Blocked** — nothing actionable remains but the goal isn't met: babysit
-  ended NOT MET with only `needs-human` items (judgement-call threads, a stuck
-  bot, an exhausted fix cap), a slice's loop hard-stopped (gut-check block), a
+- **Blocked** — nothing actionable remains but the goal isn't met: a PR
+  session's babysit of its own PR, or the stack-wide babysit, ended NOT MET
+  with only `needs-human` items (judgement-call threads, a stuck bot, an
+  exhausted fix cap), a slice's loop hard-stopped (gut-check block), a
   bootstrap failed, or a relay session died twice on the same slice. Report
   each blocker plainly as the stop reason; the human unblocks, then
   re-invokes.
@@ -123,7 +127,8 @@ wrote:
 - Relay: (none | <session id> → <NN>-<slice-id> | babysit, started <ISO time>)
 - Resumed: (none | PROJ-1234 ×1, …)
 - Assumptions recorded: (none | PROJ-1234: <one line>, …)
-- Last babysit verdict: (none | GOAL MET | NOT MET — <reason>)
+- PR babysit verdicts: (none | 01 PROJ-1230: GOAL MET, 02 PROJ-1234: NOT MET — <reason>, …)
+- Stack babysit verdict: (none | GOAL MET | NOT MET — <reason>)
 ```
 
 Rewrite it at every stage boundary, after every claim, PR, and baton pass, and
@@ -141,11 +146,15 @@ there is no parent ticket yet, that's stage 0/1):
 3. **Sub-issues exist, at least one slice with neither an open nor a merged
    PR** → stage SLICE-LOOP. Check PRs with `gh pr list --state all` — a
    **merged** PR means that slice is done; never re-detect it as needing the
-   slice loop.
+   slice loop. Within SLICE-LOOP the first thing owed is any **open PR not
+   yet babysat to GOAL MET** (its slice's `## Cloud dispatch` comment lacks
+   `babysit: GOAL MET`; local: slice checkpoint not `COMPLETE`) — the PR
+   session resumes that slice's Step 7 before claiming the next slice.
 4. **Every slice has an open or merged PR** → stage BABYSIT (merged slices
-   impose no babysit work).
-5. **Last `/babysit-stack` verdict = GOAL MET, parent has no `## QA handoff`
-   comment** → stage QA-HANDOFF.
+   impose no babysit work). An open PR still short of `babysit: GOAL MET` is
+   handled by the stack-wide babysit here, not by another PR session.
+5. **Stack-wide `/babysit-stack` verdict = GOAL MET, parent has no
+   `## QA handoff` comment** → stage QA-HANDOFF.
 6. **`## QA handoff` comment on the parent** → done; report and stop.
 
 ### Which session am I? (cloud mode, stages SLICE-LOOP / BABYSIT)
@@ -242,9 +251,11 @@ back to local. The mode choice never forks work: a slice carrying a
 its relay, never re-implement it here.
 
 Slice state comes from durable markers, never memory: **merged PR** = done ·
-**open PR** = awaiting babysit · **`## Cloud dispatch` comment** on the ticket
-with no PR = a relay session claimed it (its session id is in the comment) ·
-none of those = not yet worked.
+**open PR + `babysit: GOAL MET`** on its `## Cloud dispatch` comment = reviewed,
+the next layer may be cut on it · **open PR without that line** (or `NOT
+MET`) = babysit owed to that PR first · **`## Cloud dispatch` comment** on
+the ticket with no PR = a relay session claimed it (its session id is in the
+comment) · none of those = not yet worked.
 
 ### From outside the pipeline workspace (planning / monitoring session)
 
@@ -311,20 +322,31 @@ workspace in cloud mode.
 
 ### Inside the pipeline workspace (PR session)
 
-Follow `references/pr-session.md` exactly: claim **one** slice — the earliest
-in stack order without an open or merged PR — stamp its `## Cloud dispatch`
-marker with this session's id, cut its branch with `gh stack` on top of the
-predecessor's, run work-slice Steps 3–6 (fresh implementer and reviewers per
-its own spawn ladder; stop after Step 6, no Step 7), open the draft PR and
-`gh stack link` it, verify from durable markers, then **start the next
-session** (`/feature-goal <ISSUE>`, same workspace, next slice's agent) — or
-the babysit session when this was the last slice — and **end**. One PR per
-session, always; the next PR is the next session's.
+Follow `references/pr-session.md` exactly: claim **one** slice — an open PR
+still owed its babysit if there is one, else the earliest in stack order
+without an open or merged PR — stamp its `## Cloud dispatch` marker with this
+session's id, cut its branch with `gh stack` on top of the predecessor's, run
+work-slice Steps 3–7 (fresh implementer and reviewers per its own spawn
+ladder), i.e. open the draft PR, `gh stack link` it, then **babysit that PR
+to its verdict** with `/babysit-stack <PR>` — CI green, `<BOT>` rounds,
+`<COMMENT-BOT>` rounds, threads resolved, all on GitHub. Stamp the verdict on
+the `## Cloud dispatch` comment. **GOAL MET** → verify from durable markers,
+then **start the next session** (`/feature-goal <ISSUE>`, same workspace,
+next slice's agent) — or the babysit session when this was the last slice —
+and **end**. **NOT MET** → Blocked: report the blockers, end **without**
+starting a successor; the human acts on the PR and re-invokes, and the next
+PR session resumes this slice's babysit before anything else. One PR per
+session, always; the next PR is the next session's, and it is only ever cut
+on a reviewed, green predecessor.
 
 ## Stage BABYSIT — a fresh session in the pipeline workspace
 
 The stack's branches and babysit's cross-run state (`.context/babysit-…`) live
-in the pipeline workspace, so it is the babysit home. The babysit session is
+in the pipeline workspace, so it is the babysit home. Every PR was already
+babysat to GOAL MET by its own PR session, so this leg is the **stack-wide
+sweep**: it re-walks the whole stack bottom → top, catches anything that moved
+since (a restack, a late bot round, a thread reopened by a human) and yields
+the one verdict QA-HANDOFF keys on — usually short. The babysit session is
 the last relay leg: the final PR session starts it with `/feature-goal
 <ISSUE>` (a session outside the workspace that finds stage BABYSIT with no
 babysit session recorded starts it the same way). Inside the pipeline
@@ -407,11 +429,12 @@ handoff rather than substituting a Storybook or design image.
   stamps it; a label found anyway (hand-stamped, or a stack sliced
   standalone) means "make and record the assumption", never "wait".
 - **One PR per session.** A relay session claims one slice, takes it to a
-  linked draft PR, starts the next session and ends. It never picks up the
-  next slice "while it's here", never babysits, and never waits for the
-  session it started. The planning session never works a slice; the babysit
-  session never works a slice. A nudge-free design: a dead session is
-  replaced by a fresh one, never continued.
+  linked draft PR, babysits **that PR** to its verdict, starts the next
+  session and ends. It never picks up the next slice "while it's here",
+  never babysits another PR, and never waits for the session it started.
+  The planning session never works a slice; the babysit session never works
+  a slice. A nudge-free design: a dead session is replaced by a fresh one,
+  never continued.
 - **One pipeline workspace per stack.** All stack branches live in it, so
   `gh stack` has local tracking, babysit has one home, and every session sees
   the checkpoints of the sessions before it. Workspaces come only from the
@@ -422,6 +445,11 @@ handoff rather than substituting a Storybook or design image.
   this skill only plans, starts / resumes / checks relay sessions and reads
   verdicts — it never implements, fixes, reviews or babysits code in cloud
   mode.
+- **Every layer is cut on a reviewed PR.** A slice's branch is created only
+  when its predecessor's PR reads `babysit: GOAL MET` — CI green, every
+  configured review bot satisfied, every thread resolved. Bot findings are
+  fixed in the PR that caused them, never inherited by the layer above. A
+  NOT MET PR is Blocked, not a base.
 - **Stacking is `gh stack`, one linear stack, in stack order.** Branches are
   cut with `gh stack init` / `gh stack add` on top of the predecessor, the PR
   is opened by the repo's PR skill, then `gh stack link` by PR number adopts
@@ -443,9 +471,9 @@ handoff rather than substituting a Storybook or design image.
 
 ## Workflow Boundaries
 
-**This skill orchestrates the feature pipeline as a re-entrant stage machine with the grill as its only human gate — planning here, then a relay of one-PR sessions in one cloud workspace, then a babysit session — sequencing the constituent skills, never re-implementing them.**
+**This skill orchestrates the feature pipeline as a re-entrant stage machine with the grill as its only human gate — planning here, then a relay of one-PR sessions in one cloud workspace (each babysitting its own PR to GOAL MET before the next is cut), then a stack-wide babysit session — sequencing the constituent skills, never re-implementing them.**
 
-- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` and `/to-issues` in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–6, link the PR, start the next session, end; as the babysit session, run `/babysit-stack` to its verdict and post the QA handoff; from outside, check / resume the relay; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
+- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` and `/to-issues` in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–7 (link the PR, babysit it to GOAL MET, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict and post the QA handoff; from outside, check / resume the relay; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
 - **DOES NOT**: answer the grill for the human, ask the human anything after the grill, treat `<HITL>` as a stop, work more than one PR in a session, wait for a session it started, implement / fix / review / babysit code outside the pipeline workspace (cloud mode), own review-loop internals (the engine CLI does) or CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, or relocate the venue-neutral standalone commands (`/work-issue`, `/solve-ready-tickets`, `/daily-ticket-manager` run wherever the user starts them).
 
 ## Red Flags — STOP
@@ -456,6 +484,8 @@ handoff rather than substituting a Storybook or design image.
 - About to end the invocation because `/to-prd` said "run `/to-issues`" or `/to-issues` said "run `/work-slice`" — stop: pipeline mode supersedes those; the only command a report ever hands the user is `/feature-goal <ISSUE>`.
 - About to report `/work-slice` or `/babysit-stack` as the user's next step — stop: they run *inside* the relay sessions; start those instead.
 - About to start the next slice in the session that just opened a PR — stop: one PR per session; start a fresh session with `/feature-goal <ISSUE>` and end.
+- About to start the next session while this PR's babysit is not GOAL MET (bot round pending, thread open, verdict NOT MET) — stop: babysit waits for the bots itself; NOT MET is Blocked, not a baton pass.
+- About to cut a slice's branch on a predecessor whose `## Cloud dispatch` lacks `babysit: GOAL MET` — stop: resume that slice's Step 7 first.
 - About to keep the planning session (or a handed-off grilling session) alive as the worker for the whole stack — stop: bootstrap, start PR session 1, end.
 - About to implement, fix, review or babysit a slice from outside the pipeline workspace in cloud mode — stop: development left this session; start / resume / check relay sessions, read verdicts.
 - About to wait for, poll or message the session you just started — stop: baton passed; end with the resume line.
@@ -473,13 +503,14 @@ handoff rather than substituting a Storybook or design image.
 
 Before reporting done:
 
-- [ ] `.context/<ISSUE>/pipeline-state.md` rewritten to the current stage, dispatch mode, docs branch, pipeline workspace, slice cursor, relay session, resumes, assumptions, and last babysit verdict.
+- [ ] `.context/<ISSUE>/pipeline-state.md` rewritten to the current stage, dispatch mode, docs branch, pipeline workspace, slice cursor, relay session, resumes, assumptions, per-PR babysit verdicts, and the stack babysit verdict.
 - [ ] The reported stage matches live markers (`# PRD` comment, sub-issues, `## Cloud dispatch` comments, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
 - [ ] After the grill, the human was asked nothing: `/to-prd` and `/to-issues` ran in pipeline mode; every assumption made downstream is recorded on its ticket/PR and listed in the report.
 - [ ] Planning docs (`CONTEXT.md`, `docs/adr/**`, `docs/agents/**`) were committed **and pushed** before the relay started; `git status --porcelain` shows none left over; the docs branch is in the checkpoint and every dispatch comment.
 - [ ] Cloud mode: exactly one pipeline workspace for the stack; every worked slice's ticket carries exactly one `## Cloud dispatch` comment (workspace deep link, the session that worked it, docs branch); this session worked at most one PR and, if it did, started exactly one successor session before ending.
 - [ ] Every completed slice has a draft PR verified from durable markers (remote branch, `gh pr view`: draft, base = predecessor's branch), `gh stack view --json` shows the chain bottom → top, and `<NEXT>` has exactly one carrier or the report names why none does (stack complete).
-- [ ] Babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.
+- [ ] Every PR a session opened was babysat to a terminal verdict in that same session before any successor was started; `babysit: GOAL MET` is stamped on its slice's `## Cloud dispatch` comment (local: slice checkpoint `COMPLETE`); no slice branch was cut on a predecessor short of that.
+- [ ] The stack-wide babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.
 - [ ] The run did not end by handing the user `/to-prd`, `/to-issues`, `/work-slice`, or `/babysit-stack`: the only next command a report ever names is `/feature-goal <ISSUE>`.
 - [ ] The report ends with the resume line: stage, blocking reason if any, and `/feature-goal <ISSUE>`.
 - [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the parent carries its one `## QA handoff` comment — user-terms criteria, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>`, no dev material — and nothing else suite-authored beyond `# PRD`.

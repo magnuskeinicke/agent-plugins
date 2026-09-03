@@ -63,8 +63,8 @@ verdict recorded) → `VERIFIED` (Playwright loop done or skipped-with-reason) �
 `EVIDENCE_POSTED` (Step 4 QA evidence + consolidation tickets) → `PR_OPENED`
 (Step 5.2) → `STACK_LINKED` (Step 5.3–5.4) → `HANDED_OFF` (Step 6 pointer
 advanced) → `COMPLETE` (Step 7 babysit GOAL MET). **Rewrite the block at every
-stage boundary.** An orchestrator (`/feature-goal`) may tell you to stop at
-`HANDED_OFF` because it babysits the whole stack itself.
+stage boundary.** `/feature-goal` runs Steps 3–7 in full per slice — its next
+layer is only ever cut on a `COMPLETE` predecessor.
 
 On invocation, if the chosen slice's checkpoint exists: read `Stage`, verify
 its facts against the durable markers — the branch exists, `git rev-parse
@@ -355,7 +355,7 @@ The draft PR is the review surface, and this skill stays with it until it is in 
 - **GOAL MET** → checkpoint `COMPLETE` (record the verdict). Report: the PR, the babysit table, the assumptions recorded. Done.
 - **NOT MET** → nothing actionable is left: only `needs-human` threads, a stuck bot, or a capped fix signature. Record the verdict in the checkpoint (stage stays `HANDED_OFF`), report the blockers verbatim as the stop reason, and end. Re-running `/work-slice <slice-id>` later re-enters at Step 7 (babysit resumes from its own state file) — the human resolves the blockers on the PR first.
 
-When `/feature-goal` (or another orchestrator) says to stop at Step 6, skip this step: it babysits the whole stack bottom → top itself, which is what makes lower-PR fixes restack correctly.
+`/feature-goal` runs this step too — every PR session babysits its own PR before the next slice is cut, so bot findings are fixed in the PR that caused them and never inherited up the stack; its final stack-wide `/babysit-stack <ISSUE>` is a sweep, not the first review. Only an orchestrator that explicitly says "stop at Step 6" may skip this step, and it then owns the babysit itself.
 
 ## Boundaries
 
