@@ -142,7 +142,7 @@ If the loop landed fix commits (`git rev-list --count origin/<headRefName>..HEAD
 
 1. `git push` the branch (plain push — commits were appended, no history rewrite) and, in the same moment, refresh the body's `## Verification` block for the new head from the gate runs the fix passes reported (`testEvidence` → rows in `.context/pr-<n>/evidence/verification.jsonl`; mechanics in `../work-slice/references/pr-evidence.md`): replace the text between the `magnus:verification` markers, add the block once if the PR predates it, never a second copy, never a row for a command not run. Leave `## Visual verification` alone unless a fix changed a captured surface — then recapture or mark the scene stale; never present an old image as current.
 2. **Stack awareness:** if other open PRs base on this branch (`gh pr list --state open --json number,baseRefName` filtered on `headRefName`), tell the user the upstack branches need restacking — the mechanics live in `babysit-stack` ("Branch switching & restacking"); don't restack other worktrees' branches unasked.
-3. If the loop **stalled** (or dead reviewers blocked convergence), post the leftovers on the PR: `gh pr comment <n> --body` with the verdict line verbatim, then a `## Review ledger` section from `report`'s `report` text (open/deferred/disputed entries with their `CR-NNN` ids, dispute evidence, and adjudication rulings), plus advisory notes worth a human glance.
+3. If the loop **stalled** (or dead reviewers blocked convergence), surface the leftovers in the PR **body**, never as a comment (`../work-slice/references/pr-evidence.md`): fold a `## Notes` block into the same body write that refreshes `## Verification` at push time — at most five one-line bullets naming the findings that shipped unfixed. The full ledger (`CR-NNN` entries, dispute evidence, adjudication rulings) stays in `.context/` and the terminal report; a human who wants it asks.
 
 Then print, from `report`'s output plus the findings/fix files:
 
@@ -168,7 +168,7 @@ A PR that already had bot rounds before this skill ran is fine — babysit's per
 - **Never merge, approve, mark ready, or close** — a draft stays a draft; state changes are the human's.
 - The review loop never touches existing review threads (reply/resolve) — thread work happens only inside Step 5's `/babysit-stack`, under that skill's rules and caps. Bot reviews happen on GitHub only; never run a review CLI.
 - **The CLI owns the loop.** Reviewer selection, suppression, the relevance gate's thresholds, gate injection, stall/cap stops, dispute adjudication flow, and the verdict all come from `<ENGINE>`'s JSON output — never re-derive them in prose, never hand-edit `.context/pr-<n>/ledger.json` or a findings file, and never skip a command because you "know" what it will say.
-- **One engine run per PR — including across re-invocations.** A finished run (`status` phase `done`) is never re-`init`ed into more rounds; a stalled verdict's ledger goes onto the PR as a comment. Persistence after the loop is babysit, not more review rounds.
+- **One engine run per PR — including across re-invocations.** A finished run (`status` phase `done`) is never re-`init`ed into more rounds; a stalled verdict's leftovers go into the PR body's `## Notes`, never a comment. Persistence after the loop is babysit, not more review rounds.
 - **Fan-out is mechanism-agnostic; subagents are an optional accelerator.** Parallel subagents, `codex exec` children, or inline-sequential all satisfy the same contract: every emitted task's `outputFile` written before `collect` settles. A dead reviewer (missing/invalid output after one re-run) means degraded coverage stated explicitly, never silent convergence.
 - **Persistence is re-invocation, never a stop-hook.** A run ends at GOAL MET or Blocked (`needs-human` only), with the resume report; pending CI / bot rounds are waited on by babysit, never a reason to end.
 - Fixes stay inside the PR's existing scope; consolidations become proposals, not code. TDD discipline is carried in the fix prompts (red-green where behaviour changes).
@@ -186,7 +186,7 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 
 **This skill runs the bounded review ⇄ fix loop on one existing PR, then babysits that PR to "in order".**
 
-- **DOES**: resolve + check out the PR branch, compute the diff vs `origin/<baseRefName>`, drive the engine CLI (`init → plan → collect → decide → apply-fix → adjudicate → report`), push fixes once, post a stalled ledger as a PR comment, run `/babysit-stack <n>` to its terminal verdict.
+- **DOES**: resolve + check out the PR branch, compute the diff vs `origin/<baseRefName>`, drive the engine CLI (`init → plan → collect → decide → apply-fix → adjudicate → report`), push fixes once, fold a stalled run's leftovers into the PR body's `## Notes`, run `/babysit-stack <n>` to its terminal verdict.
 - **DOES NOT**: touch review threads (Step 5's babysit owns reply/resolve), run Playwright (`/work-slice` / `/work-issue`), open/merge/approve/ready/close PRs, re-`init` a finished engine run, restack other worktrees' branches unasked.
 
 ## Red Flags — STOP
@@ -206,7 +206,7 @@ Before reporting done:
 
 - [ ] The verdict is reported verbatim: `converged` in N rounds or `stalled — shipped with N open findings (CR-…)` — plus dead reviewers and demoted/unverified findings.
 - [ ] Fix commits (if any) are pushed exactly once and the branch is no longer ahead of `origin/<headRefName>`.
-- [ ] A stalled or degraded-coverage run left a `## Review ledger` PR comment with the verdict line and `CR-NNN` entries.
+- [ ] A stalled or degraded-coverage run left its leftovers as ≤5 `## Notes` bullets in the PR **body** (no suite PR comment anywhere), with the full ledger in `.context/` and the terminal report.
 - [ ] Upstack PRs basing on this branch are named as needing restack (mechanics deferred to babysit-stack, not done unasked).
 - [ ] `/babysit-stack` ran to a terminal verdict — GOAL MET, or NOT MET with only `needs-human` items, named in the report.
 - [ ] The PR is still open and still a draft if it was one — nothing merged, approved, readied, or closed.

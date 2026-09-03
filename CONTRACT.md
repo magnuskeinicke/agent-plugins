@@ -92,7 +92,10 @@ loop; a bot's findings reach the suite as PR review threads, which
 
 ### PR evidence
 
-Every PR the suite opens carries two sections **in its body**, after the PR
+The PR **body** is the suite's only voice on a PR — it posts **no comments** on
+its own PRs (bar the machinery `magnus:babysit-stack` needs: the
+`pr.commentReviewer` summon and the one-line replies that resolve bot threads).
+The body is written for a human reviewer only. Its sections, after the PR
 skill's own summary and before any trailer — the spec is
 `skills/work-slice/references/pr-evidence.md`:
 
@@ -111,12 +114,19 @@ skill's own summary and before any trailer — the spec is
   uncapturable surfaces get a one-line section saying so — never an omission,
   never a substitute image presented as the real surface.
 
+- **`## Notes`** — omitted unless a human must act on something. At most five
+  one-line bullets: an assumption taken where the ticket left a decision open, a
+  finding shipped unfixed, a leanness concern, a follow-up ticket filed instead
+  of widening the diff.
+
 The host's `skills.createPr` receives the rendered sections as its
 verification content; when it has no slot for them the suite makes exactly one
 `gh pr edit --body-file` insert before any bot is requested. `magnus:iterate-pr`
 and `magnus:babysit-stack` refresh the `## Verification` block for the head they
-push. Everything else the suite reports (provenance, review ledger,
-assumptions, consolidation links) stays a PR comment.
+push. The convention provenance table, the review ledger (`CR-NNN` entries,
+dispute evidence, adjudication rulings), reviewer rosters and routing
+disclosures never reach the PR at all — they stay in `.context/<run-id>/` and
+the run's terminal report.
 
 ### `skills`
 
@@ -150,7 +160,7 @@ during the Playwright verify rounds on UI slices. The contract:
   (seeded data differs from design content by construction).
 - **Semantics:** a `blocking` deviation is treated exactly like a failed
   acceptance criterion (same fix rounds, same caps); `advisory` deviations ride
-  into the PR comment and QA evidence unfixed.
+  into the PR body's `## Visual verification` and the QA evidence unfixed.
 
 ### `routing` — slice agent routing
 
@@ -206,11 +216,13 @@ QA, who has no code access — never a dev log
 (`skills/work-slice/references/qa-handoff.md`):
 
 - **Feature ticket** — the human's ticket (PM, designers, QA): the suite
-  writes labels and, once the stack is GOAL MET, exactly one **`## QA
-  handoff`** comment: per acceptance criterion (grouped where one
+  writes labels and, **only once the stack is GOAL MET**, exactly one
+  **`## QA handoff`** comment: per acceptance criterion (grouped where one
   walk-through covers several) the steps in user terms, the expected
-  result, and one visual artifact per group uploaded to the tracker.
-  Nothing else suite-authored — never the PRD.
+  result, and one embedded visual per group — under ~150 words of prose.
+  Nothing else suite-authored, ever, and nothing before the PRs are done (a
+  handoff written earlier goes stale on the next bot round). Re-runs **edit
+  that comment by id**; a second suite comment is a defect.
 - **PRD ticket** — a `PRD: <feature title>` sub-issue of the feature ticket
   created by `magnus:to-prd`; its description is the PRD, its
   `## Implementation deltas` comment amends it; every slice is its
@@ -219,13 +231,21 @@ QA, who has no code access — never a dev log
   it needs there (skeleton map, dispatch markers, assumptions, dev-form QA
   evidence).
 - **Standalone tickets** (`magnus:work-issue`, `magnus:solve-ready-tickets`) —
-  QA-visible: one `## QA handoff` comment; assumptions, leanness concerns,
-  verdicts, provenance, verification and consolidation lists go to the PR.
+  QA-visible: the same single `## QA handoff`, written after the PR is babysat
+  green (`magnus:solve-ready-tickets` never babysits, so it writes nothing and
+  reports the handoff as owed). The one exception to the single-comment rule is
+  the solver's three-line decline note, which `magnus:daily-ticket-manager`
+  re-triages on. `magnus:daily-ticket-manager` itself writes labels only.
+  Assumptions, leanness concerns, verdicts, provenance, verification and
+  consolidation lists never touch the tracker.
 
-Evidence on the tracker is **visual only** (video for behaviour, a still for
-appearance, never both of the same thing, as few as prove it — embedded
-via the tracker's attachment flow — never GitHub raw URLs). Test runs and gate
-output are developer evidence and live in the PR body's `## Verification`.
+Evidence on the tracker is **visual only and embedded inline** (video for
+behaviour, a still for appearance, never both of the same thing, 1–3 per
+handoff): upload the file and put the returned asset URL in the comment
+markdown. Never file it as a tracker attachment (Linear:
+`create_attachment_from_upload`) — a resource in the attachments panel is a
+download, not evidence — and never a GitHub raw URL. Test runs and gate output
+are developer evidence and live in the PR body's `## Verification`.
 
 ### Human gates
 

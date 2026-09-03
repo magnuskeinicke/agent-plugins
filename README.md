@@ -115,10 +115,12 @@ machine (run it again to resume) that chains:
    verdict: CI green, then Copilot review rounds until satisfied, then CodeRabbit
    rounds (summoned by `@coderabbitai review`) until satisfied, every thread resolved. Bot
    reviews happen on GitHub only — no review CLI
-6. QA handoff — one `## QA handoff` comment on the feature ticket for QA (user-terms steps +
-   one visual artifact per group of criteria, no dev material — see
-   `skills/work-slice/references/qa-handoff.md`); slice tickets stay internal, standalone tickets
-   get the same single comment from `/work-issue` / `/solve-ready-tickets`
+6. QA handoff — **after** the stack is GOAL MET, one concise `## QA handoff` comment on the
+   feature ticket for QA (user-terms steps + one **inline-embedded** visual per group of criteria,
+   under ~150 words, no dev material, no tracker attachments — see
+   `skills/work-slice/references/qa-handoff.md`); it is the only thing the suite ever writes on a
+   human's ticket, and re-runs edit it rather than adding a second. Slice tickets stay internal;
+   `/work-issue` writes the same single comment once it has babysat its PR green
 
 Planning (steps 1–3) happens in your session (local, or a cloud workspace you handed the grill
 off to); everything after it runs as fresh one-PR sessions in the pipeline workspace. The

@@ -223,37 +223,23 @@ resumed run reads instead of re-triaging.
 `daily-ticket-manager` for a fresh classification, handing over what it
 learned:
 
-1. **Write an elaborate decline comment** — this is the *new info* the manager
-   re-classifies on. Don't be terse: capture the triage reason (quoted), what
-   the solver actually found when it dug in, and why that makes the original
-   `<AGENT-READY>` wrong. Use this block:
+1. **Write the decline note** — the only suite comment a human ticket may carry
+   besides the QA handoff, because it is the durable signal `daily-ticket-manager`
+   re-classifies on (the manager writes no comment of its own). It occupies the
+   ticket's **one comment slot**, so keep it to three lines and let a later
+   handoff replace it. Use this block exactly:
 
    ```md
    ## Autonomous solve — declined
 
-   The autonomous solver picked this up from the agent-ready queue but **declined to
-   implement it** and is bouncing it back for re-triage.
-
-   Why declined (tier: escalate):
-   <the triage reason, quoted verbatim.>
-
-   What the solver found:
-   <2–4 lines of new info the original triage missed: the real scope/blast
-   radius it touches, the ambiguity or judgement calls discovered, why it
-   doesn't fit one safe PR.>
-
-   For re-triage:
-   - The agent-ready and risk labels are cleared, so daily-ticket-manager
-     re-classifies both axes from scratch against the above.
-   - Suggested direction: <e.g. likely high risk + needs-human because …> — the
-     manager makes the final call.
-
-   _Declined by solve-ready-tickets. Re-classify with daily-ticket-manager
-   before re-queueing._
+   **Why:** <the triage reason, one sentence.>
+   **Found:** <the one thing triage missed — real scope, the ambiguity, why it isn't one safe PR.>
+   **Suggested:** <e.g. high risk + needs-human> — daily-ticket-manager makes the call.
    ```
 
-   Make it idempotent: if a comment already starts with
-   `## Autonomous solve — declined`, update it rather than adding a second.
+   No preamble, no attribution footer, no bullet lists. Make it idempotent: if a
+   comment already starts with `## Autonomous solve — declined`, update it **by
+   id** rather than adding a second.
 2. **Clear `<RISK:>*`** (additive write — read the issue's current labels, write
    them back **minus any `<RISK:>` label**; `<AGENT-READY>` is already gone
    from the Step 2 claim). Stripping the risk label drops the ticket back into
@@ -341,9 +327,9 @@ judgement-call notes and `[disputed:…]` entries (I adjudicate those on the
 draft PR); the provenance table from the implement/fix results; the
 `consolidations` arrays from `.context/<issue-id>/round-*/findings/*.json`;
 Playwright per-AC verdicts + proof paths. A `stalled` verdict still ships —
-the outstanding findings surface on the draft PR (Step 5.5).
+the outstanding findings surface as `## Notes` bullets in the draft PR's body (Step 5.4).
 
-## Step 5 — Draft PR + comment (apply only)
+## Step 5 — Draft PR (apply only)
 
 Only when the solve shipped a real change (not declined, tests green):
 
@@ -368,61 +354,25 @@ Only when the solve shipped a real change (not declined, tests green):
    where it has a slot, else one `gh pr edit --body-file` insert, before any
    bot is requested. Rows and captures from this run only; a `trivial` ticket
    that skipped 4c gets the one-line visual form.
-3. **`## QA handoff` on the ticket** — the ticket's one suite-authored
-   comment, per `../work-slice/references/qa-handoff.md`. A standalone ticket
-   is QA-visible, so: per acceptance criterion (the ticket's own, verbatim, or
-   user-facing ones distilled from the description — never a separate
-   `## Acceptance criteria` comment) the steps in user terms, the expected
-   result, and the evidence — one video *or* screenshot per logical group of
-   criteria (group criteria one walk-through covers; never both for the same
-   thing; aim 1–3 artifacts), uploaded with `<TRACKER>`'s attachment flow (Linear:
-   `prepare_attachment_upload` → PUT the file → `create_attachment_from_upload`),
-   never a GitHub raw URL. Failed criteria get their evidence and a **Not
-   working yet** line in user terms. One `Engineering reference:` PR link at
-   the bottom. Idempotent. When 4c didn't run (trivial tier, no dev server), a
-   one-paragraph handoff says there is nothing for QA to see and why.
-4. **Comment on the PR** with the solve summary — dev material never goes on
-   the ticket. `gh pr comment <n> --body` with this block:
-
-   ```md
-   ## Autonomous solve
-
-   Tier: trivial | standard
-   Ticket: <ticket url>
-
-   Shipped:
-   <1–2 lines: what was built.>
-
-   Reviewers run: <from the round manifests; note any dead reviewer>
-   Fixed in review: <n finding(s)>  ·  Tests: green  ·  Verdict: <verbatim>
-
-   Convention provenance:
-   | Added file | Mirrors / deviation |
-   | --- | --- |
-   | <path> | <mirroredFrom exemplar, or [deviation: reason]> |
-
-   Acceptance criteria: <n> verified / <m> failed — QA handoff on the ticket
-   (visual evidence); developer evidence in the PR body's `## Verification`.
-
-   Consolidation follow-ups (not fixed in this PR — candidates for their own tickets):
-   - <consolidation title — targetLib — detail>
-
-   Flagged for your review:
-   - <residual judgement-call or [disputed:…] note, if any>
-
-   _Solved by solve-ready-tickets. Not merged, not marked done — review the draft PR._
-   ```
-
-   Omit the acceptance-criteria line when the Playwright check didn't run, the
-   provenance table when no files were added, and the consolidation section
-   when the reuse audit returned none. Consolidations are surfaced for me to
-   decide — this skill does NOT file follow-up tickets (unlike `/work-slice`);
-   it never creates tickets. Make it idempotent: if a PR comment already starts
-   with `## Autonomous solve`, edit it rather than adding a second.
-5. **Stalled verdict?** Post the outstanding findings as a
-   `## Outstanding review findings` PR comment (the verdict line verbatim,
-   then the open/deferred/disputed `CR-NNN` entries) so they surface on the
-   draft.
+3. **Nothing on the ticket.** This skill stops at a draft PR that no one has
+   babysat, so the QA handoff is **not** owed yet — a handoff written now would
+   be stale the moment a bot round changes the code
+   (`../work-slice/references/qa-handoff.md`). Write no comment, attach no file,
+   post no acceptance criteria. The Step 6 report names each drafted ticket as
+   **handoff owed**, resumable with `/work-issue <id>` (its resume detection sees
+   the open PR, babysits it, and writes the handoff on GOAL MET). Keep
+   `.context/<issue-id>/evidence/` intact so that run can render from it, and
+   publish the media to `<MEDIA-BRANCH>` (step 2) so it survives the workspace.
+4. **No PR comment either.** The suite does not comment on its own PRs
+   (`../work-slice/references/pr-evidence.md`); the body write of step 2 is its
+   only voice. Fold the human-actionable residue into that same write as
+   **`## Notes`** — at most five one-line bullets: each finding a `stalled`
+   verdict shipped unfixed, each residual judgement-call or `[disputed:…]` note,
+   each consolidation candidate worth a ticket (this skill surfaces them for me
+   to decide; it never files tickets). Nothing to say → omit the section. The
+   tier, reviewer manifest, fixed-finding counts, verdict text and provenance
+   table are developer machinery: terminal report and `.context/<issue-id>/`
+   only.
 
 Leave the ticket in **`<IN-PROGRESS>`** (or `tracker.statuses.inReview` if the
 team has one). **Never** mark it done, merge, mark the PR ready, or run
@@ -438,15 +388,17 @@ Mode: dry-run | apply   ·   In queue: <n>   ·   Resumed: <r>   ·   Picked up:
 
 | Ticket   | Title         | Tier      | Outcome                          |
 | -------- | ------------- | --------- | -------------------------------- |
-| <id-1>   | <short title> | standard  | draft PR #123                    |
-| <id-2>   | <short title> | trivial   | draft PR #124                    |
+| <id-1>   | <short title> | standard  | draft PR #123 — handoff owed     |
+| <id-2>   | <short title> | trivial   | draft PR #124 — handoff owed     |
 | <id-3>   | <short title> | escalate  | declined → re-triage (manager)   |
 
 ## Draft PRs awaiting review
-- <id-1> — <title> — <draft PR url>
+- <id-1> — <title> — <draft PR url> — nobody has babysat it yet, so the ticket has no QA handoff; `/work-issue <id-1>` babysits it and writes one.
 
 ## Declined — bounced back for re-triage
 - <id-3> — <title> — <why the solver declined; agent-ready + risk labels cleared, back in the ready queue for daily-ticket-manager>
+
+(This report — tiers, reviewer manifests, verdicts, provenance — is the only place the run's dev material lives. None of it is written to a ticket or a PR comment.)
 
 ## Notes
 - <claims made, worktrees created, tickets left in flight (a re-run resumes them), red-tests/hard-stop flags, anything skipped, prerequisites missing>
@@ -464,24 +416,27 @@ size (`max N`), and the mutation policy (`apply` to actually solve, `dry-run` to
 just report the queue). Default a scheduled run to `dry-run` unless I've
 explicitly approved `apply`. A scheduled `apply` run still only ever: clears
 `<AGENT-READY>` + claims, branches in a worktree, resumes or runs the solve
-loop, opens a **draft** PR, and comments — never merging, never marking done,
-never running compliance.
+loop, and opens a **draft** PR — never commenting on a ticket or a PR (bar a
+decline note), never merging, never marking done, never running compliance.
 
 ## Workflow Boundaries
 
 **This skill drains the agent-ready queue: claims stamped tickets, solves each in an isolated worktree via the engine CLI, and stops at a draft PR.**
 
-- **DOES**: resume in-flight tickets from durable markers, claim (clear `<AGENT-READY>` + move to `<IN-PROGRESS>`), branch one worktree per ticket off `<BASE>`, drive the engine-CLI loop (`--max-rounds 2`), run the lean Playwright check, open a **draft** PR (with `## Verification` + `## Visual verification` in its body) + ticket comment, report the run
-- **DOES NOT**: merge, mark PRs ready, approve, mark issues done, run compliance, create or close tickets, file consolidation follow-up tickets (surfaced for the human — unlike `/work-slice`), make routing calls on escalations (`daily-ticket-manager` re-classifies), or write/review code itself (the engine CLI's emitted tasks own that)
+- **DOES**: resume in-flight tickets from durable markers, claim (clear `<AGENT-READY>` + move to `<IN-PROGRESS>`), branch one worktree per ticket off `<BASE>`, drive the engine-CLI loop (`--max-rounds 2`), run the lean Playwright check, open a **draft** PR (with `## Verification` + `## Visual verification`, and `## Notes` when a human must act, in its body), report the run
+- **DOES NOT**: write a QA handoff (it never babysits, so the handoff is owed to `/work-issue`), comment on a shipped ticket or on its own PR, attach files to a ticket, merge, mark PRs ready, approve, mark issues done, run compliance, create or close tickets, file consolidation follow-up tickets (surfaced for the human — unlike `/work-slice`), make routing calls on escalations (`daily-ticket-manager` re-classifies), or write/review code itself (the engine CLI's emitted tasks own that)
 
 ## Red Flags — STOP
 
 - About to mutate anything in `dry-run`, or in an unattended run whose prompt didn't explicitly say `apply` — the mode is read-only; report only.
 - About to write labels without reading the current set first — `save_issue.labels` replaces the whole set; write it back minus only the managed label (Step 2's additive rule).
-- About to open a PR on red tests, or after a gut-check `hard-stop` — ship nothing: comment on the ticket, flag for a human, move to the next ticket.
+- About to open a PR on red tests, or after a gut-check `hard-stop` — ship nothing: flag it in the report for a human and move to the next ticket. Nothing goes on the ticket.
+- About to write a `## QA handoff`, a `## QA evidence` table, acceptance criteria, or any other comment on a shipped ticket — stop: this skill never babysits, so a handoff written here goes stale on the first bot round. Report it as owed instead.
+- About to run `gh pr comment` on a PR this skill opened — stop: the body's `## Notes` is the only channel.
+- About to call `create_attachment_from_upload` or attach media to a ticket — stop: no tracker attachments; media goes to `<MEDIA-BRANCH>` for the PR body.
 - About to touch a branch that carries an issue id but has no `.context/<issue-id>/` state dir — that is a human's WIP; flag it, never touch it.
 - About to re-`init` a finished engine run, hand-edit `ledger.json` or a findings file, or re-derive/trim the reviewer manifest — the CLI owns the loop.
-- About to stamp `<HITL>` or route an `escalate` ticket yourself — decline instead: elaborate comment, clear `<RISK:>*`, back to `<READY>`, remove the worktree.
+- About to stamp `<HITL>` or route an `escalate` ticket yourself — decline instead: the three-line decline note, clear `<RISK:>*`, back to `<READY>`, remove the worktree.
 - About to run a solve command from the user's active checkout — every solve command runs from the ticket's own worktree.
 - Empty queue and tempted to widen scope — an empty queue is a valid result; report it and stop. Honor `<SKIP>` and `<HITL>` as hard exclusions even alongside `<AGENT-READY>`.
 
@@ -492,7 +447,7 @@ Before reporting done:
 - [ ] Every picked-up ticket was claimed both ways: `<AGENT-READY>` cleared with all other labels intact, and status moved to `<IN-PROGRESS>`.
 - [ ] Every shipped PR is **draft** (`gh pr ready <n> --undo` ran), tests proven green via `testEvidence`, and the worktree is clean of untracked scaffolding.
 - [ ] Every shipped PR body carries `## Verification` (rows from `evidence/verification.jsonl` only) and `## Visual verification` (scenes on `<MEDIA-BRANCH>` by sha, or the one-line form) — one body write, before any bot request.
-- [ ] Every shipped ticket carries exactly one suite-authored comment — `## QA handoff` (user-terms criteria, one visual artifact per criteria group, no dev material) — and its PR carries the `## Autonomous solve` comment; declined tickets carry `## Autonomous solve — declined`. All idempotent.
+- [ ] Every shipped ticket carries **zero** suite comments (the handoff is owed to whoever babysits the PR — the report says so per ticket) and its PR carries **zero** suite comments; human-actionable residue is `## Notes` in the body, ≤5 bullets. Declined tickets carry the one three-line `## Autonomous solve — declined` note, updated by id. No tracker attachments anywhere.
 - [ ] Declined tickets: `<RISK:>*` cleared, no routing label added, status back in `<READY>`, worktree and branch removed.
 - [ ] The Step 6 report accounts for every queue ticket — drafted, declined, skipped-for-routing, or flagged — plus every resumed in-flight one.
 - [ ] Nothing in the run merged, marked ready, marked done, or initiated compliance.

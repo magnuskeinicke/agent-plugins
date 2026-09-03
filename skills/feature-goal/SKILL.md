@@ -77,8 +77,8 @@ once, in your first message.
 
 **Ticket tree** (`../work-slice/references/qa-handoff.md`): the **feature
 ticket** `<ISSUE>` is the human's — PM, designers and QA read it; the suite
-writes nothing on it but labels and, at the end, one `## QA handoff`
-comment. `/to-prd` creates the **PRD ticket** `<PRD-ISSUE>` under it
+writes nothing on it but labels and, once the whole stack is babysat green,
+one concise `## QA handoff` comment with its evidence embedded inline. `/to-prd` creates the **PRD ticket** `<PRD-ISSUE>` under it
 (`PRD: <feature title>`, description = the PRD, dev-owned: implementation
 deltas live there). `/to-issues` hangs every **slice** off the PRD ticket.
 Given a `PRD:` ticket as the argument, `<ISSUE>` is its parent; given the
@@ -404,9 +404,11 @@ it waited already; only a human changes what it would find.
 The feature ticket `<ISSUE>` belongs to humans — PM, designers, and now
 **QA**, who has no code access. The suite writes exactly one thing on it —
 a `## QA handoff` comment per `../work-slice/references/qa-handoff.md` — and
-nothing else: no PRD, no assumptions, verification tables, provenance or
-dispatch markers (those live on the PRD ticket, the slice tickets and the
-PRs). Never post the handoff on the PRD ticket. Compose it in the session that
+nothing else, ever: no PRD, no assumptions, verification tables, provenance,
+dispatch markers or progress notes (those live on the PRD ticket, the slice
+tickets and the PR bodies). It is written **only now**, after GOAL MET — a
+handoff written earlier goes stale on the next bot round. Never post the
+handoff on the PRD ticket. Compose it in the session that
 read GOAL MET:
 
 1. **Criteria.** The feature ticket's own `- [ ]` criteria verbatim when user-facing;
@@ -418,17 +420,24 @@ read GOAL MET:
    named there (`git show … > <file>`) — `criteria` in each scene says which
    ACs it covers. Group criteria under the scene that proves them: one video
    *or* one still per group, never both of the same thing, as few as prove the
-   feature. Upload with the tracker's attachment flow and embed. A criterion no
-   scene covers says so in its evidence line. Never a GitHub raw URL on the
-   tracker.
+   feature (1–3 in total). **Embed inline, never attach:** upload the file
+   (Linear: `prepare_attachment_upload` → PUT) and put the returned **asset
+   URL** straight into the comment markdown — **never**
+   `create_attachment_from_upload`, which files it as a downloadable resource
+   instead of showing it. Video as inlineable `.mp4`, else fall back to a
+   still, never a download link. Never a GitHub raw URL on the tracker. A
+   criterion no scene covers says so in one short line.
 3. **Steps + expected result** in the ticket's language, user terms only —
    navigation by what the screen shows, roles by what QA sees in the test
    environment, no routes-first, no code, no PR jargon.
 4. **Not working yet** for anything a slice shipped as a failed criterion
    (its `## QA evidence` on the slice ticket names it), in user terms.
-5. One `Engineering reference:` line with the stack's PR links, then post the
-   comment (idempotent — update an existing `## QA handoff`). Checkpoint stage
-   DONE only after it is on the feature ticket.
+5. The stack's PR links on one line at the bottom, then post the comment —
+   **idempotent by edit**: find an existing `## QA handoff` and update it **by
+   id**, never a second comment and never a "v2 supersedes the above". Keep the
+   whole thing under ~150 words of prose: no tables, no test counts, no capture
+   method, no sha's. Checkpoint stage DONE only after it is on the feature
+   ticket.
 
 Local mode does the same from this worktree. A session that died before
 publishing media leaves a criterion without evidence — write that down in the

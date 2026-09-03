@@ -99,7 +99,7 @@ consolidation tickets, then Step 5 with these readings:
   `gh stack link --base <BASE> <pr-01> … <this-pr>` (skeleton alone: nothing
   to link yet). Then `gh pr view <n> --json baseRefName,isDraft` must show
   the predecessor's branch and `true`.
-- **5.4** — the provenance / assumptions / ledger PR comment as written.
+- **5.4** — no PR comment: the human-relevant residue is `## Notes` in the body write of 5.2b; provenance and the ledger stay in `.context/`.
 
 Then Step 6 (advance `<NEXT>`, skeleton map, PRD-ticket deltas) to checkpoint
 `HANDED_OFF`, and go straight into §3b.
