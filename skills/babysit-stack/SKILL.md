@@ -235,16 +235,26 @@ unconfigured — record `n/a`.
 - `<COMMENT-BOT>`: `gh pr comment <n> --body '<command>'` (CodeRabbit:
   `@coderabbitai review`). Same command after every fix push.
 
-**Wait** for the review to land — a review by the bot's login submitted after
-`lastTriggerAt`:
+**Wait** for the round to land. A round has landed when **either** a review by
+the bot's login was submitted after `lastTriggerAt`, **or** the bot posted an
+issue comment after `lastTriggerAt` that closes the round without a review
+object — CodeRabbit answers a re-review with nothing to add as a plain comment
+(`Review finished`, or a summary reporting zero actionable comments), never as
+a review. Poll both in the same condition, or the wait runs to its full bound
+on every clean round:
 
 ```bash
 gh api repos/{owner}/{repo}/pulls/<n>/reviews \
   --jq '[.[] | select(.user.login=="<login>" and .submitted_at > "<lastTriggerAt>")] | length'
+gh api repos/{owner}/{repo}/issues/<n>/comments \
+  --jq '[.[] | select(.user.login=="<login>" and .created_at > "<lastTriggerAt>"
+         and (.body | test("Review finished|Actionable comments posted|no actionable")))] | length'
 ```
 
-Bounded wait (above); stuck rule applies (`needs-human`: "<login> never
-delivered round N").
+Either count > 0 → the round landed; read the threads. Bounded wait (above);
+stuck rule applies (`needs-human`: "<login> never delivered round N") — but a
+`Review finished` comment with no threads is a **delivered, satisfied** round,
+never `stuck`.
 
 **Address** every unresolved thread on the PR (Phase D's classification and
 mechanics — fix / dispute-with-evidence / outdated / needs-human), the bot's
@@ -338,6 +348,15 @@ Fix commits must land on the *owning* PR's branch:
 
 ## Verdict (every run ends with this)
 
+The verdict block below is the run's **terminal report** — printed to the
+caller, written to the state file, and (under `/feature-goal`) stamped as the
+`babysit:` line on the slice's `## Cloud dispatch` comment. It is **never
+posted as a PR comment**: the suite does not comment on its own PRs
+(`../work-slice/references/pr-evidence.md` — the PR body is its only voice
+there, and babysit's only body write is the `## Verification` refresh). The
+only PR comments babysit ever writes are `<COMMENT-BOT>`'s summon command and
+the per-thread replies.
+
 ```md
 # Babysit — <PRD issue id>
 | PR | Slice | CI | <BOT> | <COMMENT-BOT> | Unresolved threads | Notes |
@@ -410,6 +429,8 @@ merely because something is pending; pending is waited on.
 - About to check out a branch held by another worktree — stop: flag `needs-human`.
 - About to end the run with an actionable item left (a fixable thread, a deliverable bot round, a re-runnable check) — stop: babysitting mode finishes or blocks, it does not pause.
 - About to classify checks from the human-readable table — stop: `gh pr checks --json`, key on `bucket`.
+- About to `gh pr comment` the verdict block, a per-PR summary, or any "babysit report" onto the PR — stop: the verdict is the terminal report + state file (+ the dispatch-comment `babysit:` line under `/feature-goal`); PR comments are for the bot summon and thread replies only.
+- About to record a bot as `stuck` while a `Review finished` / zero-actionable comment from it sits after `lastTriggerAt` — stop: that is a delivered, satisfied round.
 
 ## Verification
 

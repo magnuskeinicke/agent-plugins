@@ -18,7 +18,11 @@ human).
   `gh extension list | grep -q gh-stack || gh extension install github/gh-stack`,
   `git config rerere.enabled true`, `git config remote.pushDefault origin`.
 - Read `.context/<ISSUE>/pipeline-state.md` (the previous session's
-  checkpoint — same workspace, so it is here) and the PRD ticket's
+  checkpoint — same workspace, so it is here); note its `Tracker writes:`
+  line — `planning` means every issue write below is **staged**, not posted
+  (SKILL.md, "Tracker writes from the sandbox"), and the markers you read
+  from other slices may live in `.context/<ISSUE>/tracker-writes-pending/`
+  rather than on the tickets. Then the PRD ticket's
   description (`<PRD-ISSUE>`, the `PRD:` sub-issue of the feature ticket —
   its `## Implementation deltas` comments amend it). Never write on the
   feature ticket. Planning docs are on the docs branch named there; read them from
@@ -54,7 +58,11 @@ PR state (`gh pr list --state all --search "<slice-id>"`) and its
   "needs a human decision" line as an assumption to make and record (never a
   stop), disclose a routing mismatch if any. Post / update the slice's
   **`## Cloud dispatch`** comment: pipeline workspace deep link, this session
-  id, docs branch, `dispatched-by: feature-goal relay`. Checkpoint `CLAIMED`
+  id, docs branch, `dispatched-by: feature-goal relay`. A `403` on any of
+  these writes is not a stop: stage the write
+  (`.context/<ISSUE>/tracker-writes-pending/`), flip the checkpoint to
+  `Tracker writes: planning` if it wasn't already, and carry on — the
+  planning session flushes the queue. Checkpoint `CLAIMED`
   in `.context/<slice-id>/workflow-state.md`; update the pipeline checkpoint
   (`Slice cursor`, `Relay`).
 
@@ -122,7 +130,10 @@ this workspace, so a re-run resumes rather than restarts.
 Record the verdict in **two** places: the slice checkpoint (`COMPLETE` on
 GOAL MET, else `HANDED_OFF` + the verdict line) and a `babysit: GOAL MET` /
 `babysit: NOT MET — <reason>` line on the slice's `## Cloud dispatch` comment
-(the durable marker every other session reads). Then:
+(the durable marker every other session reads; staged under `Tracker writes:
+planning`). The verdict is **not** a PR comment — babysit's own rule; the PR
+body's `## Verification` refresh is the only PR write this step makes beyond
+thread replies. Then:
 
 - **GOAL MET** → §4, then §5 (pass the baton).
 - **NOT MET** → by construction only `needs-human` threads, a stuck bot, or
@@ -135,7 +146,8 @@ GOAL MET, else `HANDED_OFF` + the verdict line) and a `babysit: GOAL MET` /
 ## 4. Verify from durable markers, not from memory
 
 `.context/<slice-id>/workflow-state.md` reads `COMPLETE`; the slice's
-`## Cloud dispatch` comment carries `babysit: GOAL MET`; `gh pr view` shows
+`## Cloud dispatch` comment carries `babysit: GOAL MET` (or its staged copy
+does, under `Tracker writes: planning`); `gh pr view` shows
 an open **draft** PR on `<stack-name>` with the predecessor's branch as base
 (or `<BASE>` for the first), CI green, no unresolved review threads
 (`gh pr view <n> --json reviewDecision,statusCheckRollup` + the thread query
@@ -159,7 +171,8 @@ babysit uses); `gh stack view --json` shows the chain; `git status
   sweep: every PR was already babysat on its own, so it mostly confirms and
   yields the one verdict QA-HANDOFF keys on.
 - Record the started session in the pipeline checkpoint (`Relay`), report
-  (slice, PR link, assumptions, the session started) and **end**. Never
+  (slice, PR link, assumptions, the session started, and — under `Tracker
+  writes: planning` — every staged tracker write by file name) and **end**. Never
   wait for, poll or message the session you started; never claim a second
   slice.
 
