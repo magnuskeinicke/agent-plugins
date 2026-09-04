@@ -19,7 +19,7 @@ test('every roster + off-loop id has a vendored agent file', () => {
 test('round 1 minimal diff: always-on + round1 tier, no unmet conditionals', () => {
   const sel = selectReviewers({ round: 1, changedFiles: ['src/util.ts'] });
   const got = ids(sel);
-  for (const id of ['code-reviewer', 'silent-failure-hunter', 'deslop-reviewer', 'lean-reviewer', 'code-simplifier', 'codebase-pattern-reviewer'])
+  for (const id of ['code-reviewer', 'silent-failure-hunter', 'deslop-reviewer', 'lean-reviewer', 'code-simplifier', 'codebase-pattern-reviewer', 'comment-analyzer'])
     assert.ok(got.includes(id), `${id} should always run round 1`);
   for (const id of ['injection-reviewer', 'a11y-auditor', 'removal-planner', 'pr-test-analyzer'])
     assert.ok(!got.includes(id), `${id} should not trigger`);
@@ -68,6 +68,9 @@ test('fix rounds: always-on + open-finding owners + reuse rerun until clean', ()
   assert.ok(got.includes('performance-oracle'), 'open-finding owner re-runs');
   assert.ok(got.includes('codebase-pattern-reviewer'), 're-runs until clean pass');
   assert.ok(!got.includes('lean-reviewer'), 'round1 tier does not re-run');
+  assert.ok(!got.includes('comment-analyzer'), 'round1 tier does not re-run on a code-only fix range');
+  const docsFix = ids(selectReviewers({ round: 2, changedFiles: ['docs/adr/0003-x.md'], openSources: [], reuseClean: true }));
+  assert.ok(docsFix.includes('comment-analyzer'), 'docs touched in the fix range re-triggers it');
   const clean = ids(selectReviewers({ round: 2, changedFiles: ['src/fix.ts'], openSources: [], reuseClean: true }));
   assert.ok(!clean.includes('codebase-pattern-reviewer'), 'clean reuse pass skips');
 });
