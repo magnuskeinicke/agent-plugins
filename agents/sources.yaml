@@ -8,7 +8,9 @@ sources:
       frontmatter `name:` fields drop the `kramme:` prefix so they surface
       under this plugin's namespace; bodies are otherwise verbatim, except
       codebase-pattern-reviewer.md, which adds a magnus-only "diff reuse audit
-      mode" section (marked inline). One file serves both runtimes: Claude
+      mode" section, and comment-analyzer.md, which adds a magnus-only
+      "Prefer a Better Name Over a Comment" check plus a blocking-severity
+      rule (both marked inline). One file serves both runtimes: Claude
       spawns it as a subagent definition, Codex uses its body as the
       `codex exec` child's system prompt. The engine's roster mapping lives in
       engine/lib/roster.mjs.

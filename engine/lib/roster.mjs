@@ -46,6 +46,18 @@ export const ROSTER = [
     // set + provenance table (the CLI tracks the fingerprint).
     rerun: (i) => !i.reuseClean,
   },
+  {
+    // Every code diff carries comments and names, so the old docs-file trigger
+    // meant this lane never ran on the slices that needed it. Naming and
+    // comment debt is a slice-wide concern, judged once on the full diff; the
+    // `when` below only re-triggers it on a fix round whose range touched
+    // docs/markdown.
+    id: 'comment-analyzer',
+    tier: 'round1',
+    when: (i) =>
+      i.changedFiles.some((f) => DOCS_FILE_RE.test(f)) ||
+      i.hints.includes('comments'),
+  },
 
   // Conditional tier: mechanical triggers on the round's diff scope.
   {
@@ -53,12 +65,6 @@ export const ROSTER = [
     when: (i) =>
       i.changedFiles.some((f) => TEST_FILE_RE.test(f)) ||
       i.addedFiles.length > 0,
-  },
-  {
-    id: 'comment-analyzer',
-    when: (i) =>
-      i.changedFiles.some((f) => DOCS_FILE_RE.test(f)) ||
-      i.hints.includes('comments'),
   },
   {
     id: 'type-design-analyzer',

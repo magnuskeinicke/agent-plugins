@@ -21,8 +21,8 @@ system prompt. The host repo's `repoConfig.reviewers` / `areaPaths` are an
 | `lean-reviewer` | round 1 | full slice diff; later rounds only while it owns an open finding |
 | `code-simplifier` | round 1 | same re-run rule |
 | `codebase-pattern-reviewer` | round 1, *diff reuse audit mode* | re-runs each fix round until a clean pass with an unchanged added-file set + provenance table (the CLI tracks the fingerprint); carries the magnus provenance audit + libMap duplicate hunt |
+| `comment-analyzer` | round 1 | full slice diff — owns the rename-over-comment lane (a comment a better function/parameter/variable name would delete); re-triggers on a fix round that touched docs/markdown, or hint `comments` |
 | `pr-test-analyzer` | conditional | test files touched, or any file added |
-| `comment-analyzer` | conditional | docs/markdown touched, or hint `comments` |
 | `type-design-analyzer` | conditional | type/schema files touched, or hint `types` |
 | `removal-planner` | conditional | files deleted, or hint `removal` |
 | `convention-drift-reviewer` | conditional, *convention review mode* | ≥10 changed files, or hint `conventions` |

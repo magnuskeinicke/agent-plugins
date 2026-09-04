@@ -276,9 +276,10 @@ judgement-call review threads, a stuck bot, an exhausted fix cap.
 engine (`engine/lib/roster.mjs`) selects reviewers from the vendored
 kramme-cc-workflow roster — an always-on tier (code-reviewer,
 silent-failure-hunter, deslop-reviewer), a round-1 tier (lean-reviewer,
-code-simplifier, codebase-pattern-reviewer in diff reuse audit mode), and
-mechanically-triggered conditionals (tests, types, removals, conventions,
-overengineering, performance, the four-agent security bundle, a11y/copy).
+code-simplifier, comment-analyzer, codebase-pattern-reviewer in diff reuse
+audit mode), and mechanically-triggered conditionals (tests, types, removals,
+conventions, overengineering, performance, the four-agent security bundle,
+a11y/copy).
 Whatever a host writes under `reviewers.<area>` sharpens the prompts of the
 reviewers covering that area; it never adds, removes, or replaces a lane.
 
