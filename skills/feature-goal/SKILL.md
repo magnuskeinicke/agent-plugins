@@ -77,8 +77,8 @@ once, in your first message.
 
 **Ticket tree** (`../work-slice/references/qa-handoff.md`): the **feature
 ticket** `<ISSUE>` is the human's — PM, designers and QA read it; the suite
-writes nothing on it but labels and, at the end, one `## QA handoff`
-comment. `/to-prd` creates the **PRD ticket** `<PRD-ISSUE>` under it
+writes nothing on it but labels and, once the whole stack is babysat green,
+one concise `## QA handoff` comment with its evidence embedded inline. `/to-prd` creates the **PRD ticket** `<PRD-ISSUE>` under it
 (`PRD: <feature title>`, description = the PRD, dev-owned: implementation
 deltas live there). `/to-issues` hangs every **slice** off the PRD ticket.
 Given a `PRD:` ticket as the argument, `<ISSUE>` is its parent; given the
@@ -136,6 +136,7 @@ wrote:
 - PRD ticket: (none | PROJ-1201)
 - Docs branch: <pushed planning-docs branch>
 - Pipeline workspace: (none | <workspace deep link> / <workspace id>)
+- Tracker writes: (sandbox | planning — <reason, e.g. GitHub App token: 403 on issue writes>)
 - Slice cursor: PROJ-1234 (03 of 05) | (none)
 - Relay: (none | <session id> → <NN>-<slice-id> | babysit, started <ISO time>)
 - Resumed: (none | PROJ-1234 ×1, …)
@@ -164,6 +165,12 @@ stage 0/1):
    yet babysat to GOAL MET** (its slice's `## Cloud dispatch` comment lacks
    `babysit: GOAL MET`; local: slice checkpoint not `COMPLETE`) — the PR
    session resumes that slice's Step 7 before claiming the next slice.
+   When the checkpoint reads `Tracker writes: planning` (see "Tracker writes
+   from the sandbox"), the `## Cloud dispatch` comment may be **staged, not
+   posted** — read the staged copy under
+   `.context/<ISSUE>/tracker-writes-pending/` and the slice checkpoint
+   (`.context/<slice-id>/workflow-state.md`) as the marker; PR state stays the
+   tie-breaker.
 4. **Every slice has an open or merged PR** → stage BABYSIT (merged slices
    impose no babysit work). An open PR still short of `babysit: GOAL MET` is
    handled by the stack-wide babysit here, not by another PR session.
@@ -299,19 +306,33 @@ You start or resume the relay and end. One invocation does exactly one of:
 
      > Bootstrap this workspace: install the agent plugin for your own CLI and
      > the gh-stack extension, verify, and reply with exactly `BOOTSTRAP OK` or
-     > `BOOTSTRAP FAILED: <reason>` — change nothing else in the repo.
-     > Claude Code: `claude plugin marketplace add magnuskeinicke/agent-plugins
-     > && claude plugin install magnus@magnus-skills`, verify with
-     > `claude plugin list`. Codex: `codex plugin marketplace add
+     > `BOOTSTRAP FAILED: <reason>` on the first line — change nothing else in
+     > the repo. Claude Code: `claude plugin marketplace add
+     > magnuskeinicke/agent-plugins && claude plugin install
+     > magnus@magnus-skills`, verify with `claude plugin list`. Codex:
+     > `codex plugin marketplace add
      > https://github.com/magnuskeinicke/agent-plugins.git &&
      > codex plugin add magnus@magnus-skills`. Both:
-     > `gh extension install github/gh-stack`.
+     > `gh extension install github/gh-stack`. Then probe whether this
+     > sandbox may write to the issue tracker: `gh api -X POST
+     > repos/{owner}/{repo}/issues/<ISSUE>/labels -f 'labels[]=<SKIP>'`
+     > (re-adds a label the ticket already carries — a no-op when allowed;
+     > substitute any label already on the ticket if `<SKIP>` is unset) and
+     > reply on a second line with exactly `TRACKER WRITES: ok` or
+     > `TRACKER WRITES: denied — <HTTP status + message>`.
+
+     The probe applies when `<TRACKER>` is GitHub Issues; with Linear (the
+     MCP runs on the user's own token) skip it and record `sandbox`.
 
      Wait for it to go idle — the **one bounded in-dispatch wait** (a few
      status checks over ~3 minutes; an install is seconds, not a slice) and
      read its last message. `BOOTSTRAP FAILED`, or not idle → **Blocked**
      with the deep link + reason; never paste slice instructions inline or
-     implement the slice here.
+     implement the slice here. `TRACKER WRITES: denied` is **not** Blocked:
+     record `Tracker writes: planning — <reason>` in the checkpoint, say so
+     once in the report (the fix is granting the Conductor GitHub App
+     **Issues: read & write** on the repo), and run the relay under "Tracker
+     writes from the sandbox" below.
    - Then **start PR session 1** in the pipeline workspace: `create_session`
      / `conductor session create`, agent = the skeleton's `<AGENT:>` label
      else this runtime's agent, `<CLOUD-MODEL>`, name `01-<skeleton-id>`,
@@ -321,7 +342,10 @@ You start or resume the relay and end. One invocation does exactly one of:
      checkpoint (`Pipeline workspace`, `Relay`). **Baton passed** — end.
 2. **Pipeline workspace exists** → read the newest `## Cloud dispatch` marker
    (or the checkpoint's `Relay` line) and check that session **once**
-   (`get_session_status` / `conductor session status`):
+   (`get_session_status` / `conductor session status`). With `Tracker writes:
+   planning`, first **flush the staged tracker writes** (below) — that is the
+   monitoring session's one write job, and it is what makes the markers the
+   next check reads truthful:
    - `working` → the relay is alive. Report the slice table (slice → status →
      PR) and end.
    - `idle`, and its slice now has a PR (or babysit's verdict is on record) →
@@ -337,6 +361,45 @@ You start or resume the relay and end. One invocation does exactly one of:
 
 Never spin-poll a session, and never work a slice from outside the pipeline
 workspace in cloud mode.
+
+### Tracker writes from the sandbox
+
+The relay's durable markers are tracker writes: the `## Cloud dispatch`
+comment and its `babysit:` line, the `<NEXT>` move, the `Skeleton map`
+comments, the PRD ticket's `## Implementation deltas`, and — last — the
+`## QA handoff` on the feature ticket. A Conductor sandbox authenticates
+`gh` with the Conductor GitHub App's installation token, which today carries
+`pull_requests: write` but may lack `issues: write`: PR comments, reviews and
+thread replies succeed while every issue write fails with
+`403 Resource not accessible by integration`. The bootstrap probe tells you
+which world you are in; the checkpoint's `Tracker writes:` line remembers it.
+
+- **`sandbox`** — relay sessions write the tracker directly, as written
+  everywhere in this skill.
+- **`planning`** — relay sessions never retry a 403 and never stop for it.
+  Each denied write is **staged** as one file under
+  `.context/<ISSUE>/tracker-writes-pending/<NN>-<kind>-<target>.md`
+  (`kind` ∈ `comment` | `label-add` | `label-remove`; `target` = the ticket
+  id; body = the exact markdown, or the label name), written in the order it
+  would have been posted, and the relay signal moves through what the sandbox
+  *can* write: the slice checkpoint, `.context/<ISSUE>/pipeline-state.md`,
+  and PR state. A GitHub write that succeeded (a `## Verification` refresh, a
+  thread reply) is never staged. The session's report names every staged
+  file. The **planning / monitoring session** (any invocation outside the
+  workspace with a token that has `issues: write` — the user's `gh`) flushes
+  the queue whenever it checks the relay and at DONE: read the files from the
+  workspace (a read-only `conductor session message` / `send_message` to an
+  idle session asking it to print them verbatim, or the CLI's file read when
+  available), post each in order (comments: create, or update by id when a
+  comment with the same first heading already exists — idempotent; labels:
+  additive), then note the flush in the checkpoint. The QA handoff composed
+  by the babysit session is staged the same way and posted by the flush;
+  stage DONE is claimed only once the flush has put it on the feature ticket.
+  Nothing else changes: one PR per session, babysit to GOAL MET, the baton.
+
+A session that hits an unexpected 403 with `Tracker writes: sandbox` (the
+probe passed, the token changed) switches the checkpoint to `planning`, says
+so, and stages from there on — it does not go Blocked over a marker.
 
 ### Inside the pipeline workspace (PR session)
 
@@ -404,9 +467,11 @@ it waited already; only a human changes what it would find.
 The feature ticket `<ISSUE>` belongs to humans — PM, designers, and now
 **QA**, who has no code access. The suite writes exactly one thing on it —
 a `## QA handoff` comment per `../work-slice/references/qa-handoff.md` — and
-nothing else: no PRD, no assumptions, verification tables, provenance or
-dispatch markers (those live on the PRD ticket, the slice tickets and the
-PRs). Never post the handoff on the PRD ticket. Compose it in the session that
+nothing else, ever: no PRD, no assumptions, verification tables, provenance,
+dispatch markers or progress notes (those live on the PRD ticket, the slice
+tickets and the PR bodies). It is written **only now**, after GOAL MET — a
+handoff written earlier goes stale on the next bot round. Never post the
+handoff on the PRD ticket. Compose it in the session that
 read GOAL MET:
 
 1. **Criteria.** The feature ticket's own `- [ ]` criteria verbatim when user-facing;
@@ -418,17 +483,27 @@ read GOAL MET:
    named there (`git show … > <file>`) — `criteria` in each scene says which
    ACs it covers. Group criteria under the scene that proves them: one video
    *or* one still per group, never both of the same thing, as few as prove the
-   feature. Upload with the tracker's attachment flow and embed. A criterion no
-   scene covers says so in its evidence line. Never a GitHub raw URL on the
-   tracker.
+   feature (1–3 in total). **Embed inline, never attach:** upload the file
+   (Linear: `prepare_attachment_upload` → PUT) and put the returned **asset
+   URL** straight into the comment markdown — **never**
+   `create_attachment_from_upload`, which files it as a downloadable resource
+   instead of showing it. Video as inlineable `.mp4`, else fall back to a
+   still, never a download link. Never a GitHub raw URL on the tracker. A
+   criterion no scene covers says so in one short line.
 3. **Steps + expected result** in the ticket's language, user terms only —
    navigation by what the screen shows, roles by what QA sees in the test
    environment, no routes-first, no code, no PR jargon.
 4. **Not working yet** for anything a slice shipped as a failed criterion
    (its `## QA evidence` on the slice ticket names it), in user terms.
-5. One `Engineering reference:` line with the stack's PR links, then post the
-   comment (idempotent — update an existing `## QA handoff`). Checkpoint stage
-   DONE only after it is on the feature ticket.
+5. The stack's PR links on one line at the bottom, then post the comment —
+   **idempotent by edit**: find an existing `## QA handoff` and update it **by
+   id**, never a second comment and never a "v2 supersedes the above". Keep the
+   whole thing under ~150 words of prose: no tables, no test counts, no capture
+   method, no sha's. Checkpoint stage DONE only after it is on the feature
+   ticket. Under `Tracker writes: planning` the babysit session **stages** it
+   (`.context/<ISSUE>/tracker-writes-pending/`) and ends with stage
+   QA-HANDOFF, not DONE; the next outside invocation flushes the queue, posts
+   it, and claims DONE.
 
 Local mode does the same from this worktree. A session that died before
 publishing media leaves a criterion without evidence — write that down in the
@@ -495,7 +570,7 @@ handoff rather than substituting a Storybook or design image.
 **This skill orchestrates the feature pipeline as a re-entrant stage machine with the grill as its only human gate — planning here, then a relay of one-PR sessions in one cloud workspace (each babysitting its own PR to GOAL MET before the next is cut), then a stack-wide babysit session — sequencing the constituent skills, never re-implementing them.**
 
 - **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` (PRD ticket under the feature ticket) and `/to-issues` (slices under the PRD ticket) in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–7 (link the PR, babysit it to GOAL MET, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict and post the QA handoff; from outside, check / resume the relay; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
-- **DOES NOT**: answer the grill for the human, ask the human anything after the grill, write anything but labels and the one `## QA handoff` on the feature ticket, treat `<HITL>` as a stop, work more than one PR in a session, wait for a session it started, implement / fix / review / babysit code outside the pipeline workspace (cloud mode), own review-loop internals (the engine CLI does) or CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, or relocate the venue-neutral standalone commands (`/work-issue`, `/solve-ready-tickets`, `/daily-ticket-manager` run wherever the user starts them).
+- **DOES NOT**: answer the grill for the human, ask the human anything after the grill, write anything but labels and the one `## QA handoff` on the feature ticket, treat `<HITL>` as a stop, work more than one PR in a session, wait for a session it started, implement / fix / review / babysit code outside the pipeline workspace (cloud mode), own review-loop internals (the engine CLI does) or CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, or relocate the venue-neutral standalone commands (`/work-issue` and `/daily-ticket-manager` run wherever the user starts them; `/solve-ready-tickets` does its own fan-out and is none of this skill's business).
 
 ## Red Flags — STOP
 
@@ -529,7 +604,7 @@ Before reporting done:
 - [ ] The reported stage matches live markers (`PRD:` sub-issue of the feature ticket, slice sub-issues of the PRD ticket, `## Cloud dispatch` comments, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
 - [ ] After the grill, the human was asked nothing: `/to-prd` and `/to-issues` ran in pipeline mode; every assumption made downstream is recorded on its ticket/PR and listed in the report.
 - [ ] Planning docs (`CONTEXT.md`, `docs/adr/**`, `docs/agents/**`) were committed **and pushed** before the relay started; `git status --porcelain` shows none left over; the docs branch is in the checkpoint and every dispatch comment.
-- [ ] Cloud mode: exactly one pipeline workspace for the stack; every worked slice's ticket carries exactly one `## Cloud dispatch` comment (workspace deep link, the session that worked it, docs branch); this session worked at most one PR and, if it did, started exactly one successor session before ending.
+- [ ] Cloud mode: the checkpoint records `Tracker writes: sandbox | planning` from the bootstrap probe; under `planning`, every denied tracker write is a staged file and the outside session flushed them (no marker silently dropped). Exactly one pipeline workspace for the stack; every worked slice's ticket carries exactly one `## Cloud dispatch` comment (workspace deep link, the session that worked it, docs branch); this session worked at most one PR and, if it did, started exactly one successor session before ending.
 - [ ] Every completed slice has a draft PR verified from durable markers (remote branch, `gh pr view`: draft, base = predecessor's branch), `gh stack view --json` shows the chain bottom → top, and `<NEXT>` has exactly one carrier or the report names why none does (stack complete).
 - [ ] Every PR a session opened was babysat to a terminal verdict in that same session before any successor was started; `babysit: GOAL MET` is stamped on its slice's `## Cloud dispatch` comment (local: slice checkpoint `COMPLETE`); no slice branch was cut on a predecessor short of that.
 - [ ] The stack-wide babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.

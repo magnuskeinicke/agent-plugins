@@ -29,7 +29,7 @@ owns which label.
 
 Three tiers, two audiences (`../work-slice/references/qa-handoff.md`):
 
-- **Feature ticket `<ISSUE>`** — the human's ticket. PM, designers and QA read it; its description and comments are theirs. The suite writes **nothing** on it except labels and, at the very end, one `## QA handoff` comment. No PRD, no assumptions, no dev material.
+- **Feature ticket `<ISSUE>`** — the human's ticket. PM, designers and QA read it; its description and comments are theirs. The suite writes **nothing** on it except labels and, once the whole stack is babysat green, one concise `## QA handoff` comment with inline evidence (`../work-slice/references/qa-handoff.md`). No PRD, no assumptions, no dev material, no progress notes.
 - **PRD ticket `<PRD-ISSUE>`** — a sub-issue of the feature ticket, titled **`PRD: <feature ticket title>`**, whose **description is the PRD**. Dev-owned: `/work-slice` appends `## Implementation deltas` comments here, `/to-issues` hangs every slice off it. This is the ticket this skill produces.
 - **Slice tickets** — sub-issues of the PRD ticket, created by `/to-issues`.
 

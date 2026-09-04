@@ -1,106 +1,154 @@
 # Tracker audiences + the `## QA handoff` comment
 
-The tracker is not a dev log. Two audiences read it, and every ticket write in
-the suite must know which one it is talking to.
+The tracker is not a dev log, and a human's ticket is not the suite's scratch
+pad. Every ticket write in the suite must know which audience it is talking to,
+and a **human-authored ticket gets exactly one suite comment, ever**.
 
 ## Who reads which ticket
 
 | Ticket | Audience | The suite may write | Never on this ticket |
 | --- | --- | --- | --- |
-| **Feature ticket** (`<ISSUE>` — the human's ticket, seed of `/feature-goal`) | PM, designers, **QA**, the user | **one `## QA handoff` comment** (this file); labels | the PRD, assumptions, implementation deltas, provenance, review ledgers, verification tables, cloud-dispatch markers, per-slice QA evidence — anything dev-shaped |
+| **Feature ticket** (`<ISSUE>` — the human's ticket, seed of `/feature-goal`) | PM, designers, **QA**, the user | labels, status, and **one** `## QA handoff` comment (this file) | everything else |
+| **Standalone ticket** (`/work-issue`, whether run by hand or dispatched by `/solve-ready-tickets`) | QA (and the user) | labels, status, and **one** suite comment — the `## QA handoff`, or the dispatcher's decline note that the same slot later becomes | everything else |
 | **PRD ticket** (`PRD: …` sub-issue of the feature ticket, `/to-prd`) | the user + AI | the PRD as its description; `## Implementation deltas` comment | QA handoff (that is the feature ticket's), per-slice machinery |
 | **Slice sub-issues** (`/to-issues`, children of the PRD ticket) | the user + AI **only** — never shown to anyone else | anything the machinery needs: Skeleton map, `## Cloud dispatch`, `## Assumptions`, dev-form `## QA evidence`, acceptance-criteria notes | — |
-| **Standalone ticket** (`/work-issue`, `/solve-ready-tickets`) | QA (and the user) | **one `## QA handoff` comment**; the triage / declined comments the manager loop already leaves | assumptions, leanness concerns, reviewer rosters, verdicts, provenance, verification tables, consolidation lists — all of that is **PR-comment** material |
 
-Rule of thumb: **evidence on the tracker is visual only.** Test runs, gate
-output, reviewer verdicts and provenance are for developers and live on the PR
-(`pr-evidence.md`, the PR comments). A QA-visible ticket gets exactly one
-suite-authored comment, and it must be readable by someone who has never seen
-the code.
+Two rules follow, and they are absolute:
+
+- **AI-generated prose belongs on AI-generated tickets.** The PRD ticket and the
+  slice sub-issues are the suite's own; write what the machinery needs there.
+  The human's ticket is theirs.
+- **Evidence on a human ticket is visual, inline, and concise.** Test runs, gate
+  output, reviewer verdicts, provenance, review ledgers and assumptions are
+  developer material and live on the **PR body** (`pr-evidence.md`) — never on
+  the tracker, never as a tracker comment.
+
+## The one comment slot on a human ticket
+
+There is exactly **one** suite-authored comment per human-facing ticket. It is
+not a thread and it is never appended to:
+
+- **Find it by its heading** (`## QA handoff`, or the decline note's heading) in
+  `list_comments`, and **update that comment by id**. A second suite comment on
+  a human ticket is a defect, not a duplicate.
+- **Superseding is editing.** New evidence, a re-run, a corrected criterion, a
+  recapture — all of it *replaces* the body of the existing comment. Never post
+  a "v2 supersedes the above" comment; the reader must never have to work out
+  which version is current.
+- **The decline note shares the slot.** A ticket `/solve-ready-tickets` refuses
+  to dispatch gets a three-line `## Autonomous solve — declined` note in that
+  slot — the one AI-to-AI message on a human ticket, because
+  `/daily-ticket-manager` re-triages on it. If the ticket is later worked, the
+  handoff replaces it.
+
+## When it is written — after the PR is done, never before
+
+The handoff is written **only once `/babysit-stack` reports GOAL MET** for the
+ticket's PR (the whole stack's PRs, for `/feature-goal`): CI green, both review
+bots satisfied, every thread resolved. Bot rounds change code, and code changes
+invalidate captures — a handoff written at PR-open time is stale by the time QA
+reads it.
+
+Consequences, binding on every skill:
+
+- Nothing is posted to the human ticket at claim time, at PR-open time, or
+  between review rounds. Not acceptance criteria, not a status note.
+- A run that ends **Blocked** short of GOAL MET writes **nothing** on the
+  ticket; the state lives on the PR, and the resume report names it.
+- If a later run changes what QA would see, it re-renders the same comment.
 
 ## The `## QA handoff` comment
 
-Written **once** per QA-visible ticket, idempotently (update the existing
-`## QA handoff` comment, never add a second), in the **language the ticket is
-written in**:
+Written in the **language the ticket is written in**. Concise is the point:
+target **under ~150 words of prose** plus 1–3 embedded media. No tables, no
+PASS/FAIL columns, no method notes, no counts.
 
-- **`/work-issue`, `/solve-ready-tickets`** — on the ticket itself, right after
-  the draft PR opens (the Playwright loop has run by then).
+- **`/work-issue`** — on the ticket itself, after babysit GOAL MET. Same when
+  the run was dispatched into a cloud workspace by `/solve-ready-tickets`; the
+  dispatcher itself never writes a handoff.
 - **`/feature-goal`** — on the **feature ticket** (never the PRD ticket), in the
-  QA-HANDOFF stage after babysit reports GOAL MET, composed across the whole
-  stack.
+  QA-HANDOFF stage after babysit reports GOAL MET, composed across the stack.
 
 ```markdown
 ## QA handoff
 
-Test on <the team's test environment, in plain words — never localhost or a port>, signed in as <a role, in plain words: "a clinic admin">. Nothing below needs code access.
+Test on <the team's test environment, in plain words — never localhost or a port>, signed in as <a role, in plain words: "a clinic admin">.
 
 ### 1–2. <Acceptance criteria in user terms, grouped when one walk-through covers them>
 **Steps:** 1. Open Administration → Forms. 2. On the "Mouth-first triage" row, choose Upload JSON and pick a template file. 3. Confirm. 4. Upload again.
 **Expected:** the row shows the new version and today's date and a "Published" message appears (1); the second upload asks before overwriting (2).
-**Evidence:** 🎥 <one embedded video covering both>
+
+![Uploading a template and the overwrite confirmation](https://uploads.linear.app/…)
 
 ### 3. <a criterion that is about how something looks>
 **Steps:** …
 **Expected:** …
-**Evidence:** 🖼 <one screenshot>
 
-**Not working yet:** <only if something failed — in user terms, what QA will see, e.g. "Uploading a second time does not ask before overwriting.">
+![The published row](https://uploads.linear.app/…)
 
-Engineering reference: <PR link(s)> — for developers, QA can ignore it.
+**Not working yet:** <only if something failed — in user terms, what QA will see>
+
+<PR link>
 ```
 
 ### Acceptance criteria — whose, and in what words
 
 1. The ticket's own `- [ ]` criteria, **verbatim**, when they are user-facing.
 2. A criterion written in technical terms (schema, endpoint, component) is
-   **rewritten** as what the user experiences; the original wording is not
-   shown.
+   **rewritten** as what the user experiences; the original wording is not shown.
 3. No criteria on the ticket → **write user-facing ones** from the description
-   (or, for a feature ticket, from the PRD ticket's User Stories — one
-   criterion per story the stack delivered). They live **inside** the handoff; never post a separate
-   `## Acceptance criteria` comment on a QA-visible ticket.
-4. Cover every criterion, including ones that failed — a failed one gets its
-   evidence and a line under **Not working yet**, in user terms. Silence is a
-   false claim.
+   (or, for a feature ticket, from the PRD ticket's User Stories — one criterion
+   per story the stack delivered). They live **inside** the handoff; never post a
+   separate `## Acceptance criteria` comment.
+4. Cover every criterion, including ones that failed — a failed one gets a line
+   under **Not working yet**, in user terms. Silence is a false claim.
 
 ### Language rules
 
 - No file paths, commands, component names, branch or PR jargon, model or
-  reviewer names, `CR-NNN` ids, PASS/FAIL columns, test counts.
-- Navigation by what the screen shows ("Administration → Forms"), not by
-  route; a route may follow in parentheses if the app exposes it.
+  reviewer names, `CR-NNN` ids, PASS/FAIL columns, test counts, sha's, or
+  "captured against…" method paragraphs.
+- Navigation by what the screen shows ("Administration → Forms"), not by route;
+  a route may follow in parentheses if the app exposes it.
 - Roles and data by what QA sees in the test environment ("the seeded clinic
   admin"), never credentials.
-- Expected results as observable outcomes ("a Published message appears"),
-  not implementation ("the cache is invalidated").
+- Expected results as observable outcomes ("a Published message appears"), not
+  implementation ("the cache is invalidated").
 
-### Evidence — visual only, as few artifacts as prove it
+### Evidence — inline, visual, as few artifacts as prove it
 
-- **One artifact per logical group of criteria, video *or* screenshot — never
-  both for the same thing.** Group criteria that one walk-through covers under
-  one heading with one video; a criterion about appearance gets one
-  screenshot. Aim for 1–3 artifacts per handoff. Prefer video when the
-  criterion is something the user does; a still when it is something the user
-  sees. Missing evidence for a criterion → say so on its evidence line.
-- Files come from the run's `.context/<run-id>/evidence/media/` (work-slice
-  3.5). For a feature-ticket handoff composed after the fact, fetch them from the
-  media branch: `git fetch origin <MEDIA-BRANCH>` then
+**Everything the reader needs must render in the comment.** A tracker
+attachment, a file to download, a link to click, a GitHub raw URL — all of them
+are failures of this rule.
+
+- **Embed, never attach.** Linear: `prepare_attachment_upload` → PUT the file to
+  the returned URL → put the returned **asset URL straight into the comment
+  markdown** (`![alt](assetUrl)`). **Never call `create_attachment_from_upload`**
+  on a human ticket — that files the media in the attachments panel as a
+  downloadable resource, which is exactly what this rule forbids.
+- **Never a GitHub raw URL on the tracker** — QA has no repo access.
+- **One artifact per logical group of criteria, video *or* still — never both
+  for the same thing.** Group criteria that one walk-through covers under one
+  heading with one video; a criterion about appearance gets one still. **1–3
+  artifacts per handoff**, full stop. Prefer video when the criterion is
+  something the user *does*, a still when it is something the user *sees*.
+- **Video must play inline.** Upload `.mp4` (`ffmpeg -i <flow>.webm -c:v libx264
+  -pix_fmt yuv420p <flow>.mp4`) and embed it. If the tracker will not render it
+  inline, fall back to a **still** — never to a download link.
+- Files come from the run's `.context/<run-id>/evidence/media/` (work-slice 3.5).
+  For a feature-ticket handoff composed after the fact, fetch them from the media
+  branch: `git fetch origin <MEDIA-BRANCH>` then
   `git show origin/<MEDIA-BRANCH>:pr/<n>/<file> > <file>` for each stack PR —
   `pr/<n>/media.json` names the scenes, routes and captions.
-- Upload with the tracker's attachment flow and **embed** in the comment
-  (Linear: `prepare_attachment_upload` → PUT the file → `create_attachment_from_upload`,
-  then the asset URL in markdown). Video as `.webm`/`.mp4` — convert with
-  `ffmpeg -i <flow>.webm -c:v libx264 -pix_fmt yuv420p <flow>.mp4` when the
-  tracker will not play WebM; GIFs are the GitHub form, not the tracker form.
-- Never link a GitHub raw URL on the tracker — QA has no repo access.
-- The 3.5 secret preflight applies unchanged: seeded users, fake data, no
-  URL bars with tokens, discard + recapture on a slip.
+- Missing evidence for a criterion → one short line saying so.
+- The 3.5 secret preflight applies unchanged: seeded users, fake data, no URL
+  bars with tokens, discard + recapture on a slip.
 
 ### What is *not* in the handoff
 
 Assumptions, HITL decisions, routing disclosures, leanness concerns, the
 reviewer roster, verdicts, provenance, the review ledger, consolidation
-follow-ups, verification tables. All of it goes to the PR as comments (or the
-PR body's evidence sections). If the human needs to see it, they see it on the
-PR; QA never needs it.
+follow-ups, verification tables, capture methodology, sandbox caveats. None of
+it reaches the tracker in any form. What a human must act on goes in the PR
+body's `## Notes` (`pr-evidence.md`); the rest stays in `.context/<run-id>/`
+and the terminal report.

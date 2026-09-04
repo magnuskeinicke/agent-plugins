@@ -115,10 +115,12 @@ machine (run it again to resume) that chains:
    verdict: CI green, then Copilot review rounds until satisfied, then CodeRabbit
    rounds (summoned by `@coderabbitai review`) until satisfied, every thread resolved. Bot
    reviews happen on GitHub only — no review CLI
-6. QA handoff — one `## QA handoff` comment on the feature ticket for QA (user-terms steps +
-   one visual artifact per group of criteria, no dev material — see
-   `skills/work-slice/references/qa-handoff.md`); slice tickets stay internal, standalone tickets
-   get the same single comment from `/work-issue` / `/solve-ready-tickets`
+6. QA handoff — **after** the stack is GOAL MET, one concise `## QA handoff` comment on the
+   feature ticket for QA (user-terms steps + one **inline-embedded** visual per group of criteria,
+   under ~150 words, no dev material, no tracker attachments — see
+   `skills/work-slice/references/qa-handoff.md`); it is the only thing the suite ever writes on a
+   human's ticket, and re-runs edit it rather than adding a second. Slice tickets stay internal;
+   `/work-issue` writes the same single comment once it has babysat its PR green
 
 Planning (steps 1–3) happens in your session (local, or a cloud workspace you handed the grill
 off to); everything after it runs as fresh one-PR sessions in the pipeline workspace. The
@@ -132,7 +134,7 @@ Standalone entry points onto the same machinery:
 | Command | Use for |
 | --- | --- |
 | `/magnus:work-issue <id>` | a lean ticket straight to a babysat draft PR — skips PRD/slicing, no human gates |
-| `/magnus:solve-ready-tickets apply` | autonomously drain the `agentReady`-labeled queue; built for a scheduler |
+| `/magnus:solve-ready-tickets apply` | drain the `agentReady`-labeled queue by fanning it out — one cloud workspace per ticket, each running `/work-issue`; built for a scheduler |
 | `/magnus:review-code` | one read-only reviewer round on any diff, PR, or working tree |
 | `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
 | `/magnus:babysit-stack` | babysit a PR or stack to GOAL MET: CI, Copilot rounds, CodeRabbit rounds, threads |
@@ -174,8 +176,9 @@ the CLI: sequential-first loop (subagents an optional accelerator), a
 (full loop on an existing PR, `--max-rounds`) the same treatment and deleted
 their workflow scripts. PR4 killed the `/goal` stop-hook dependency —
 `feature-goal`, `work-issue` and `solve-ready-tickets` are re-entrant stage
-machines on durable markers ("run again to resume"), and `solve-ready-tickets`
-drives the engine CLI (last workflow script deleted). PR5 adopted the kramme
+machines on durable markers ("run again to resume"). `solve-ready-tickets` has
+since become a pure dispatcher — it fans the queue out to one cloud workspace per
+ticket, each running `/work-issue`, and writes no code itself. PR5 adopted the kramme
 fix-ci CI mechanics into `babysit-stack` (bucket classification, bounded
 watch, failure-signature caps, no `git add -A`). PR6 added the
 `design.fidelityCheck` repo extension point, slice agent routing

@@ -1,12 +1,47 @@
 # PR evidence — `## Verification` + `## Visual verification`
 
-Every PR the suite opens carries two evidence sections **in its description**,
-so a reviewer can judge what was actually run and actually seen without pulling
-the branch. Shared by `/work-slice`, `/work-issue`, `/solve-ready-tickets`,
-`/split-pr`; refreshed by `/iterate-pr` and `/babysit-stack` when they push.
+Every PR the suite opens carries its evidence **in its description**, so a
+reviewer can judge what was actually run and actually seen without pulling the
+branch. Shared by `/work-slice`, `/work-issue` (including the runs
+`/solve-ready-tickets` dispatches) and `/split-pr`; refreshed by `/iterate-pr` and `/babysit-stack` when they push.
 
-Two sections, always in this order, always after the PR skill's own Summary /
-What content and before any trailer (stack navigation, workspace link):
+## The PR body is the suite's only voice on the PR
+
+**The suite posts no comments on its own PRs.** Not provenance, not review
+ledgers, not assumptions, not outstanding findings, not consolidation lists, not
+"posted by /work-issue" notes. The only comments the suite is allowed to leave
+on a PR are **machinery** `/babysit-stack` needs: the `<COMMENT-BOT>` summon
+command, and the one-line replies that resolve a bot's review threads.
+
+**The body is written for a human reviewer, and only for one.** Include what a
+human wants to read, in as few words as it takes; leave out everything written
+for a bot, a ledger, or a future audit:
+
+| Goes in the body | Stays in `.context/<run-id>/` + the terminal report |
+| --- | --- |
+| Summary / What (the PR skill's own content) | the convention provenance table |
+| `## Verification` — what was actually run | the review ledger, `CR-NNN` ids, dispute evidence, adjudication rulings |
+| `## Visual verification` — the fewest scenes that prove it | reviewer roster, model/agent names, round counts |
+| `## Notes` — only what a human must act on (see below) | routing disclosures, "posted by" attributions, capture methodology |
+
+### `## Notes` — at most five one-line bullets
+
+Written **only when there is something the reviewer must act on or would be
+misled without**. Omit the whole section otherwise. One line each, no
+sub-sections, no prose:
+
+- an **assumption** taken where the ticket left a decision open;
+- an **outstanding review finding** the loop shipped without fixing;
+- a **leanness concern** (this ticket wanted the full pipeline);
+- a **follow-up ticket** filed instead of widening this diff — id + one clause.
+
+Anything that needs more than a line does not belong on the PR — it belongs in
+the diff, in a follow-up ticket, or nowhere.
+
+## The two evidence sections
+
+Always in this order, always after the PR skill's own Summary / What content and
+before `## Notes` and any trailer (stack navigation, workspace link):
 
 1. **`## Verification`** — a table of every terminal check run against this
    branch: gates, test runs, builds, typechecks, lint, manual runs. Commands
@@ -183,13 +218,15 @@ ticket), never a spec, never anything outside `media/`. Re-publishing after a re
 under the same `pr/<n>/`; update the URLs to the new sha.
 
 **Push refused** (branch rulesets, no write access from this workspace)? Do not
-fight it. Fall back to the tracker's attachment flow (Linear:
-`prepare_attachment_upload` → PUT → `create_attachment_from_upload`) and link
-those URLs — they will not inline, but they are evidence — and open the
-section with one line naming the refusal. No tracker either → the section
-lists the scenes with `not published — <reason>` and the local path.
+fight it. Fall back to the tracker's **upload** step only (Linear:
+`prepare_attachment_upload` → PUT → use the returned **asset URL**) and embed
+those URLs in the body, and open the section with one line naming the refusal.
+Never call `create_attachment_from_upload` for this — that would file the media
+as a downloadable resource on the ticket, which no tracker rule allows. No
+tracker either → the section lists the scenes with `not published — <reason>`
+and the local path.
 
-## Rendering — the two sections
+## Rendering — the body sections
 
 Render from the ledger at PR time. Wrap each section in markers so a later
 refresh replaces it instead of appending a second copy.
@@ -233,6 +270,14 @@ Captured against the local dev stack (`<devServerCommand>` + Docker services) wi
 
 <img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/publish-flow@2x.gif" width="830" alt="Uploading a form template JSON, the published row, and the overwrite confirmation">
 <!-- /magnus:visual-verification -->
+
+<!-- magnus:notes -->
+## Notes
+
+- The ticket left the empty-handle case open; treated it as a validation error, matching `createPatientDetails`.
+- Shipping with one unfixed finding: the retry banner is not announced to screen readers (CR-014).
+- Filed CP-742 for the duplicated size-guard helper rather than widening this diff.
+<!-- /magnus:notes -->
 ```
 
 Rendering rules:
@@ -260,6 +305,10 @@ Rendering rules:
   saying it is one.
 - **Advisory design-fidelity deviations** (work-slice 3.5 `<FIDELITY>`) are
   listed under the scenes as `Design fidelity (advisory): …` bullets.
+- **`## Notes`** is omitted entirely when there is nothing a human must act on.
+  When present: five bullets maximum, one line each, no headings inside it. A
+  finding needing more than a line is not summarised at length — it is fixed,
+  filed as a ticket, or left to the reviewer's own reading of the diff.
 
 ## Getting the sections into the body
 
@@ -267,14 +316,14 @@ The suite ships **one** body write per PR creation — `gh pr edit` fires the
 `pull_request: edited` event and restarts CI, so never edit the body twice in
 a row.
 
-- **No `<PR-SKILL>`** (fallback `gh pr create --base <BASE> --draft`): render both
-  sections into the initial `--body-file`, after the summary.
-- **With `<PR-SKILL>`**: hand it the two rendered sections as the PR's
+- **No `<PR-SKILL>`** (fallback `gh pr create --base <BASE> --draft`): render all
+  the sections into the initial `--body-file`, after the summary.
+- **With `<PR-SKILL>`**: hand it the rendered sections as the PR's
   verification content (most PR skills have a test-plan / verification slot —
   the rendered sections *are* that content). After it opens the PR, read the
-  body back (`gh pr view <n> --json body --jq .body`). Both markers present →
+  body back (`gh pr view <n> --json body --jq .body`). Markers present →
   done. Otherwise **one** `gh pr edit <n> --body-file <file>` that inserts the
-  two blocks after the skill's own content and before any trailer
+  blocks after the skill's own content and before any trailer
   (`<!-- conductor-workspace-link -->`, a stack navigation block) — keep every
   other byte of the body as the skill wrote it. Do this **before** requesting
   the review bots, so the restarted CI run is the one they see.
@@ -285,6 +334,8 @@ a row.
   only when a fix changed a captured surface (re-run the capture; a stale
   screenshot presented as current is a false claim).
 
-The convention provenance, review ledger, assumptions and consolidation links
-stay **PR comments** as before — the body edit is for the two evidence sections
-only.
+**One body write covers all of it.** `## Notes` is rendered in the same write as
+the evidence sections — never as a follow-up edit and never as a comment. A
+later run that must add a note (a capped fix round, a follow-up ticket filed
+during babysit) folds it into the same push-time body edit that refreshes
+`## Verification`, replacing the text between the `magnus:notes` markers.

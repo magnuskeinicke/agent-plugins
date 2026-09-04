@@ -39,7 +39,7 @@ work-slice verbatim.
    <slice-id>` (it does its own Steps 1–2 in the child — skip step 2 below),
    wait for exit, then verify the slice's durable markers exactly as in step
    4. No delegate configured → this runtime works it via the loop below and
-   the report + PR comment say `routing label <AGENT:><name> not honoured: no
+   the report and the slice ticket's `## Assumptions` say `routing label <AGENT:><name> not honoured: no
    routing.delegate.<name> configured`. Never delegate below slice granularity.
 2. **Branch with `gh stack` (replaces work-slice Step 2)** — exactly
    `references/pr-session.md` §2: name `<project-slug>/<NN>-<issue-id>`;
@@ -67,12 +67,12 @@ work-slice verbatim.
    > `<predecessor-branch | BASE>` @ `<oid>`, checkpoint `BRANCH_READY`. Do
    > NOT rename, reset, or create branches. Run Steps 3–7 verbatim (implement
    > + engine-CLI review loop, Playwright loop, evidence + consolidation
-   > tickets, draft PR + `gh stack link` by PR number + provenance comment,
+   > tickets, draft PR + `gh stack link` by PR number, no PR comment,
    > skeleton map + `<NEXT>` pointer). Step 5.1 does not apply (nothing was
    > renamed); push with `gh stack push --remote origin`. If the slice body
    > names a decision that "needs a human", make the call most consistent
    > with the PRD and record it under `## Assumptions` on the ticket and in
-   > the PR comment — never stop for it. Then run **Step 7**: `/babysit-stack
+   > the PR body's `## Notes` — never stop for it. Then run **Step 7**: `/babysit-stack
    > <PR number>` on this PR to its terminal verdict (CI, `<BOT>` rounds,
    > `<COMMENT-BOT>` rounds, threads) — checkpoint `COMPLETE` on GOAL MET,
    > `HANDED_OFF` + the verdict line on NOT MET. Reply with the PR number,

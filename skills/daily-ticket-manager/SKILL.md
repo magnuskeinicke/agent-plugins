@@ -6,7 +6,7 @@ description: >
   each on two axes: how risky it is to execute unattended (risk: low / medium / high), and who should
   pick it up (routing: agent-ready vs needs-human). Ticket `type` is assumed set upstream by the
   PM / PRD pipeline — not assessed here. It produces a triage
-  report and, on `apply`, applies risk/routing labels and writes an "Agent Assessment" comment.
+  report and, on `apply`, applies risk/routing labels. It never writes on a ticket beyond labels.
   Use this whenever I ask to "review my tickets", "triage my queue", "what's ready for me to pick up",
   "classify my Linear tickets", "which of my tickets can an agent pick up", "what needs my attention",
   "go through my assigned issues", or run `/daily-ticket-manager` — even when I don't name Linear
@@ -53,8 +53,10 @@ It reports those classifications and, when asked, records them back on the ticke
 self-describing for me and for downstream automation — the whole point is to mark which work is safe to
 route to an agent and which needs my attention.
 
-This skill **does not implement tickets**. It reads, classifies, and (on `apply`) labels + comments.
-Nothing else mutates.
+This skill **does not implement tickets**. It reads, classifies, and (on `apply`) **labels**.
+It writes **no comments at all** — a human's ticket is not a triage log
+(`../work-slice/references/qa-handoff.md`). The reasoning lives in the run's
+report, which is what I read. Nothing else mutates.
 
 ## Mode — dry-run is the default
 
@@ -62,8 +64,8 @@ Parse the argument for the run mode:
 
 - **`dry-run`** (default, and the default whenever the mode is absent or ambiguous) — read the tracker, classify,
   print the report. **Mutate nothing.** No labels, no comments, no label creation.
-- **`apply`** — do everything dry-run does, then apply the `<RISK:>*` and routing labels and
-  write/update the Agent Assessment comment on each ticket, creating any missing managed labels first.
+- **`apply`** — do everything dry-run does, then apply the `<RISK:>*` and routing labels,
+  creating any missing managed labels first. Labels only; never a comment.
 
 When running unattended (scheduled / non-interactive), never block on input. If a prerequisite is missing
 or the scope can't be resolved, record it in the report and exit. Treat an unattended run as `dry-run`
@@ -121,11 +123,11 @@ queued in `<READY>` right now. If nothing is in scope, report "No tickets assign
 
 For each in-scope ticket, read the title and full description and decide two things: **risk** and
 **routing**. Write one or two plain sentences of reasoning that justify both — this is the "why" that
-goes in the report and, on `apply`, into the Agent Assessment comment.
+goes in the report, and the report is the only place it goes.
 
 **Read the ticket's comments first.** A ticket back in `<READY>`
-with **no `<RISK:>` label** has usually been bounced back by `solve-ready-tickets` after the autonomous
-solver *declined* it — look for a comment starting with `## Autonomous solve — declined`. That comment
+with **no `<RISK:>` label** has usually been bounced back by `solve-ready-tickets`, whose pre-dispatch
+triage *declined* it — look for a comment starting with `## Autonomous solve — declined`. That comment
 is new triage information the original classification didn't have: the solver dug into the work and
 found it bigger / more ambiguous / higher-blast-radius than `<AGENT-READY>` claimed. **Factor it into both
 axes**, and treat it as a hard signal for routing — see the re-triage rule in 3b. (Ordinary tickets with
@@ -169,8 +171,8 @@ agent-readiness bar in kramme-cc-workflow's backlog refinement):
 7. **Dependencies clear** — blockers are named and resolved, or there are none.
 8. **Done detectable** — the solver can *prove* completion (this is what feeds dev-loop's proof gate).
 
-The **first failed check is the routing reason**: it names the specific blocker for the `Human needed:`
-block in the assessment comment. Never invent missing acceptance criteria or product decisions to reach
+The **first failed check is the routing reason**: it names the specific blocker in the report's
+`Human needed` column. Never invent missing acceptance criteria or product decisions to reach
 agent-ready — a missing decision is `<HITL>`, not a guess.
 
 Add **`<HITL>`** when **any** of these hold:
@@ -256,42 +258,21 @@ Two rules govern that merge:
 If, after the merge, the written set is identical to the current set (the ticket already carries the right
 managed labels), **leave it** — don't issue a write just to re-write the same labels.
 
-### 5c. Write or update the Agent Assessment comment
+### 5c. No comment — the reasoning goes in the report
 
-The reasoning lives in one comment, not in extra labels. Use this exact block:
+These are the human's tickets, and a daily run that stamps AI-written reasoning
+onto each of them buries what the humans wrote
+(`../work-slice/references/qa-handoff.md`). So: the classification is durable in
+the **labels**, and the reasoning, suggested plan and `Human needed` blocker are
+durable in the **Step 6 report** — which is what I read, and what a scheduled run
+must deliver somewhere I read it.
 
-```md
-## Agent Assessment
-
-Risk: low | medium | high
-Agent-ready: yes | no
-
-Reason:
-<1–2 sentences: what this ticket does, and why it got this risk and routing.>
-
-Suggested plan:
-1. <small first step>
-2. <small second step>
-3. <verification step>
-
-_Classified by daily-ticket-manager._
-```
-
-When the routing is `<HITL>`, append — before the marker line — a block naming the blocker:
-
-```md
-Human needed:
-<the specific question, decision, or missing input required before an agent can execute.>
-```
-
-Make it **idempotent** so repeated daily runs don't spam notifications:
-
-1. List the issue's comments.
-2. Find an existing comment whose body starts with `## Agent Assessment` and ends with the
-   `_Classified by daily-ticket-manager._` marker.
-3. If one exists and the risk + routing + reason are unchanged, **do nothing**.
-4. If one exists but any of those changed, **update it in place** (by that comment's id).
-5. If none exists, **create** one on the issue with the block as its body.
+- Write no comment, in either mode. Not on first classification, not on a
+  re-classification, not on `<HITL>`.
+- **Existing `## Agent Assessment` comments from earlier runs are not touched** —
+  not updated, not deleted. Leave them; I'll clear them when I care to.
+- The one comment this skill still *reads* is `solve-ready-tickets`' decline note
+  (Step 3 / the 3b re-triage rule). Reading is not writing.
 
 ## Step 6 — Report
 
@@ -308,7 +289,7 @@ Mode: dry-run | apply   ·   Team: <team>   ·   In scope: <n>   ·   Skipped (o
 | …        |                    |        |              |             |
 
 ## Recommended next pickups (agent-ready)
-- <id-2> — <title> — <why it's safe>
+- <id-2> — <title> — <why it's safe> — <suggested first step>
 
 ## Needs my attention (needs-human)
 - <id-1> — <title> — <the specific question/decision/blocker>
@@ -318,14 +299,16 @@ Mode: dry-run | apply   ·   Team: <team>   ·   In scope: <n>   ·   Skipped (o
 - Routing — agent-ready: N  needs-human: N  unrouted: N
 
 ## Notes
-- <labels created; comments written/updated/skipped; disagreements with existing managed labels; opt-out tickets dropped>
+- <labels created; disagreements with existing managed labels; opt-out tickets dropped>
 - <blockers or missing setup, if any>
 ```
 
 Lead with the two action lists — **`<AGENT-READY>`** (what I can safely delegate) and **`<HITL>`** (what I must
 look at myself) — because that routing is the whole point of the triage; the table is the supporting detail.
 In `dry-run` describe what *would* be applied; in `apply` state what was done ("added the low-risk +
-agent-ready labels", "already classified", "updated comment", etc.). If a ticket already carries a managed label that
+agent-ready labels", "already classified", etc.). This report is the **only** record of the reasoning,
+the suggested plan and any `Human needed` blocker — nothing is written to the tickets but labels, so
+keep it complete enough to act on. If a ticket already carries a managed label that
 **disagrees** with this run's classification, **do not silently overwrite it** — keep the existing label and
 flag the disagreement here.
 
@@ -341,9 +324,9 @@ flag the disagreement here.
 - A ticket carrying a `## Autonomous solve — declined` comment was bounced back by the solver: never re-stamp `<AGENT-READY>` on it unless the named blocker is clearly resolved — route `<HITL>` to avoid a re-grab/decline loop (Step 3b re-triage rule).
 - Don't change ticket state, assignee, title, description, estimate, or any field other than the managed labels.
 - Don't create tickets, close tickets, or touch tickets that aren't assigned to me in `<READY>`.
-- Only classify/label/comment tickets in `<READY>`. Never touch a ticket in any other status, even if it's mine.
-- Never touch a ticket carrying `<SKIP>` — it's PRD-pipeline-owned. Drop it from scope (Step 2), fold it into the skip count, and never classify, label, or comment on it. `<SKIP>` is the *only* exclusion; never infer ownership from a ticket's parent/sub-issue structure.
-- Don't re-write an unchanged Agent Assessment comment.
+- Only classify/label tickets in `<READY>`. Never touch a ticket in any other status, even if it's mine.
+- **Never write a comment on a ticket, in either mode.** Labels are the only tracker write; the reasoning lives in the report.
+- Never touch a ticket carrying `<SKIP>` — it's PRD-pipeline-owned. Drop it from scope (Step 2), fold it into the skip count, and never classify or label it. `<SKIP>` is the *only* exclusion; never infer ownership from a ticket's parent/sub-issue structure.
 - An empty in-scope set is a valid result — report it and stop, never widen scope to fill the report.
 
 ## Scheduling
@@ -351,21 +334,23 @@ flag the disagreement here.
 This skill is built to run unattended on a daily cadence (e.g. a morning cron). For that, the
 schedule prompt must be self-contained: name the team (`<TEAM>`), the scope (`my tickets, status
 `<READY>`, any cycle`), and the mutation policy (`dry-run` to just get a report, or `apply` to
-label + comment). Default a scheduled run to `dry-run` unless I have explicitly approved `apply`. A scheduled
-`apply` run still only ever creates managed labels (`<RISK:>` / `<AGENT-READY>` / `<HITL>`), fills label gaps
-on those axes per ticket, and writes the assessment comment — never downgrading an existing managed label,
-never touching `<TYPE:>*` or any other field.
+label). Default a scheduled run to `dry-run` unless I have explicitly approved `apply`. A scheduled
+`apply` run still only ever creates managed labels (`<RISK:>` / `<AGENT-READY>` / `<HITL>`) and fills label gaps
+on those axes per ticket — never commenting, never downgrading an existing managed label,
+never touching `<TYPE:>*` or any other field. The report is the deliverable, so a scheduled run must
+deliver it somewhere I read.
 
 ## Workflow Boundaries
 
 **This skill triages my `<READY>` queue — it classifies and records, nothing more.**
 
-- **DOES**: resolve the repo contract, fetch my `<READY>` tickets, classify risk + routing, print the triage report; on `apply`, create missing managed labels, fill label gaps, write/update the Agent Assessment comment
-- **DOES NOT**: implement tickets (that's the agent loop via `solve-ready-tickets`), apply `<TYPE:>*` labels (owned by `to-prd` / `to-issues`), change state/assignee/title/description/estimate, create or close tickets, or touch `<SKIP>` or non-`<READY>` tickets
+- **DOES**: resolve the repo contract, fetch my `<READY>` tickets, read any prior solver decline note, classify risk + routing, print the triage report; on `apply`, create missing managed labels and fill label gaps
+- **DOES NOT**: write any comment on any ticket, implement tickets (that's `work-issue`, dispatched over the queue by `solve-ready-tickets`), apply `<TYPE:>*` labels (owned by `to-prd` / `to-issues`), change state/assignee/title/description/estimate, create or close tickets, or touch `<SKIP>` or non-`<READY>` tickets
 
 ## Red Flags — STOP
 
-- About to label, comment, or create a label without an explicit `apply` — stop; dry-run mutates nothing.
+- About to label or create a label without an explicit `apply` — stop; dry-run mutates nothing.
+- About to write an `## Agent Assessment` (or any other) comment on a ticket — stop: labels only; the reasoning belongs in the report.
 - `tracker.statuses.readyForDev`, `labels.agentReady`, or `labels.needsHuman` is empty in the config — stop; name the missing key and end the run, never guess.
 - About to write `save_issue.labels` without merging in the ticket's current labels — stop; that field replaces the entire set.
 - About to replace or downgrade an existing `<RISK:>` / routing label that disagrees with this run — stop; keep the existing label and flag the disagreement in the report.
@@ -380,7 +365,7 @@ Before reporting done:
 
 - [ ] Report printed with mode, team, in-scope count, skip count, the per-ticket table, both action lists, and the counts block
 - [ ] Every classified ticket has exactly one `<RISK:>` level and at most one routing label — never both routing labels
-- [ ] `dry-run`: zero tracker writes — no labels, no comments, no label creation
+- [ ] `dry-run`: zero tracker writes — no labels, no label creation
 - [ ] `apply`: every written label set preserves all non-managed and `<TYPE:>*` labels; identical sets were not re-written
-- [ ] `apply`: Agent Assessment comments created/updated only where risk/routing/reason changed; `<HITL>` comments carry a `Human needed:` block
+- [ ] `apply`: **zero comments written** on any ticket; every `<HITL>` ticket's blocker is named in the report instead
 - [ ] Disagreements with existing managed labels flagged in Notes, not overwritten
