@@ -94,15 +94,18 @@ predecessor's branch here — lower layers are only changed by babysit, with
 Run the `magnus:work-slice` skill for this slice **starting at Step 3**,
 verbatim: implement + engine-CLI review loop (the implementer and every fix
 pass are freshly spawned agents per its writer-spawn ladder — you orchestrate,
-you don't implement), the Playwright user-story loop, QA evidence +
-consolidation tickets, then Step 5 with these readings:
+you don't implement), the artifact-free Playwright user-story loop (it captures
+nothing — all visual evidence is Step 8's, after this PR's babysit verdict), the
+text-only QA evidence + consolidation tickets, then Step 5 with these readings:
 
 - **5.1 (stale remote branch)** — does not apply: nothing was renamed.
 - **Push** with `gh stack push --remote origin` (pushes the tracked stack;
   predecessors are unchanged so only this branch moves) — or
   `git push -u origin <stack-name>` if tracking is absent.
 - **5.2** — `<PR-SKILL>` opens the draft PR verbatim (it targets `<BASE>`);
-  the evidence-sections insert is the one body write.
+  the `## Verification` (+ `## Notes`) insert is the body write here. No
+  `## Visual verification` and no media publish yet — that is Step 8, after
+  §3b's verdict.
 - **5.3** — link by PR number, bottom → top, never `--open`, never `submit`:
   `gh stack link --base <BASE> <pr-01> … <this-pr>` (skeleton alone: nothing
   to link yet). Then `gh pr view <n> --json baseRefName,isDraft` must show
@@ -127,15 +130,20 @@ bounded polls; every fix is a fresh agent per its own rules. `<BOT>` /
 still applies. Its state file (`.context/babysit-<ISSUE>.json`) lives in
 this workspace, so a re-run resumes rather than restarts.
 
-Record the verdict in **two** places: the slice checkpoint (`COMPLETE` on
-GOAL MET, else `HANDED_OFF` + the verdict line) and a `babysit: GOAL MET` /
+Record the verdict in **two** places: the slice checkpoint (`BABYSAT` on GOAL
+MET, `COMPLETE` once Step 8 has published, else `HANDED_OFF` + the verdict line) and a `babysit: GOAL MET` /
 `babysit: NOT MET — <reason>` line on the slice's `## Cloud dispatch` comment
 (the durable marker every other session reads; staged under `Tracker writes:
 planning`). The verdict is **not** a PR comment — babysit's own rule; the PR
 body's `## Verification` refresh is the only PR write this step makes beyond
 thread replies. Then:
 
-- **GOAL MET** → §4, then §5 (pass the baton).
+- **GOAL MET** → run **work-slice Step 8** here, in this session, before
+  anything else: capture this PR's scenes on its finished branch, publish them
+  to `<MEDIA-BRANCH>` under `pr/<n>/`, insert `## Visual verification` into the
+  body with one `gh pr edit`. That is the only capture this PR ever gets —
+  `/feature-goal`'s QA handoff re-uses these files. Then §4, then §5 (pass the
+  baton).
 - **NOT MET** → by construction only `needs-human` threads, a stuck bot, or
   a capped fix signature remain. That is **Blocked**: rewrite the pipeline
   checkpoint, report the blockers verbatim as the stop reason, and end
@@ -145,7 +153,9 @@ thread replies. Then:
 
 ## 4. Verify from durable markers, not from memory
 
-`.context/<slice-id>/workflow-state.md` reads `COMPLETE`; the slice's
+`.context/<slice-id>/workflow-state.md` reads `COMPLETE` (babysit GOAL MET and
+Step 8 published); the PR body carries `## Visual verification` pinned to a
+`<MEDIA-BRANCH>` sha (or its one-line form); the slice's
 `## Cloud dispatch` comment carries `babysit: GOAL MET` (or its staged copy
 does, under `Tracker writes: planning`); `gh pr view` shows
 an open **draft** PR on `<stack-name>` with the predecessor's branch as base

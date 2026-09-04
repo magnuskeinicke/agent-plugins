@@ -407,10 +407,11 @@ Follow `references/pr-session.md` exactly: claim **one** slice — an open PR
 still owed its babysit if there is one, else the earliest in stack order
 without an open or merged PR — stamp its `## Cloud dispatch` marker with this
 session's id, cut its branch with `gh stack` on top of the predecessor's, run
-work-slice Steps 3–7 (fresh implementer and reviewers per its own spawn
+work-slice Steps 3–8 (fresh implementer and reviewers per its own spawn
 ladder), i.e. open the draft PR, `gh stack link` it, then **babysit that PR
 to its verdict** with `/babysit-stack <PR>` — CI green, `<BOT>` rounds,
-`<COMMENT-BOT>` rounds, threads resolved, all on GitHub. Stamp the verdict on
+`<COMMENT-BOT>` rounds, threads resolved, all on GitHub — and, on GOAL MET,
+capture + publish this PR's visual evidence (Step 8). Stamp the verdict on
 the `## Cloud dispatch` comment. **GOAL MET** → verify from durable markers,
 then **start the next session** (`/feature-goal <ISSUE>`, same workspace,
 next slice's agent) — or the babysit session when this was the last slice —
@@ -477,7 +478,7 @@ read GOAL MET:
 1. **Criteria.** The feature ticket's own `- [ ]` criteria verbatim when user-facing;
    otherwise one user-facing criterion per PRD User Story the stack delivered
    (rewrite technical wording into what the user experiences).
-2. **Evidence.** Fetch the stack's media from `<MEDIA-BRANCH>`:
+2. **Evidence — re-used, never recaptured.** Every PR's media was captured once by its own PR session, after that PR's babysit reported GOAL MET (work-slice Step 8); this stage embeds those same files and captures nothing itself. Fetch the stack's media from `<MEDIA-BRANCH>`:
    `git fetch origin <MEDIA-BRANCH>`, then for every stack PR read
    `git show origin/<MEDIA-BRANCH>:pr/<n>/media.json` and extract the files
    named there (`git show … > <file>`) — `criteria` in each scene says which
@@ -507,7 +508,8 @@ read GOAL MET:
 
 Local mode does the same from this worktree. A session that died before
 publishing media leaves a criterion without evidence — write that down in the
-handoff rather than substituting a Storybook or design image.
+handoff rather than substituting a Storybook or design image, and never start a
+dev server to capture it here.
 
 ## Boundaries
 
@@ -569,12 +571,13 @@ handoff rather than substituting a Storybook or design image.
 
 **This skill orchestrates the feature pipeline as a re-entrant stage machine with the grill as its only human gate — planning here, then a relay of one-PR sessions in one cloud workspace (each babysitting its own PR to GOAL MET before the next is cut), then a stack-wide babysit session — sequencing the constituent skills, never re-implementing them.**
 
-- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` (PRD ticket under the feature ticket) and `/to-issues` (slices under the PRD ticket) in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–7 (link the PR, babysit it to GOAL MET, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict and post the QA handoff; from outside, check / resume the relay; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
+- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` (PRD ticket under the feature ticket) and `/to-issues` (slices under the PRD ticket) in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–8 (link the PR, babysit it to GOAL MET, capture + publish its evidence, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict and post the QA handoff; from outside, check / resume the relay; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
 - **DOES NOT**: answer the grill for the human, ask the human anything after the grill, write anything but labels and the one `## QA handoff` on the feature ticket, treat `<HITL>` as a stop, work more than one PR in a session, wait for a session it started, implement / fix / review / babysit code outside the pipeline workspace (cloud mode), own review-loop internals (the engine CLI does) or CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, or relocate the venue-neutral standalone commands (`/work-issue` and `/daily-ticket-manager` run wherever the user starts them; `/solve-ready-tickets` does its own fan-out and is none of this skill's business).
 
 ## Red Flags — STOP
 
 - About to fabricate a PRD from a bare ticket title with no grilling session in the conversation — stop: run `/grill-with-docs` inline and grill the user for real; end only if they disengage.
+- About to capture screenshots or video in this stage, or to accept a PR whose media was captured before its babysit verdict — stop: each PR session captures once, after its own GOAL MET (work-slice Step 8); QA-HANDOFF only re-uses what is on `<MEDIA-BRANCH>`.
 - About to post the PRD, a QA handoff's dev material, or any marker on the feature ticket — or the QA handoff on the PRD ticket — stop: feature ticket = humans (QA handoff only), PRD ticket = the PRD + deltas, slices = machinery.
 - About to ask the human to approve the PRD, the slice breakdown, the test seams, a PR, or "whether to continue" — stop: the grill was the gate; decide, record the assumption, proceed.
 - About to stop on a `<HITL>` slice or a "needs a human decision" line — stop: work it; the PR session makes and records the assumption.
@@ -610,4 +613,4 @@ Before reporting done:
 - [ ] The stack-wide babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.
 - [ ] The run did not end by handing the user `/to-prd`, `/to-issues`, `/work-slice`, or `/babysit-stack`: the only next command a report ever names is `/feature-goal <ISSUE>`.
 - [ ] The report ends with the resume line: stage, blocking reason if any, and `/feature-goal <ISSUE>`.
-- [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the feature ticket carries its one `## QA handoff` comment — user-terms criteria, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>`, no dev material — and nothing else suite-authored on it; the PRD and its deltas sit on the PRD ticket.
+- [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the feature ticket carries its one `## QA handoff` comment — user-terms criteria, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>` (captured by each PR session after its own GOAL MET, never recaptured here), no dev material — and nothing else suite-authored on it; the PRD and its deltas sit on the PRD ticket.
