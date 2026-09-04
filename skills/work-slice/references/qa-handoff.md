@@ -11,7 +11,7 @@ and a **human-authored ticket gets exactly one suite comment, ever**.
 | **Feature ticket** (`<ISSUE>` — the human's ticket, seed of `/feature-goal`) | PM, designers, **QA**, the user | labels, status, and **one** `## QA handoff` comment (this file) | everything else |
 | **Standalone ticket** (`/work-issue`, whether run by hand or dispatched by `/solve-ready-tickets`) | QA (and the user) | labels, status, and **one** suite comment — the `## QA handoff`, or the dispatcher's decline note that the same slot later becomes | everything else |
 | **PRD ticket** (`PRD: …` sub-issue of the feature ticket, `/to-prd`) | the user + AI | the PRD as its description; `## Implementation deltas` comment | QA handoff (that is the feature ticket's), per-slice machinery |
-| **Slice sub-issues** (`/to-issues`, children of the PRD ticket) | the user + AI **only** — never shown to anyone else | anything the machinery needs: Skeleton map, `## Cloud dispatch`, `## Assumptions`, dev-form `## QA evidence`, acceptance-criteria notes | — |
+| **Slice sub-issues** (`/to-issues`, children of the PRD ticket) | the user + AI **only** — never shown to anyone else | anything the machinery needs: Skeleton map, `## Cloud dispatch`, `## Assumptions`, **text-only** `## QA evidence` (PASS/FAIL rows, no images), acceptance-criteria notes | images or video — the only two places visual proof appears are the PR body and the human ticket's handoff |
 
 Two rules follow, and they are absolute:
 
@@ -53,6 +53,10 @@ Consequences, binding on every skill:
 
 - Nothing is posted to the human ticket at claim time, at PR-open time, or
   between review rounds. Not acceptance criteria, not a status note.
+- **Nothing is even captured before then** — the media is produced by the
+  post-GOAL-MET capture stage (`pr-evidence.md`), which is also what fills the
+  PR body's `## Visual verification`. The handoff embeds those same files; there
+  is never a second set of captures and never an earlier copy of them.
 - A run that ends **Blocked** short of GOAL MET writes **nothing** on the
   ticket; the state lives on the PR, and the resume report names it.
 - If a later run changes what QA would see, it re-renders the same comment.
@@ -135,13 +139,14 @@ are failures of this rule.
 - **Video must play inline.** Upload `.mp4` (`ffmpeg -i <flow>.webm -c:v libx264
   -pix_fmt yuv420p <flow>.mp4`) and embed it. If the tracker will not render it
   inline, fall back to a **still** — never to a download link.
-- Files come from the run's `.context/<run-id>/evidence/media/` (work-slice 3.5).
-  For a feature-ticket handoff composed after the fact, fetch them from the media
-  branch: `git fetch origin <MEDIA-BRANCH>` then
+- Files come from the capture stage's `.context/<run-id>/evidence/media/`
+  (`pr-evidence.md`) — the same scenes the PR body shows, re-used, never
+  recaptured for the tracker. For a feature-ticket handoff composed across the
+  stack, fetch them from the media branch: `git fetch origin <MEDIA-BRANCH>` then
   `git show origin/<MEDIA-BRANCH>:pr/<n>/<file> > <file>` for each stack PR —
   `pr/<n>/media.json` names the scenes, routes and captions.
 - Missing evidence for a criterion → one short line saying so.
-- The 3.5 secret preflight applies unchanged: seeded users, fake data, no URL
+- The capture stage's secret preflight applies unchanged: seeded users, no URL
   bars with tokens, discard + recapture on a slip.
 
 ### What is *not* in the handoff

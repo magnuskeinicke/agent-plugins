@@ -5,6 +5,8 @@ reviewer can judge what was actually run and actually seen without pulling the
 branch. Shared by `/work-slice`, `/work-issue` (including the runs
 `/solve-ready-tickets` dispatches) and `/split-pr`; refreshed by `/iterate-pr` and `/babysit-stack` when they push.
 
+Visual evidence is **captured once, at the very end** — see the next section.
+
 ## The PR body is the suite's only voice on the PR
 
 **The suite posts no comments on its own PRs.** Not provenance, not review
@@ -38,21 +40,58 @@ sub-sections, no prose:
 Anything that needs more than a line does not belong on the PR — it belongs in
 the diff, in a follow-up ticket, or nowhere.
 
+## Captured once, after the PR is done
+
+**Nothing visual is captured, published or posted before `/babysit-stack`
+reports GOAL MET for the PR.** Bot rounds change code, and any capture taken
+earlier is either retaken or knowingly shown stale — so the suite takes it once,
+at the end, and shows it in exactly two places, rendered from the same files:
+the PR body's `## Visual verification` and the human ticket's one
+`## QA handoff` (`qa-handoff.md`). There is never a third copy, and never an
+earlier one.
+
+The order is fixed, in every flow:
+
+1. implement + review loop, then the headless Playwright user-story loop
+   (work-slice 3.5) — it **proves** the acceptance criteria and keeps **no
+   artifacts**: no screenshots, no video, nothing published, nothing posted;
+2. the draft PR is opened — its body carries `## Verification` (+ `## Notes`);
+   **no `## Visual verification` block yet**;
+3. `/babysit-stack` drives the PR to **GOAL MET** — CI green, every configured
+   bot satisfied, every thread resolved, refreshing `## Verification` as it
+   pushes fixes;
+4. **the capture stage** (below) runs on the finished branch: one Playwright
+   capture run → publish to `<MEDIA-BRANCH>` → **one** body edit inserting
+   `## Visual verification`;
+5. the ticket's `## QA handoff` is composed from those same files.
+
+A PR that never reaches GOAL MET carries no visual section at all — the run is
+Blocked, and nothing is captured for it.
+
+The one exception is `/split-pr`, whose layer PRs are code-identical to a branch
+that was already reviewed: each layer gets the section's **one-line form** at
+PR creation (`Split layer — no new surface captured`) and captures nothing, and
+the top layer inherits the original PR's already-published scenes.
+
 ## The two evidence sections
 
 Always in this order, always after the PR skill's own Summary / What content and
-before `## Notes` and any trailer (stack navigation, workspace link):
+before `## Notes` and any trailer (stack navigation, workspace link) — but
+written at **different moments** (above):
 
-1. **`## Verification`** — a table of every terminal check run against this
-   branch: gates, test runs, builds, typechecks, lint, manual runs. Commands
-   verbatim, results from the actual output.
-2. **`## Visual verification`** — how the visual evidence was captured (one
-   sentence), then **the fewest scenes that prove the change**: a GIF when the
-   change is behaviour (a flow, a state change), a still when it is appearance
-   (before/after pair for a changed surface, single image for a new one). One
-   scene per *logical group* of acceptance criteria, never one per criterion,
-   and never both a video and a picture of the same thing. Every scene names
-   the surface, the route, and the viewport width.
+1. **`## Verification`** — written when the PR is opened, refreshed on every fix
+   push. A table of every terminal check run against this branch: gates, test
+   runs, builds, typechecks, lint, manual runs. Commands verbatim, results from
+   the actual output.
+2. **`## Visual verification`** — written **only after GOAL MET**, by the
+   capture stage. How the evidence was captured (one sentence), then **the
+   fewest scenes that prove the change**: a GIF when the change is behaviour (a
+   flow, a state change), a still when it is appearance. Scenes show the
+   **finished state** — there are no before shots, because the base is long gone
+   by the time anything is captured. One scene per *logical group* of acceptance
+   criteria, never one per criterion, and never both a video and a picture of
+   the same thing. Every scene names the surface, the route, and the viewport
+   width.
 
 Both sections rest on the same rule as `/verify-before-done`: **a row or an
 image exists only for something that ran or was captured in this run.** No
@@ -62,17 +101,16 @@ silently.
 
 ## The evidence ledger — `.context/<run-id>/evidence/`
 
-Evidence accumulates in the run's gitignored state dir while the work happens,
-and is rendered once at PR time. `<run-id>` is the slice id / issue id /
-`pr-<n>` the run already uses for `.context/`.
+`verification.jsonl` accumulates in the run's gitignored state dir while the
+work happens; `media/` is written only by the capture stage, after GOAL MET.
+`<run-id>` is the slice id / issue id / `pr-<n>` the run already uses for
+`.context/`.
 
 ```
 .context/<run-id>/evidence/
   verification.jsonl     # one line per check actually run
-  media/
-    <scene>-before@2x.png
-    <scene>-after@2x.png
-    <scene>@2x.png         # brand-new surface — no before exists
+  media/                   # written by the capture stage only, after GOAL MET
+    <scene>@2x.png         # a surface in its finished state
     <flow>@2x.gif          # + <flow>.webm, the Playwright source video
     media.json             # scene manifest, rendered into the section
 ```
@@ -111,48 +149,61 @@ Rules:
 ### `media.json`
 
 ```json
-[{"scene": "admin-sidebar", "kind": "before-after" | "new" | "flow",
+[{"scene": "admin-sidebar", "kind": "still" | "flow",
   "surface": "Administration sidebar", "route": "/administration/users", "viewport": 1440,
   "caption": "the new discovery-only Forms item", "criteria": [1, 2],
-  "files": {"before": "admin-sidebar-before@2x.png", "after": "admin-sidebar-after@2x.png"},
-  "displayWidth": 352}]
+  "files": {"image": "admin-sidebar@2x.png"},
+  "displayWidth": 830}]
 ```
 
-`kind` decides the render: `before-after` → a two-column table; `new` → one
-image; `flow` → one GIF (or a video link). `displayWidth` is the `<img width>`
-in CSS px — about half the 2× file's pixel width: ~830 for a full 1440 px
-viewport, ~352–410 each for a side-by-side pair, ~390 for a mobile frame.
+`kind` decides the render: `still` → one image; `flow` → one GIF (or a video
+link). `displayWidth` is the `<img width>` in CSS px — about half the 2× file's
+pixel width: ~830 for a full 1440 px viewport, ~390 for a mobile frame, ~410 for
+a cropped component.
 
-## Capturing — rules for the Playwright spec
+## The capture stage — one run, after GOAL MET
 
-The captures are produced by the same throwaway Playwright spec the user-story
-loop runs (work-slice 3.5); this reference only fixes **what** it captures.
-Everything in 3.5 still binds: one dev server per run, the **secret preflight
-before any capture**, seeded demo users only, authenticate outside the recorded
-flow, a leaked secret means discard + recapture.
+Reached only on a `/babysit-stack` **GOAL MET** verdict, on the PR's own branch
+with every bot fix already merged into it. It is the **only** place the suite
+captures anything, and it runs once per PR:
 
+1. Check out the PR's branch, up to date with what CI went green on
+   (`git status --porcelain` clean, head = the pushed head).
+2. Start the dev server (`devServerCommand`) if one is not already serving —
+   one instance, never a second.
+3. Author (or restore) a throwaway Playwright spec on the `e2eDir` config, dev-login
+   as the seeded user the ticket's story needs, drive the acceptance-criterion
+   stories once more and capture the scenes below into
+   `.context/<run-id>/evidence/media/`, plus `media.json`.
+4. Publish to `<MEDIA-BRANCH>` (below), insert `## Visual verification` into the
+   body with **one** `gh pr edit`, then delete the throwaway spec — nothing
+   untracked may remain in a source dir.
+
+The change is already reviewed and green, so the capture is a recording, not a
+check: **a story that fails here is a real regression** — stop, report it, do
+not doctor the capture around it.
+
+Rules for what it captures:
+
+- **Secret preflight before any capture.** Screenshots and video reach the PR
+  and the ticket, so anything on screen is published: no credentials, tokens,
+  API keys, auth headers, cookies or signed URLs — scan for the classic shapes
+  (`sk-`, `ghp_`, `xoxb-`, `Bearer `, `Authorization:`, `?token=`, `api_key=`,
+  `.env` contents). Authenticate *outside* the recorded flow and show the
+  authenticated result, not the auth step; use the seeded demo users. A secret
+  that slips into a capture means **discard and recapture** — never blur, crop,
+  or edit it out after the fact. (The dev stack is seeded, so its data needs no
+  screening.)
 - **Viewport.** Desktop at `1440 × 900`, `deviceScaleFactor: 2` → files are
   `@2x`. Add a `390` px mobile capture when the browser guide says the surface
   is used on mobile or the diff touches responsive styles; each viewport is its
   own scene, named with its width.
 - **Crop to what changed.** A component, sidebar, or table → `locator.screenshot()`
-  of that element; a whole page → the viewport (`fullPage: false`). Before and
-  after use the **same** crop, route, seeded user, and viewport, or the pair
-  proves nothing.
-- **Before.** Captured while the working tree is still the base — i.e. **before
-  the implement pass** (work-slice 3.1 pre-capture): the routes the ticket's
-  acceptance criteria / "where to look" / design links name, into
-  `media/<scene>-before@2x.png`. That is the only cheap moment the base is
-  running on the one dev server; afterwards HMR (or a restart of that same
-  server — a restart is not a second server) serves the branch. No before for a
-  brand-new surface (`kind: new`). If the before was not captured (resumed run,
-  scene not predictable up front, server not up yet) → the scene is rendered
-  with an explicit `Before not captured — <reason>` cell. **Never** switch
-  branches, stash, or add a second worktree + server to manufacture a before.
-- **After.** The final passing Playwright round captures each scene's
-  `-after@2x.png` (or `@2x.png` for `new`) in the same spec run that captures
-  the per-AC `ac-<n>-<pass|fail>.png` QA evidence. The AC shots go to the
-  ticket; the scenes go to the PR. One shot may serve as both.
+  of that element; a whole page → the viewport (`fullPage: false`).
+- **Finished state only — no before shots.** By capture time the base is long
+  gone, and the suite never switches branches, stashes, or adds a second
+  worktree + server to manufacture a "before". A scene shows what the surface
+  looks like now; the caption says what to look at.
 - **Economy.** Aim for 1–3 scenes per PR. Group acceptance criteria that a
   single walk-through covers into **one** capture (`media.json` lists the
   criteria a scene proves under `criteria`); pick video **or** still per scene,
@@ -175,13 +226,14 @@ flow, a leaked secret means discard + recapture.
   never quietly substitute.
 - **Themes.** Both light and dark only when the diff touches theme-dependent
   styling; otherwise the app's default theme, named once in the capture sentence.
-- **Fake data only.** Say so in the capture sentence. A capture that shows real
-  customer/personal data is a hard stop (3.5 preflight).
+- **Nothing capturable** (no dev stack, no credentials, internal-only change)
+  → the one-line form of the section (below). Never a Storybook or design image
+  standing in for the real surface.
 
 ## Publishing media — the media branch
 
-Images in a PR body need a stable URL `gh` can produce. The suite commits them
-to an **orphan media branch** in the host repo and references them by
+Images in a PR body need a stable URL `gh` can produce. The capture stage commits
+them to an **orphan media branch** in the host repo and references them by
 **commit sha**, so the URLs are immutable and survive later media commits:
 
 ```
@@ -212,10 +264,11 @@ git worktree remove --force "$tmp"
 ```
 
 Publish only `.png` / `.gif` / small `.webm` plus `media.json` from `media/` —
-the manifest is what lets `/feature-goal` compose the feature ticket's QA handoff from
-the stack later (`qa-handoff.md`). Never the per-AC QA shots (those go to the
-ticket), never a spec, never anything outside `media/`. Re-publishing after a recapture is a new commit on the same branch
-under the same `pr/<n>/`; update the URLs to the new sha.
+the manifest is what lets `/feature-goal` compose the feature ticket's QA handoff
+from the stack later (`qa-handoff.md`), and the same files are what a ticket's own
+handoff embeds. Never a spec, never anything outside `media/`. Re-publishing after
+a recapture is a new commit on the same branch under the same `pr/<n>/`; update
+the URLs to the new sha.
 
 **Push refused** (branch rulesets, no write access from this workspace)? Do not
 fight it. Fall back to the tracker's **upload** step only (Linear:
@@ -254,13 +307,11 @@ Not run here, left to CI:
 <!-- magnus:visual-verification -->
 ## Visual verification
 
-Captured against the local dev stack (`<devServerCommand>` + Docker services) with Playwright — headless Chromium, 1440 px, 2× scale — signed in as a seeded admin. Fake data only.
+Captured against the local dev stack (`<devServerCommand>` + Docker services) with Playwright — headless Chromium, 1440 px, 2× scale — signed in as a seeded admin, after the PR went green and the review bots were satisfied.
 
 **Administration sidebar, `/administration/users`, 1440 px — the new discovery-only Forms item.**
 
-| Before | After |
-| --- | --- |
-| <img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/admin-sidebar-before@2x.png" width="352" alt="Administration sidebar without the Forms item"> | <img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/admin-sidebar-after@2x.png" width="352" alt="Administration sidebar with the Forms item"> |
+<img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/admin-sidebar@2x.png" width="410" alt="Administration sidebar with the Forms item">
 
 **Form templates table, `/administration/forms`, 1440 px — a published handle.**
 
@@ -287,8 +338,8 @@ Rendering rules:
   runs. `Passed — <summary>` / `Failed — <summary>`; a `fail` row ships only when
   the PR knowingly ships red (a capped loop) and the note says so. Omit the
   second table when nothing was left to CI.
-- **Scene order**: flows (video) first, then before/after pairs, then single
-  stills. A reviewer should see the story move before reading the diffs.
+- **Scene order**: flows (video) first, then stills. A reviewer should see the
+  story move before reading the diffs.
 - **Not one per criterion.** A scene that covers several acceptance criteria
   says so in its caption ("covers 1–3"); no scene is duplicated as both GIF and
   still.
@@ -298,7 +349,7 @@ Rendering rules:
 - **Internal-only change** (no user-facing surface): the section is one line —
   `No user-facing change — no visual verification.` Never omit the heading.
 - **User-facing but uncapturable** (`devServerCommand` empty, no stack or
-  credentials in this workspace, Playwright loop skipped): the section says
+  credentials in this workspace, capture stage could not run): the section says
   exactly that, in one line, e.g. `No real-app capture — no dev stack or login
   credentials in this cloud workspace; verification is test-only.` Never
   substitute a Storybook or design screenshot for the real surface without
@@ -312,30 +363,34 @@ Rendering rules:
 
 ## Getting the sections into the body
 
-The suite ships **one** body write per PR creation — `gh pr edit` fires the
-`pull_request: edited` event and restarts CI, so never edit the body twice in
-a row.
+`gh pr edit` fires the `pull_request: edited` event and restarts CI, so the body
+is written at exactly **two** moments, never twice in a row:
 
-- **No `<PR-SKILL>`** (fallback `gh pr create --base <BASE> --draft`): render all
-  the sections into the initial `--body-file`, after the summary.
-- **With `<PR-SKILL>`**: hand it the rendered sections as the PR's
-  verification content (most PR skills have a test-plan / verification slot —
-  the rendered sections *are* that content). After it opens the PR, read the
-  body back (`gh pr view <n> --json body --jq .body`). Markers present →
-  done. Otherwise **one** `gh pr edit <n> --body-file <file>` that inserts the
-  blocks after the skill's own content and before any trailer
+- **At PR creation — `## Verification` (+ `## Notes`).** No `<PR-SKILL>`
+  (fallback `gh pr create --base <BASE> --draft`): render them into the initial
+  `--body-file`, after the summary. With `<PR-SKILL>`: hand it `## Verification`
+  as the PR's verification content (most PR skills have a test-plan /
+  verification slot — that rendered section *is* that content). After it opens
+  the PR, read the body back (`gh pr view <n> --json body --jq .body`). Markers
+  present → done. Otherwise **one** `gh pr edit <n> --body-file <file>` that
+  inserts the blocks after the skill's own content and before any trailer
   (`<!-- conductor-workspace-link -->`, a stack navigation block) — keep every
-  other byte of the body as the skill wrote it. Do this **before** requesting
-  the review bots, so the restarted CI run is the one they see.
-- **Refresh** (`/iterate-pr`, `/babysit-stack` after pushing fixes): re-render
-  `## Verification` for the new head from the rows appended during the fix
-  passes, replace the text between the `magnus:verification` markers, and fold
-  the edit into the moment of the push. `## Visual verification` is refreshed
-  only when a fix changed a captured surface (re-run the capture; a stale
-  screenshot presented as current is a false claim).
+  other byte of the body as the skill wrote it. Do this **before** requesting the
+  review bots, so the restarted CI run is the one they see.
+- **After GOAL MET — `## Visual verification`.** The capture stage's one
+  `gh pr edit`, inserting the block between `## Verification` and `## Notes`.
+  CI restarting on it is harmless: the bots are already satisfied and no fix
+  rides on this edit.
 
-**One body write covers all of it.** `## Notes` is rendered in the same write as
-the evidence sections — never as a follow-up edit and never as a comment. A
-later run that must add a note (a capped fix round, a follow-up ticket filed
-during babysit) folds it into the same push-time body edit that refreshes
-`## Verification`, replacing the text between the `magnus:notes` markers.
+**Refresh** (`/iterate-pr`, `/babysit-stack` after pushing fixes): re-render
+`## Verification` for the new head from the rows appended during the fix passes,
+replace the text between the `magnus:verification` markers, and fold the edit
+into the moment of the push. A push that lands **after** a visual section exists
+(a review round re-opened on an already-captured PR) marks the affected scenes
+stale and lets the next capture stage re-render them — a stale screenshot
+presented as current is a false claim.
+
+`## Notes` rides in the creation write — never as a comment. A later run that
+must add a note (a capped fix round, a follow-up ticket filed during babysit)
+folds it into the same push-time body edit that refreshes `## Verification`,
+replacing the text between the `magnus:notes` markers.

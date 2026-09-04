@@ -65,17 +65,20 @@ work-slice verbatim.
    > claimed (status `<IN-PROGRESS>`, `<NEXT>` cleared) and branch
    > `<stack-name>` is checked out via `gh stack`, based on
    > `<predecessor-branch | BASE>` @ `<oid>`, checkpoint `BRANCH_READY`. Do
-   > NOT rename, reset, or create branches. Run Steps 3–7 verbatim (implement
-   > + engine-CLI review loop, Playwright loop, evidence + consolidation
-   > tickets, draft PR + `gh stack link` by PR number, no PR comment,
-   > skeleton map + `<NEXT>` pointer). Step 5.1 does not apply (nothing was
+   > NOT rename, reset, or create branches. Run Steps 3–8 verbatim (implement
+   > + engine-CLI review loop, artifact-free Playwright loop, text-only QA
+   > evidence + consolidation tickets, draft PR with `## Verification` only +
+   > `gh stack link` by PR number, no PR comment, skeleton map + `<NEXT>`
+   > pointer). Capture no media before the babysit verdict. Step 5.1 does not apply (nothing was
    > renamed); push with `gh stack push --remote origin`. If the slice body
    > names a decision that "needs a human", make the call most consistent
    > with the PRD and record it under `## Assumptions` on the ticket and in
    > the PR body's `## Notes` — never stop for it. Then run **Step 7**: `/babysit-stack
    > <PR number>` on this PR to its terminal verdict (CI, `<BOT>` rounds,
-   > `<COMMENT-BOT>` rounds, threads) — checkpoint `COMPLETE` on GOAL MET,
-   > `HANDED_OFF` + the verdict line on NOT MET. Reply with the PR number,
+   > `<COMMENT-BOT>` rounds, threads) and, on GOAL MET, **Step 8**: capture the
+   > scenes, publish them to `<MEDIA-BRANCH>`, insert `## Visual verification`
+   > with one `gh pr edit` — checkpoint `COMPLETE` on GOAL MET + Step 8 done,
+   > `HANDED_OFF` + the verdict line on NOT MET (capture nothing then). Reply with the PR number,
    > the checkpoint stage, the babysit verdict, and any assumptions made.
 
    Never continue, re-prompt or reuse a previous slice's agent; the handoff

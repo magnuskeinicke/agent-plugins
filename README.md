@@ -105,9 +105,9 @@ machine (run it again to resume) that chains:
    bot-reviewed, green predecessor (the workspace bootstraps this plugin + `gh-stack` once,
    first). Walking up the stack in order: test-first
    implementation inside the bounded engine-CLI review-fix loop, ending in a stacked draft PR
-   (one linear GitHub stack via `gh stack`) whose body carries `## Verification` (every check actually run) and `## Visual verification`
-   (the fewest scenes that prove it — video for behaviour, before/after for appearance — published to `pr.mediaBranch`, sha-pinned — see
-   `skills/work-slice/references/pr-evidence.md`).
+   (one linear GitHub stack via `gh stack`) whose body carries `## Verification` (every check actually run) and — only after that PR is
+   babysat to GOAL MET — `## Visual verification` (the fewest scenes that prove it, captured once on the finished branch, published to
+   `pr.mediaBranch`, sha-pinned, and re-used verbatim by the ticket's QA handoff — see `skills/work-slice/references/pr-evidence.md`).
    Opt-in `local` runs the loop in this worktree with a fresh subagent per slice
    (`skills/feature-goal/references/local-loop.md`)
 5. `/babysit-stack` — each PR session runs it on its own PR first (step 4); the last PR session then

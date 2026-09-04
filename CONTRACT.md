@@ -104,15 +104,17 @@ skill's own summary and before any trailer — the spec is
   verbatim, results from the actual output; a second table lists checks left to
   CI. Rows are appended to `.context/<run-id>/evidence/verification.jsonl` as
   the gates run — a row exists only for a command that ran.
-- **`## Visual verification`** — one sentence on how the captures were made
-  (stack, Playwright, viewport, seeded user, fake data), then one scene per
-  changed surface: before/after pair for a changed surface, single image for a
-  new one, GIF for a flow — each captioned with surface, route and viewport
-  width. Before shots are taken at the base before the implement pass; after
-  shots in the final Playwright round. Media is committed to `pr.mediaBranch`
-  under `pr/<n>/` and referenced by commit sha. Internal-only changes and
-  uncapturable surfaces get a one-line section saying so — never an omission,
-  never a substitute image presented as the real surface.
+- **`## Visual verification`** — written **only after `/babysit-stack` reports
+  GOAL MET**, by the capture stage: one sentence on how the captures were made
+  (stack, Playwright, viewport, seeded user), then the fewest scenes that prove
+  the change (1–3): a still for appearance, a GIF for a flow, each captioned
+  with surface, route and viewport width. Scenes show the **finished state** —
+  there are no before shots, and nothing visual is captured before the verdict.
+  Media is committed to `pr.mediaBranch` under `pr/<n>/`, referenced by commit
+  sha, and re-used verbatim by the tracker's `## QA handoff` — one capture per
+  PR, two places, never a third. Internal-only changes and uncapturable surfaces
+  get a one-line section saying so — never an omission, never a substitute image
+  presented as the real surface.
 
 - **`## Notes`** — omitted unless a human must act on something. At most five
   one-line bullets: an assumption taken where the ticket left a decision open, a
@@ -160,7 +162,8 @@ during the Playwright verify rounds on UI slices. The contract:
   (seeded data differs from design content by construction).
 - **Semantics:** a `blocking` deviation is treated exactly like a failed
   acceptance criterion (same fix rounds, same caps); `advisory` deviations ride
-  into the PR body's `## Visual verification` and the QA evidence unfixed.
+  into the QA evidence and, once the capture stage runs, the PR body's
+  `## Visual verification`, unfixed.
 
 ### `routing` — slice agent routing
 

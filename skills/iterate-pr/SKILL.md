@@ -28,6 +28,7 @@ defaults apply and you say so once.
 | `<BOT>` | `pr.botReviewer` | babysit skips the review-request bot phase |
 | `<COMMENT-BOT>` | `pr.commentReviewer` | babysit skips the comment-summoned bot phase |
 | `<STACK>` | `pr.stackTool` | plain branches; nothing to restack |
+| `<MEDIA-BRANCH>` | `pr.mediaBranch` | `pr-media` — only used when a stale scene must be re-rendered |
 
 Which reviewers exist and when they trigger: `../work-slice/references/reviewer-roster.md`
 (documentation; `engine/lib/roster.mjs` is the source of truth).
@@ -140,7 +141,7 @@ The stop conditions live in the CLI (convergence, two-round stall, per-fingerpri
 
 If the loop landed fix commits (`git rev-list --count origin/<headRefName>..HEAD` > 0):
 
-1. `git push` the branch (plain push — commits were appended, no history rewrite) and, in the same moment, refresh the body's `## Verification` block for the new head from the gate runs the fix passes reported (`testEvidence` → rows in `.context/pr-<n>/evidence/verification.jsonl`; mechanics in `../work-slice/references/pr-evidence.md`): replace the text between the `magnus:verification` markers, add the block once if the PR predates it, never a second copy, never a row for a command not run. Leave `## Visual verification` alone unless a fix changed a captured surface — then recapture or mark the scene stale; never present an old image as current.
+1. `git push` the branch (plain push — commits were appended, no history rewrite) and, in the same moment, refresh the body's `## Verification` block for the new head from the gate runs the fix passes reported (`testEvidence` → rows in `.context/pr-<n>/evidence/verification.jsonl`; mechanics in `../work-slice/references/pr-evidence.md`): replace the text between the `magnus:verification` markers, add the block once if the PR predates it, never a second copy, never a row for a command not run. Leave `## Visual verification` alone: it exists only on a PR already driven to GOAL MET once (captured then, per `../work-slice/references/pr-evidence.md`). If a fix here changed a captured surface, mark those scenes stale — the capture stage after this run's babysit re-renders them; never present an old image as current and never capture mid-loop.
 2. **Stack awareness:** if other open PRs base on this branch (`gh pr list --state open --json number,baseRefName` filtered on `headRefName`), tell the user the upstack branches need restacking — the mechanics live in `babysit-stack` ("Branch switching & restacking"); don't restack other worktrees' branches unasked.
 3. If the loop **stalled** (or dead reviewers blocked convergence), surface the leftovers in the PR **body**, never as a comment (`../work-slice/references/pr-evidence.md`): fold a `## Notes` block into the same body write that refreshes `## Verification` at push time — at most five one-line bullets naming the findings that shipped unfixed. The full ledger (`CR-NNN` entries, dispute evidence, adjudication rulings) stays in `.context/` and the terminal report; a human who wants it asks.
 
@@ -158,7 +159,7 @@ If round 1 was already clean, say so and push nothing.
 
 The review loop only proves **our** reviewers are satisfied. "Everything in order" additionally means CI green, the GitHub review bots satisfied, and every review thread resolved — that machinery already exists, so delegate: run **`/babysit-stack <PR number>`** (it accepts explicit PR numbers; pass the whole stack's numbers when this PR has stacked siblings that need restacking after the push). It is a babysitting mode: CI green first, then `<BOT>` rounds (request → wait → fix → re-request) until satisfied, then `<COMMENT-BOT>` rounds (comment-summoned) until satisfied, threads resolved — each round waited for with bounded polls, each fix a fresh agent. It returns only with a terminal verdict:
 
-- **GOAL MET** → done. Report the final state and stop.
+- **GOAL MET** → if this run marked any `## Visual verification` scene stale, re-render it now with the capture stage (`../work-slice/references/pr-evidence.md`): capture on the finished branch, republish to `<MEDIA-BRANCH>`, one `gh pr edit`. Otherwise nothing is captured. Report the final state and stop.
 - **NOT MET** → nothing actionable is left: `needs-human` threads (including this skill's own stalled-verdict ledger posted in Step 4), a stuck bot, or a capped fix signature. Report them verbatim as the stop reason and end; the human unblocks, then re-invokes — babysit resumes from its state file. Never re-run babysit back-to-back on the same NOT MET state.
 
 A PR that already had bot rounds before this skill ran is fine — babysit's per-bot round counter lives in its state file and its 5-rounds-per-bot cap still applies; never work around it.

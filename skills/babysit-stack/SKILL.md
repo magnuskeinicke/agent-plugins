@@ -405,6 +405,13 @@ merely because something is pending; pending is waited on.
   `magnus:verification` markers, one edit folded into the push moment; a PR
   without the markers gets the block added once). A table that claims results
   for a head the fix moved past is a false claim.
+- **Never capture or publish visual evidence.** `## Verification` is the only
+  body block babysit writes. `## Visual verification` is captured *after* this
+  skill returns GOAL MET, by the caller (`/work-slice` Step 8, `/work-issue`
+  Step 7a) — so a bot round can never strand a stale screenshot. If a PR
+  already carries the block (a review round re-opened on a captured PR), leave
+  it in place and name the affected scenes as stale in the report; the caller
+  re-captures.
 - Report faithfully: stuck is stuck (with what never arrived), failed is failed
   (with the log line), a skipped phase says `n/a`.
 
