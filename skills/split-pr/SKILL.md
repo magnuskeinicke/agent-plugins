@@ -6,6 +6,8 @@ argument-hint: "[PR number | nothing = current branch]"
 
 # Split PR
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `split-pr`; supporting skills inherit the caller’s resolved role.
+
 Turn one oversized change into a **stack of small reviewable PRs**. The original diff is never altered — it is re-cut into layers, each layer a branch based on the one below, each independently green, together tree-identical to the original. Stacking follows the `<STACK>` skill's rules — load it before any stack command.
 
 Two entry modes:
@@ -90,7 +92,7 @@ Then link, by PR number, never `--open`:
 gh stack link --base <BASE> <pr-01> <pr-02> … <pr-top>
 ```
 
-**Existing-PR mode:** the original PR becomes the top of the stack. After the empty-diff check, point its branch at the top layer's tip — `git push --force-with-lease origin <top-layer>:<original-branch>` — so the PR keeps its number and threads while its history becomes stack-shaped, then link with the original PR number on top and refresh its body with `<PR-SKILL>` (the Summary now covers only the remainder). In pre-PR mode there is nothing to replace — clean up a stale Conductor-pushed remote branch the same way `/work-slice` Step 5.1 does (delete it, close any PR on it) and end checked out on the top layer.
+**Existing-PR mode:** the original PR becomes the top of the stack. After the empty-diff check, point its branch at the top layer's tip — `git push --force-with-lease origin <top-layer>:<original-branch>` — so the PR keeps its number and threads while its history becomes stack-shaped, then link with the original PR number on top and refresh its body with `<PR-SKILL>` (the Summary now covers only the remainder). In pre-PR mode there is nothing to replace — preserve existing remote branches and PRs as `/work-slice` Step 5.1 requires and end checked out on the top layer.
 
 ## Step 4 — Report, then drive to "in order"
 
@@ -139,6 +141,6 @@ Before reporting done:
 - [ ] Each layer is a draft PR with its own `<TITLE-RULE>` title, opened via `<PR-SKILL>` verbatim.
 - [ ] Each layer PR body carries `## Verification` from its own validation rows and the one-line `## Visual verification` (the top layer keeps the original's in existing-PR mode).
 - [ ] Stack linked by PR number: `gh stack link --base <BASE> <pr-01> … <pr-top>`.
-- [ ] Existing-PR mode: original PR retargeted to the top layer with number/threads intact and body refreshed. Pre-PR mode: stale remote branch cleaned up, checked out on the top layer.
+- [ ] Existing-PR mode: original PR retargeted to the top layer with number/threads intact and body refreshed. Pre-PR mode: existing remote branches/PRs preserved, checked out on the top layer.
 - [ ] Report shows the layer table, the empty-diff verification line, and per-layer validation results.
 - [ ] `/babysit-stack` ran to GOAL MET, or the `needs-human` stop reason is named.

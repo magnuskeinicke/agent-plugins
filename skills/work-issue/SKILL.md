@@ -6,6 +6,14 @@ argument-hint: "[issue id]"
 
 # Work Issue — the lean loop
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `work-issue`; supporting skills inherit the caller’s resolved role.
+
+At entry, resolve bootstrap/checkpoint configuration under the shared runtime
+contract **before** placeholders, tracker reads or stage detection. A pinned
+config takes precedence over the checked-out branch for every setting and is
+passed to all constituent skills; a missing named snapshot blocks the run.
+
+
 Drive **one standalone tracker issue** to a **draft PR**, with the same quality machinery as the big pipeline but none of its planning stages: no grilling, no PRD, no slice split, no stack. The ticket itself is the contract. Implementation runs inside the **work-slice engine-CLI loop** (implement TDD → up to 5 review rounds → Playwright loop max 3), and a `/babysit-stack` finish stage babysits the PR — CI green, `<BOT>` rounds until satisfied, then `<COMMENT-BOT>` rounds until satisfied, every thread resolved — waiting for each bot round itself. Only once that lands is anything **captured**: one Playwright capture run fills the PR body's `## Visual verification` and the ticket's one comment, a concise, inline-illustrated `## QA handoff`, from the same files. Nothing visual exists before GOAL MET, and no proof is ever shown twice. **No human gates**: the user invoking this skill on a ticket is the decision; the only stops are safety stops (dirty worktree, no diff, gut-check hard-stop) and `needs-human` escalations babysit cannot resolve. **Run the skill again to resume.**
 
 When to use which:
@@ -48,7 +56,7 @@ Fetch the issue from `<TRACKER>`. Classify — none of these stops the run or as
 
 ## Step 2 — Worktree preflight & claim
 
-**This skill does NOT create a worktree or branch** — same rule as `/work-slice`. Confirm before claiming:
+**Resolve Resume below before fresh-run preflight or claiming.** This skill does not create or rename the worktree/branch. A recorded run resumes on its recorded branch; only a new run needs a virgin branch:
 
 - Inside a git worktree (`git rev-parse --is-inside-work-tree`), clean (`git status --porcelain` empty), and the branch is virgin — `git rev-list --count <BASE>..HEAD` prints `0`. Any failure → STOP and tell the user (open a fresh Conductor workspace for the ticket, or commit/stash first).
 - **Keep the branch Conductor checked out** — no rename, no stack naming; there is no stack. Base = `<BASE>`.
@@ -63,11 +71,16 @@ There is no stop-hook: **persistence is re-invocation.** One invocation runs to 
 
 **Re-entry is stage detection from durable markers, never memory** (mid-Step-3 resume belongs to work-slice's own `## Workflow State` checkpoint in `.context/<issue-id>/workflow-state.md` and the engine CLI's `status`):
 
-1. No committed diff vs `<BASE>` → Step 3 (implement).
-2. Committed diff, no open/merged PR for the branch (`gh pr list --state all --head <branch>`) → Step 5 (draft PR). Never re-run the review loop after its verdict — converged or stalled, the result stands; leftovers ride on the PR.
-3. Open PR, last `/babysit-stack` verdict not GOAL MET → Step 6 (babysit).
-4. Babysit GOAL MET (or the PR merged), and either the PR body has no `## Visual verification` block or the ticket has no `## QA handoff` comment → Step 7 (capture, then write it).
-5. Babysit GOAL MET, the PR body carries `## Visual verification` **and** the `## QA handoff` comment is on the ticket → done; report and stop.
+1. Read `.context/<issue-id>/workflow-state.md`, the engine `status` (if a ledger exists), the branch’s PR and head. Verify the recorded branch/base before proceeding. Do not re-claim an owned run or apply the virgin-branch check to it.
+2. No implementation checkpoint/result → Step 3 implementation. A dirty tree left by the recorded worker can be resumed only after matching its exact owned files against its result/checkpoint; unknown changes are preserved and reported.
+3. Implemented but engine absent or phase not `done` → resume Step 3 at `init` or the pending task from `status`. A committed diff alone is never proof of review. `incomplete` coverage resumes the same reviewer round.
+4. Engine terminal verdict recorded, browser verification not recorded → finish Step 3.5. A gut-check hard stop remains blocked; do not open a PR. Only a recorded converged/stalled verdict may pass to the next stage.
+5. Review and verification recorded, no PR → Steps 4–5. Never rerun a completed review merely because PR creation was interrupted.
+6. Open PR without current-head babysit GOAL MET → Step 6.
+7. Current-head babysit GOAL MET, evidence or QA handoff missing/stale → Step 7. Match the evidence `sourceHead` to the PR head; update stale media and the existing handoff by id.
+8. Current-head verdict, current evidence and the handoff all verified → complete.
+
+Checkpoint every boundary using work-slice’s stage names. Reality wins over the checkpoint, but a missing stage is not inferred from a later commit. A merged PR is read-only history: reuse verified evidence or name the gap; do not restart implementation on it.
 
 ## Step 3 — Implement + review loop (engine CLI)
 
@@ -88,7 +101,7 @@ Work-slice Step 4 applies verbatim, minus stack talk and **minus every tracker w
 
 No stack, so this is the short form of work-slice Step 5:
 
-1. **Scrub** untracked review scaffolding (`git status --porcelain` — remove every `??`; committed work is never untracked).
+1. **Remove only owned scratch files** recorded before creation in `scratch-files.json`. Preserve all other untracked files; status alone does not prove they are scaffolding.
 2. `git push -u origin "$(git rev-parse --abbrev-ref HEAD)"`.
 3. **`<PR-SKILL>`** verbatim (title regex, conflict check, Summary, test plan onto the tracker issue) — then draft it: `pr=$(gh pr view --json number --jq .number); gh pr ready "$pr" --undo`.
 4. **Write `## Verification`** per `../work-slice/references/pr-evidence.md`, rendered from `evidence/verification.jsonl` — handed to `<PR-SKILL>` where it has a slot, else one `gh pr edit --body-file` insert, before any bot is requested. Rows from this run only. **No `## Visual verification` and no media publish here** — that is Step 7's, after GOAL MET.
@@ -123,21 +136,21 @@ Then report and stop.
 - One ticket per run. Never batch; never pull adjacent work into the diff.
 - **Never merge, approve, mark ready, or mark the issue done** — terminal state is a green, review-resolved **draft** PR plus the ticket's one QA handoff.
 - **The ticket gets one comment, at the very end.** Nothing before GOAL MET, nothing beyond the handoff, no second comment ever, no tracker attachments. The PR body is the only place dev-adjacent material appears, and only as ≤5 `## Notes` bullets.
-- **Evidence is captured once, after GOAL MET.** The Playwright loop in Step 3 verifies and keeps nothing; Step 7a is the only capture, and its files serve both the PR body and the handoff. No captures before the verdict, no second capture run, no third copy of the proof.
+- **Evidence is captured once, after GOAL MET.** The Playwright loop in Step 3 verifies and keeps nothing; Step 7a is the only capture, and its files serve both the PR body and the handoff. Reuse captures only while their manifest `sourceHead` matches the live PR head. Later fixes require Step 7a again after fresh GOAL MET; replace the existing body and handoff content.
 - **No human gates.** `<HITL>` becomes a recorded assumption; a non-lean ticket is worked with a disclosed concern; `<SKIP>` tickets are handed to `/work-slice` / `/feature-goal` **in this invocation**, never bounced to the user. The only stops are safety stops and babysit's `needs-human` escalations.
 - Never create a worktree or branch; never rename the Conductor branch; no stack commands (nothing to stack).
 - All constituent caps respected (5 review rounds, 3 Playwright, babysit's fix/thread caps and 5 rounds per bot) — caps exhausted → escalate on the PR, never grind. Bot reviews happen on GitHub only; never run a review CLI.
 - The review loop runs **once** per ticket, including across re-invocations — persistence after it is babysit, not more review rounds.
 - Label writes stay additive; never stamp `<AGENT-READY>` or `labels.sliceNext` on anything; consolidation follow-ups are new tickets, never scope creep.
 - **Persistence is re-invocation, never a stop-hook.** A run ends at GOAL MET or Blocked (`needs-human` only), always with the resume report; pending CI or bot rounds are waited on by babysit, never a reason to end.
-- Model roles fixed, aliases only (implementers Opus, reviewers/verifier Sonnet) — never pin exact ids or effort.
+- Use the shared model registry: implementer/fixer/adjudicator roles for those passes, reviewer/verifier roles for reports. Apply the resolved model and effort explicitly.
 
 ## Workflow Boundaries
 
 **This skill takes one lean tracker issue straight to a green, bot-satisfied, thread-resolved draft PR — no planning stages, no stack, no human gates.**
 
 - **DOES**: classify leanness (`<AGENT-READY>` or judged, disclosed when not lean), record HITL decisions as PR-body `## Notes` bullets, claim the ticket, run work-slice's implement + engine-CLI review loop + artifact-free Playwright verification verbatim, open the draft PR via `<PR-SKILL>` + `gh pr ready --undo` with `## Verification` (+ `## Notes`) in its body, run `/babysit-stack` to its terminal verdict, and — only on GOAL MET — capture the evidence once (7a: publish + `## Visual verification`) and write the ticket's one concise `## QA handoff` from those same files.
-- **DOES NOT**: ask the human anything, capture / publish / post any visual evidence before GOAL MET or more than once, grill / write PRDs / slice (`/feature-goal`), work pipeline tickets (`<SKIP>` → hands off to `/work-slice` / `/feature-goal` in-invocation), create or rename worktrees/branches, run stack commands, comment on its own PR, write anything on the ticket before GOAL MET or beyond the one handoff, attach files to the ticket, mark the issue done or the PR ready.
+- **DOES NOT**: ask the human anything, capture / publish / post any visual evidence before GOAL MET or for a stale head, grill / write PRDs / slice (`/feature-goal`), work pipeline tickets (`<SKIP>` → hands off to `/work-slice` / `/feature-goal` in-invocation), create or rename worktrees/branches, run stack commands, comment on its own PR, write anything on the ticket before GOAL MET or beyond the one handoff, attach files to the ticket, mark the issue done or the PR ready.
 
 ## Red Flags — STOP
 
@@ -152,7 +165,7 @@ Then report and stop.
 - Ticket carries `<SKIP>` — don't run the lean loop and don't bounce the user: run `/work-slice <id>` (slice) or `/feature-goal <id>` (PRD or feature ticket) in this invocation.
 - About to end because the ticket isn't lean — stop: proceed with a `## Notes` bullet in the PR body; the user chose this loop.
 - About to end because CI or a bot review is pending, or to wait for it yourself — stop: `/babysit-stack` waits; a run ends only at GOAL MET or Blocked.
-- Worktree dirty, not a worktree, or the branch isn't virgin (`git rev-list --count <BASE>..HEAD` ≠ 0) — stop and tell the user.
+- A fresh run needs a clean virgin worktree. On resume, resolve the saved stage and owned edits first; a non-virgin branch alone does not block an existing run.
 - About to create/rename a branch or run a stack command — stop: keep Conductor's checkout, base stays `<BASE>`.
 - About to re-run the review loop after its verdict on a re-invocation — stop: converged or stalled, the result stands; leftovers ride the PR.
 - About to run a review CLI — stop: bot reviews happen on GitHub, through babysit.
@@ -170,3 +183,11 @@ Before reporting done:
 - [ ] **Nothing visual existed before GOAL MET** and nothing was captured twice: the Step 3 Playwright loop kept no artifacts, `evidence/media/` was written only by 7a, and the handoff embeds those same files.
 - [ ] The ticket carries **exactly one** suite-authored comment — `## QA handoff` per `qa-handoff.md`, written **after** GOAL MET and the capture, never before: user-terms steps, 1–3 **inline-embedded** artifacts, Not-working-yet line, PR link, under ~150 words, no dev material, no tracker attachments. Re-runs updated it by id rather than adding a second. Consolidation follow-ups filed as tickets with `<SKIP>`.
 - [ ] The run ended at GOAL MET (handoff written) or Blocked (`needs-human` only — named, **ticket untouched**), never on pending CI / bot rounds; the report says `/work-issue <ISSUE>` resumes; done claimed only on a babysit GOAL MET verdict.
+
+When running under `/solve-ready-tickets`, read bootstrap's pinned config and
+tracker mode in `.context/<ISSUE>/pipeline-state.md` before preflight. Apply the
+queue and terminal marker protocol in
+`../feature-goal/references/cloud-relay.md`: emit `complete` only after current
+PR verification and the published QA handoff, `tracker-pending` when its exact
+payload awaits the caller, or `blocked` with a concrete reason. The caller owns
+crash recovery and denied tracker writes; this session owns implementation.

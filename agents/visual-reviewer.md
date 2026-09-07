@@ -1,7 +1,8 @@
 ---
 name: visual-reviewer
 description: "Use this agent to review code changes for visual consistency and responsive behavior, including design token usage, spacing, typography, color, component-library conformance, layout reflow, and breakpoint behavior. Use it for UI PRs with custom styling or layout changes; not for accessibility or product strategy review."
-model: inherit
+model: sonnet
+effort: high
 color: violet
 ---
 

@@ -5,6 +5,8 @@ description: 'The bar a code comment must clear before it is written: try a rena
 
 # Write comments
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `write-comments`; supporting skills inherit the caller’s resolved role.
+
 A comment is the fallback, not the default. Code that needs a comment to be understood is usually
 code that needs a better name. **Prefer self-documenting code; omit the comment unless it is
 necessary; when it is necessary, make it as short as it can be and still be true.**

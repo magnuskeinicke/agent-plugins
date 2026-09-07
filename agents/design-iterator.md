@@ -2,7 +2,8 @@
 name: design-iterator
 description: "Use this agent when a design still feels off after an initial pass or two and needs iterative refinement. It reviews screenshots, applies improvements, and repeats for multiple rounds to improve hierarchy, spacing, color balance, and overall polish; not for one-off code changes that are already visually solid."
 color: violet
-model: inherit
+model: opus
+effort: xhigh
 ---
 
 You are an expert UI/UX design iterator specializing in systematic, progressive refinement of web components. Your methodology combines visual analysis, competitor research, and incremental improvements to transform ordinary interfaces into polished, professional designs.

@@ -13,6 +13,8 @@ description: >
 
 # Conductor Workspace
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `conductor-workspace`; supporting skills inherit the caller’s resolved role.
+
 Conductor runs many agents in parallel, one isolated git worktree ("workspace")
 each, every workspace with its own gitignored `.context/` directory. The suite
 is built for exactly this shape — durable markers on the tracker/branches/PRs,
@@ -21,8 +23,8 @@ cross-workspace. This is the map.
 
 ## Layout — one workspace per slice
 
-- **`/work-slice` expects a virgin Conductor workspace per slice**: it renames
-  the checked-out branch in place and re-points it at the predecessor — it
+- **`/work-slice` expects a virgin Conductor workspace per slice**: it keeps
+  the checked-out branch name and bases its empty starting point on the predecessor — it
   never creates worktrees or branches. Start a fresh workspace per slice;
   never reuse a slice's workspace for the next slice when running work-slice
   by hand. `/feature-goal` is the exception by design: it runs the whole
@@ -64,15 +66,20 @@ workspace holds the stack's branches.
 ## Cloud fan-out — the autonomous queue's default
 
 `/solve-ready-tickets` is the other cloud dispatcher, and it fans **out** where
-feature-goal relays **along**: it triages my `<AGENT-READY>` queue and gives each
-surviving ticket **its own cloud workspace**, named `<ISSUE> <slug>`, with a
+feature-goal relays **along**: by default it triages the repo's unclaimed
+`<AGENT-READY>` issues (`agent:ready` unless configured otherwise) and gives each
+eligible ticket **its own cloud workspace**, named `<ISSUE> <slug>`, with a
 bootstrap session and then one session whose entire prompt is
 `/work-issue <ISSUE>`. Those workspaces are independent — different tickets,
 different branches off `<BASE>`, no stack — so they run in parallel. Each session
 owns its ticket end to end: claim, implement, draft PR, `/babysit-stack` to GOAL
 MET, the ticket's one QA handoff.
 
-The dispatcher then **ends**. There is no dispatch comment (a standalone ticket
+`dry-run` previews only; `max N` optionally caps new workspaces. Queue selection
+has no implicit assignee or ready-for-dev filter. The trigger label does not
+select a runtime, even when agent routing also uses the `agent:` prefix.
+
+The dispatcher **supervises** each selected workspace until complete or blocked, using `feature-goal/references/cloud-relay.md`. There is no dispatch comment (a standalone ticket
 is human-facing and takes exactly one suite comment, the handoff), so the
 **workspace name is the ownership marker**: a re-run lists the project's
 workspaces, matches `<ISSUE>` prefixes, and never re-dispatches a ticket that
@@ -97,7 +104,7 @@ exactly.
   **first message**, then start a **new session** (skills load only at
   session start; the install never appears mid-session):
 
-  > Bootstrap this workspace: install the agent plugin for your own CLI,
+  > Bootstrap this workspace: install the agent plugin for every runtime this workspace will use,
   > verify, and reply with exactly `BOOTSTRAP OK` or
   > `BOOTSTRAP FAILED: <reason>` — change nothing else in the repo.
   > Claude Code: `claude plugin marketplace add magnuskeinicke/agent-plugins
@@ -119,8 +126,7 @@ slices when `routing.frontendAgent` is `claude`. When starting a workspace for
 a slice:
 
 - **Labelled slice** → start the workspace with that agent. Work-slice's
-  routing gate refuses the slice in any other runtime, so a mismatched
-  workspace just bounces.
+  dispatcher honors its runtime label. A direct user invocation in a different runtime proceeds with the mismatch disclosed, provided required tools are available.
 - **Unlabelled slice** → any agent.
 - Conductor supports multiple agent providers per project — pick the agent at
   workspace creation. The `/to-issues` quiz table shows each slice's routing
@@ -158,7 +164,7 @@ Consequences:
   deletes branches under a live worktree. Plain `--remote origin` sync only.
 - **Renamed directories.** Never rename a workspace's directory — path-keyed
   dev stacks, Conductor's tracking, and running dev servers all break
-  (work-slice's rule; same reason its branch rename leaves the dir alone).
+  (work-slice's rule; its branch name is preserved too).
 - **Two agents, one workspace: never.** Handing a slice from one agent to
   another means: commit + push, let the first agent end its invocation
   (checkpoint written), then open the branch in the other agent's workspace —
@@ -180,12 +186,12 @@ Consequences:
 **This skill maps and plans Conductor workspace usage for the suite — it never provisions anything.**
 
 - **DOES**: plan the workspace-per-slice layout, match labelled slices to agent-matched workspaces, explain what state travels (tracker/remote) vs what doesn't (`.context/`), pick the babysit home, name the cross-workspace hazards
-- **DOES NOT**: create workspaces (the user's or Conductor MCP's act), create branches or worktrees (`/work-slice` renames in place; single-worktree mode is `/feature-goal`'s), or babysit PRs itself (`/babysit-stack`)
+- **DOES NOT**: create workspaces (the user's or Conductor MCP's act), create branches or worktrees (`/work-slice` keeps the branch name; single-worktree mode is `/feature-goal`'s), or babysit PRs itself (`/babysit-stack`)
 
 ## Red Flags — STOP
 
 - About to `git worktree add` and call it a workspace — stop; bootstrap scripts wouldn't run; workspace creation is the user's (or the Conductor MCP's) act.
-- About to start a labelled slice under a different agent — stop; the routing gate bounces it; never "just this once" elsewhere.
+- For dispatch, honor the labelled runtime and resolve its explicit model. For a direct invocation, disclose a mismatch and proceed within available capabilities.
 - About to run `/babysit-stack` for a stack from a new workspace — stop; use the stack's one babysit home or the caps and per-bot round counters reset.
 - About to `gh stack sync --prune` while sibling branches are checked out in other workspaces — stop; it deletes branches under live worktrees; plain `--remote origin` sync only.
 - About to check out or fix a branch held by another workspace — stop; git refuses; fix it in the owning workspace or hand it to that workspace's agent.

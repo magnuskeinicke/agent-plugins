@@ -16,6 +16,8 @@ argument-hint: "[dry-run|apply] [for <team>]"
 
 # Daily Ticket Manager
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `daily-ticket-manager`; supporting skills inherit the caller’s resolved role.
+
 ## Repo contract — resolve this first
 
 Read `docs/agents/repo-config.md` (its `## Config` JSON block); the placeholders

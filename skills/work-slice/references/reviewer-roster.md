@@ -69,14 +69,7 @@ area's overlay; specialists take only their own (e.g. the security bundle takes
 
 ## Model roles
 
-Role-based, aliases only — never pin exact model ids or effort levels:
-
-- **Writers get the strongest model**: the implement pass, every fix pass
-  (code-review and Playwright), and the closeout adjudicator (it overrules
-  both sides, so it gets the strongest judgement).
-- **Reporters run leaner**: every roster reviewer, the gut-check pre-pass, the
-  relevance validator, and the read-only Playwright
-  verifier (browser transcripts are token-heavy).
-
-A roster file may name its own `model:` in frontmatter; the CLI surfaces it in
-`plan` output — honor it when present.
+The registry in `engine/lib/models.mjs` supplies explicit role profiles for both
+runtimes. Read `runtime.md` for resolution, overrides, task manifests and the
+native/CLI launch contract. Roster Claude pins remain defaults; their Codex
+aliases map through `routing.codexModelAliases`. Unknown aliases are errors.

@@ -106,7 +106,7 @@ machine (run it again to resume) that chains:
    first). Walking up the stack in order: test-first
    implementation inside the bounded engine-CLI review-fix loop, ending in a stacked draft PR
    (one linear GitHub stack via `gh stack`) whose body carries `## Verification` (every check actually run) and — only after that PR is
-   babysat to GOAL MET — `## Visual verification` (the fewest scenes that prove it, captured once on the finished branch, published to
+   babysat to GOAL MET — `## Visual verification` (the fewest scenes that prove it, captured once per verified head on the finished branch, published to
    `pr.mediaBranch`, sha-pinned, and re-used verbatim by the ticket's QA handoff — see `skills/work-slice/references/pr-evidence.md`).
    Opt-in `local` runs the loop in this worktree with a fresh subagent per slice
    (`skills/feature-goal/references/local-loop.md`)
@@ -134,13 +134,14 @@ Standalone entry points onto the same machinery:
 | Command | Use for |
 | --- | --- |
 | `/magnus:work-issue <id>` | a lean ticket straight to a babysat draft PR — skips PRD/slicing, no human gates |
-| `/magnus:solve-ready-tickets apply` | drain the `agentReady`-labeled queue by fanning it out — one cloud workspace per ticket, each running `/work-issue`; built for a scheduler |
+| `/magnus:solve-ready-tickets` | dispatch every eligible `agent:ready` issue (or configured `labels.agentReady`) into its own cloud workspace running `/work-issue`; `dry-run` previews, `max N` caps new workspaces |
 | `/magnus:review-code` | one read-only reviewer round on any diff, PR, or working tree |
 | `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
 | `/magnus:babysit-stack` | babysit a PR or stack to GOAL MET: CI, Copilot rounds, CodeRabbit rounds, threads |
 
-The standalone commands are **venue-neutral**: run them locally or in a Conductor cloud
-workspace — only `/feature-goal` dispatches to the cloud.
+`/work-issue`, `/review-code`, `/iterate-pr`, and `/babysit-stack` run wherever
+you invoke them. `/solve-ready-tickets` dispatches to Conductor cloud workspaces
+by default and supervises them, as `/feature-goal` does after planning.
 
 Under all of them sits the engine CLI (next section): skills run it from the host repo root, obey
 its JSON output, and resume from durable markers — `## Workflow State` checkpoints, the ledger in
@@ -196,3 +197,11 @@ session and ends, the last starting the stack-wide babysit session (`local` opt-
 mode that runs Copilot then CodeRabbit rounds on GitHub until satisfied, and
 removed the CodeRabbit CLI lane from the engine (`pr.cliReviewer` →
 `pr.commentReviewer`).
+
+Worker models and runtime execution are defined in
+[the shared runtime contract](skills/work-slice/references/runtime.md): explicit
+Claude/Codex role profiles, native agents or the schema-validating CLI adapter,
+and resumable task manifests. Missing review results cannot produce success.
+[Cloud supervision](skills/feature-goal/references/cloud-relay.md) keeps the
+caller monitoring through crash recovery and tracker publication. GitHub checks
+and visual evidence are tied to each PR's current head.

@@ -6,6 +6,8 @@ argument-hint: "[--base <branch>] [PR number | nothing = current branch vs the r
 
 # Gut check
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `gut-check`; supporting skills inherit the caller’s resolved role.
+
 Ask one question, and answer it honestly:
 
 > Does anything in this change jump out as strange, unusual, or unnecessary?

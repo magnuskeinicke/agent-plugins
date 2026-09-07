@@ -12,8 +12,7 @@ human).
 
 ## 0. Preflight
 
-- Working tree clean (`git status --porcelain` empty) — a dirty tree is a
-  safety stop: report it as Blocked, don't clean up another session's work.
+- Read the slice checkpoint and engine `status` before fresh-run checks. A resumed writer may have recorded unfinished edits: compare them with its saved pre-pass status and owned paths, preserve them, and resume that stage. Unexplained dirty files are a blocker; never clean another session's work.
 - Plugin + tools present: the skill you're reading proves the plugin; check
   `gh extension list | grep -q gh-stack || gh extension install github/gh-stack`,
   `git config rerere.enabled true`, `git config remote.pushDefault origin`.
@@ -25,8 +24,7 @@ human).
   rather than on the tickets. Then the PRD ticket's
   description (`<PRD-ISSUE>`, the `PRD:` sub-issue of the feature ticket —
   its `## Implementation deltas` comments amend it). Never write on the
-  feature ticket. Planning docs are on the docs branch named there; read them from
-  `origin/<docs-branch>` (`git show origin/<docs-branch>:CONTEXT.md`), never
+  feature ticket. Use the pinned `.context/<ISSUE>/planning/repo-config.md` for every engine init and model resolution. Planning docs are at the full docs OID in that checkpoint; read them with `git show <docs-oid>:CONTEXT.md`, never
   merge that branch into a stack branch.
 
 ## 1. Claim exactly one slice
@@ -35,13 +33,15 @@ Stack order is `/to-issues`' published numbering (`NN`). Read every slice's
 PR state (`gh pr list --state all --search "<slice-id>"`) and its
 `## Cloud dispatch` comment. Two cases, checked in this order:
 
-- **An open PR whose babysit is not GOAL MET** — its `## Cloud dispatch`
-  comment has no `babysit: GOAL MET` line (or reads `NOT MET`), and the slice
-  checkpoint `.context/<slice-id>/workflow-state.md` is not `COMPLETE`. That
-  slice is still owed its review: stamp your session id on the comment, skip
-  §2–§3 and go to **§3b** for it. This is the resume path after a human
-  cleared a NOT MET blocker, or after a session died during babysit. Never
-  cut the next slice on top of it first.
+- **An open PR with an unfinished required stage** — its checkpoint is not
+  `COMPLETE`, its babysit evidence no longer matches the live head, or required
+  Step 8 media is missing/stale. This includes GOAL MET recorded immediately
+  before a worker died during capture. Stamp your session ID on the marker,
+  check out the PR's actual owning branch with a clean or accounted-for tree,
+  and resume the first unfinished stage. Complete pending engine/browser work;
+  run §3b only when current-head babysit is owed; otherwise go straight to Step 8.
+  Do not cut the next slice until required media is published (or a concrete
+  not-applicable reason is recorded for that head) and the checkpoint is COMPLETE.
 - Otherwise the slice to work is the **earliest in stack order with neither
   an open nor a merged PR**. Then:
 
@@ -141,7 +141,7 @@ thread replies. Then:
 - **GOAL MET** → run **work-slice Step 8** here, in this session, before
   anything else: capture this PR's scenes on its finished branch, publish them
   to `<MEDIA-BRANCH>` under `pr/<n>/`, insert `## Visual verification` into the
-  body with one `gh pr edit`. That is the only capture this PR ever gets —
+  body with one `gh pr edit`. Record `sourceHead` in its media manifest; recapture after any later head change —
   `/feature-goal`'s QA handoff re-uses these files. Then §4, then §5 (pass the
   baton).
 - **NOT MET** → by construction only `needs-human` threads, a stuck bot, or
@@ -187,5 +187,12 @@ babysit uses); `gh stack view --json` shows the chain; `git status
   slice.
 
 If the spawn call fails: retry once; still failing → report Blocked with the
-error verbatim (the human, or a `/feature-goal <ISSUE>` from anywhere,
+error verbatim (the supervising caller, or a `/feature-goal <ISSUE>` from anywhere,
 restarts the relay from the markers).
+
+Read `cloud-relay.md` for the required terminal result marker at every exit.
+Resolve the successor's profile with the registry (`implementer` for a PR,
+`dispatcher` for the stack babysit), using the pinned config. Persist intended
+session/message UUIDs before creation, pass explicit model/effort, and check
+that its runtime passed bootstrap. The caller follows the recorded baton and
+keeps supervising after this worker ends.

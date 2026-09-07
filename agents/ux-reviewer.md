@@ -1,7 +1,8 @@
 ---
 name: ux-reviewer
 description: "Use this agent to review code changes for usability issues using Nielsen's heuristics and interaction design best practices. It looks for missing states, confusing flows, poor feedback, preventable errors, and weak recovery paths; not for accessibility compliance or visual consistency checks."
-model: inherit
+model: sonnet
+effort: high
 color: cyan
 ---
 

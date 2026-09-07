@@ -5,6 +5,8 @@ description: 'The iron law before any completion claim: no "done", "fixed", "pas
 
 # Verify before done
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `verify-before-done`; supporting skills inherit the caller’s resolved role.
+
 Claiming work is complete without fresh verification evidence leaves the claim unsupported. **Evidence before claims, always.** Violating the letter of this rule is violating the spirit of this rule.
 
 ```
