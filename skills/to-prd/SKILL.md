@@ -7,6 +7,8 @@ This skill takes the current conversation context and codebase understanding and
 
 ## Repo contract — resolve this first
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `to-prd`; supporting skills inherit the caller’s resolved role.
+
 Read `docs/agents/repo-config.md` (its `## Config` JSON block); the placeholders
 below stand for its values. Missing file or empty key → use the fallback and say
 so once. Also read the prose docs it points at (`tracker.docPath`,

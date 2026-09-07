@@ -5,6 +5,8 @@ description: Run the shared reviewer roster (engine CLI, review-only mode) on an
 
 # Review Code
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `review-code`; supporting skills inherit the caller’s resolved role.
+
 Run the **same reviewer roster** the feature-dev loops (`/work-slice`, `/iterate-pr`) use — gut-check pre-pass, always-on + mechanically-triggered roster lanes, the reuse audit — on **any** code, standalone, through the plugin's **engine CLI in review-only mode**. One read-only round; the relevance validator classifies every finding before it reaches the report, so the human sees **blocking** (≥80 confidence, diff-caused), **advisory** (60–79, or confident-but-pre-existing), and **unverified** (<60) findings separately, each under a stable `CR-NNN` id. No implementer, no fix loop, no Playwright, no ticket: the human decides what to do with the findings.
 
 ## Repo contract — resolve this first
@@ -50,11 +52,7 @@ field says. Run state lives in the host repo's gitignored `.context/<run-id>/`.
 
 Resolve `<ENGINE>` once — it lives in the **plugin install root**, not the host repo:
 
-```bash
-engine="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/engine/cli.mjs}"
-[ -n "$engine" ] && [ -f "$engine" ] || engine="$(realpath "<this-skill-dir>/../..")/engine/cli.mjs"  # symlinked install
-[ -f "$engine" ] || engine="$(ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/engine/cli.mjs 2>/dev/null | sort -V | tail -1)"
-```
+Resolve `engine` from the loaded skill’s real path using the shared runtime contract. Do not search another runtime’s cache or pick a version by sorting paths.
 
 **Run id:** `review-$(date +%Y%m%d-%H%M%S)` — each invocation is a fresh run.
 (Resuming an interrupted run instead: find the newest `.context/review-*`
@@ -85,24 +83,22 @@ node "$engine" report --slice <run-id>
 `--review-only` makes the run single-round: `decide` classifies and stops —
 no fix prompt is ever emitted.
 
-**Running an emitted task.** Every task names an `agentFile` (roster file —
-its body is the agent's system prompt), a `promptFile`, an `outputFile` (the
-JSON the agent must write), and a `model` + `effort` when the roster pins
-them. Mechanism
-is runtime-dependent; **subagents are an optional accelerator, the round is
-sequential-first**: Claude spawns each reviewer as a subagent (its definition's
-pins apply; read-only, so
-run them **in parallel**); Codex runs background `codex exec` children with
-the agent-file body prepended, the task's `model` alias mapped through
-`routing.codexModelAliases` and passed with its `effort` as the child's
-model/effort flags; with neither, run each reviewer yourself, one
-at a time, adopting the roster persona fresh — and disclose the fallback once.
+**Running an emitted task.** Use the shared runtime contract: every task has
+resolved profiles for Claude and Codex, a schema and a persisted `taskFile`.
+Claude native subagents remain supported; Codex native subagents may be used
+when they expose the required controls. Otherwise run
+`node "$engine" run --task <taskFile> --runtime <claude|codex>`.
+Each worker returns JSON; the parent validates and saves it. Writers and the
+adjudicator get a fresh worker per pass, never a resumed prior worker. If a
+writer cannot commit, the parent verifies and commits only its `editedFiles`
+as described in the runtime contract. No inline persona fallback: report
+unavailable worker capability explicitly.
 
 Ground rules:
 
 - **Gut-check runs first.** A `"disposition": "block"` observation → run `collect` immediately; it hard-stops for the human before any reviewer spend.
-- **Every emitted reviewer must report before `collect` settles.** `collect` lists `missing` and `invalid` reports: re-run each dead reviewer once, then run `collect` again; still dead → proceed, but the verdict is NOT clean — state the degraded coverage explicitly.
-- **Reviewers and the validator are read-only** — the only side effect of this skill is the report. Reporters run on a leaner model; aliases only, never exact model ids.
+- **Every emitted reviewer must report.** Retry missing/invalid results once, then report `incomplete` and preserve the round for resume. Never advance to PR creation with incomplete coverage.
+- **Reviewers and the validator are read-only** — the only side effect of this skill is the report. Use the registry’s reviewer role with explicit model and effort.
 - Never hand-edit `.context/<run-id>/ledger.json` or a findings file.
 
 ## Step 3 — Present the report

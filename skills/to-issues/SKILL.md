@@ -5,6 +5,8 @@ description: Break a PRD into independently-grabbable, agent-ready sub-issues on
 
 # To Issues
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `to-issues`; supporting skills inherit the caller’s resolved role.
+
 Break a PRD into **independently-grabbable, agent-ready sub-issues** using a **walking skeleton + behaviour deltas** split, ordered as a **stack** so each ships as a small, reviewable PR built on the last.
 
 The split optimises for what an agent one-shots reliably: the **skeleton** slice concentrates every cross-layer decision into one wide-but-shallow end-to-end path; every **delta** slice after it is a localized behaviour addition that mirrors the skeleton and introduces **at most one novel decision**. Slice sizing is by *decision count*, not layer count or LOC — diff size follows.

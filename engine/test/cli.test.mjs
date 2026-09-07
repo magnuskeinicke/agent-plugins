@@ -44,7 +44,8 @@ test('full loop: findings → fix → clean re-review → converged', () => {
   assert.match(readFileSync(cr.promptFile, 'utf8'), /widget renders/, 'contract embedded in prompt');
   assert.match(readFileSync(cr.promptFile, 'utf8'), /READ-ONLY/);
 
-  // Reviewers "run": gut-check clean, one real finding, one clean report.
+  for (const task of plan.reviewers)
+    writeFileSync(task.outputFile, findingsFile({ reviewer: task.id, blockingFindings: [], notes: [] }));
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'read all 2 files vs origin/main' }));
   writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', blockingFindings: [{ title: 'Missing null check', detail: 'boom on empty', file: 'components/Widget.tsx', rootCause: 'null-widget' }], notes: [] }));
   const reuse = plan.reviewers.find((r) => r.id === 'codebase-pattern-reviewer');

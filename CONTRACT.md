@@ -15,7 +15,7 @@ Scaffold a fresh repo's half of this contract with **`/magnus:init-repo`**.
 
 | Path | Purpose | Absent → |
 | --- | --- | --- |
-| `docs/agents/repo-config.md` | **the one required file** — its `## Config` JSON block supplies every key below | every key falls back to the generic default; skills say so once |
+| `docs/agents/repo-config.md` | **the one required file** — its `## Config` JSON block supplies every key below | absent file/empty values use defaults; existing malformed config is a blocking error |
 | `CONTEXT.md` | domain glossary; extended by `magnus:grill-with-docs` | skills skip domain-language checks |
 | `docs/adr/` | architecture decision records (`0001-slug.md`, …) | no ADR cross-checks, no ADR writes |
 | `docs/agents/issue-tracker.md` | prose rules for the tracker (`tracker.docPath`) | skills work from the `tracker` key alone |
@@ -70,10 +70,12 @@ config) and **names which it used** rather than guessing silently.
 `riskPrefix`, `docPath`. Default: all `''` except `typePrefix: 'type:'` and
 `riskPrefix: 'risk:'`.
 
-A label left empty **disables the machinery that rides on it** — no
-`sliceNext` means the slice pointer is carried by the user instead; no
-`agentReady` means `magnus:solve-ready-tickets` has no queue to drain and says
-so.
+Empty labels generally disable the machinery that uses them; for example,
+without `sliceNext` the user supplies the next slice. `solve-ready-tickets`
+uses `agent:ready` when `labels.agentReady` is empty, and supplies the resolved
+trigger in each worker's separate pinned dispatch config. A configured value
+overrides that trigger. Standalone `work-issue` keeps its existing behavior:
+without `labels.agentReady`, it judges leanness itself and infers no claim label.
 
 ### `pr`
 
@@ -171,23 +173,22 @@ during the Playwright verify rounds on UI slices. The contract:
 | --- | --- | --- | --- |
 | `routing.labelPrefix` | string | `''` → routing disabled | tracker-label prefix for reserving a slice to an agent (`agent:` → `agent:claude`) |
 | `routing.frontendAgent` | string | `''` → no stamping | agent name `magnus:to-issues` stamps on frontend-dominant slices (paths judged by `areaPaths.frontend`) |
-| `routing.delegate` | agent → command template | `{}` → report/skip, never delegate | headless invocation per agent, e.g. `{"claude": "claude -p \"<prompt>\" --permission-mode acceptEdits", "codex": "codex exec \"<prompt>\""}` — local-mode machinery |
+| `routing.delegate` | runtime → command template | `{}` → disclosed current-runtime fallback | local full-slice delegation; prepare the branch first, pass the complete bounded handoff via stdin/message file and explicit resolved model/effort; preflight tools and never interpolate prompt text into shell code |
 | `routing.dispatch` | string | `'cloud'` | where `magnus:feature-goal` runs everything after planning (slice loop + babysit): `cloud` → **one** Conductor cloud pipeline workspace for the stack and a **fresh session per PR** (a relay: each session works one slice to a linked draft PR, babysits that PR to GOAL MET, starts the next session and ends; the last starts the stack-wide babysit session), created via the Conductor MCP or the `conductor` CLI (falls back to `local` when neither is reachable); `local` (opt-in) → the sequential single-worktree loop, one fresh subagent per slice |
-| `routing.cloudModels` | agent → `{model, effort}` | `{"claude": {"model": "opus-5-1m", "effort": "xhigh"}, "codex": {"model": "gpt-5.6-sol", "effort": "xhigh"}}` | Conductor model + effort `magnus:feature-goal` passes on every cloud session it creates (`create_workspace` and every relay `create_session`), keyed by the session's agent; an agent key set to `{}` → Conductor's own default for that agent. A host's per-agent object replaces the default one wholesale. Implementer-side only — reviewer subagents use the roster files' own pins |
-| `routing.codexModelAliases` | alias → codex model | `{"sonnet": "gpt-5.6-terra", "opus": "gpt-5.6-sol"}` | roster files pin reviewer models with Claude alias names; a Codex runtime maps each task's emitted alias through this table for its `codex exec` children (the task's `effort` passes through unchanged). Unmapped alias → the child runs on the session model, disclosed once |
+| `routing.models` | role → runtime → profile | `engine/lib/models.mjs` | explicit model/effort/access/timeout for every worker; profile may override `model`, `effort`, `cloudModel`, `access`, `timeoutMs`; see [runtime contract](skills/work-slice/references/runtime.md) |
+| `routing.cloudModels` | runtime → `{model, effort}` | Claude `opus-5-1m`/`xhigh`; Codex `gpt-5.6-sol`/`xhigh` | legacy planner/implementer/fixer cloud overrides; explicit role profiles take precedence; `{}` retains registry defaults |
+| `routing.codexModelAliases` | alias → Codex model | `sonnet` → `gpt-5.6-terra`, `opus` → `gpt-5.6-sol` | preserves roster Claude pins while translating Codex workers; unmapped aliases fail instead of silently inheriting |
 
-Different agents have different strengths (e.g. Claude at frontend). With
-routing configured, `magnus:to-issues` stamps `<labelPrefix><agent>` on slices
-reserved for a specific agent; `magnus:work-slice` refuses a slice reserved
-for an agent other than its own runtime; `magnus:feature-goal` either
-delegates such a slice via `routing.delegate` (child process running
-`/work-slice`, verified afterwards from durable markers) or ends the
-invocation naming which agent the slice waits on. Routing is **slice-granular
-only** — never per-step or per-file. The suite's durable markers (checkpoint
-files, ledger, PR state) are what make a slice resumable by any agent.
+Routing labels select a runtime when the dispatcher creates a session. A direct
+`work-slice` invocation in a different runtime proceeds with the mismatch
+recorded on the slice, provided its required tools are available. Local pipeline
+`routing.delegate` can select a different runtime for the full slice; without a
+delegate, disclose the fallback. Models within either runtime come from the
+shared role registry. Durable checkpoints and result files allow either runtime
+to resume work.
 
 `routing.dispatch` decides the venue, not the agent: by default (`cloud`)
-`magnus:feature-goal` leaves the planning session once planning is done —
+`magnus:feature-goal` moves implementation to the pipeline workspace after planning while the caller supervises —
 **one** Conductor cloud pipeline workspace for the stack (Conductor MCP
 `create_workspace`, or the workspace the grilling session was handed off to),
 then a **relay of fresh sessions**: each session works exactly one slice to a
@@ -198,21 +199,24 @@ rounds, `pr.commentReviewer` rounds, threads — so the next layer is cut on a
 reviewed PR; NOT MET blocks the relay), starts the next session
 (`create_session` / `conductor session create`, the `<AGENT:>` label picking
 that session's agent) and ends; the last PR session starts the stack-wide
-babysit session in the same workspace. No session ever outlives
-one PR. Opting into `local` runs the sequential single-worktree loop with a
+babysit session in the same workspace. No PR worker handles more than one PR. The caller monitors across the whole relay. Opting into `local` runs the sequential single-worktree loop with a
 fresh subagent per slice and consults `routing.delegate` for slices reserved
 for another agent (no delegate → it works the slice itself and discloses that
 on the PR — the pipeline never waits on a human after the grill).
 The pipeline workspace bootstraps once: its first session installs this
-plugin and `gh-stack` in the fresh sandbox (skills load only at session
+plugin for every selected runtime and `gh-stack` in the fresh sandbox, checks actual tools in fresh sessions, and transfers the immutable planning config (skills load only at session
 start), then the relay sessions run `/feature-goal <ISSUE>` and re-detect the
 stage. The host repo's shared Conductor settings are never touched, so the
 plugin stays personal to the dispatching user.
-`solve-ready-tickets` is the other cloud dispatcher, fanning **out** rather than
-relaying along: one workspace per `agentReady` ticket, named `<ISSUE> <slug>`
+`solve-ready-tickets` dispatches by default; `dry-run` previews and optional
+`max N` caps new workspaces. It selects the repo's unclaimed `agent:ready` issues
+(or configured `labels.agentReady`), without implicit assignee or ready-for-dev
+filters, then triages them. It creates one workspace per eligible ticket, named `<ISSUE> <slug>`
 (the name is the ownership marker — there is no dispatch comment on a
 human-facing ticket), bootstrap session, then one session whose entire prompt is
-`/work-issue <ISSUE>`. It dispatches and ends; a re-run sweeps those workspaces.
+`/work-issue <ISSUE>`. It supervises those workspaces to completion or a concrete blocker, recovering one silent crash per worker and flushing denied tracker writes. A caller re-run adopts the same supervisor state.
+The trigger label never selects a runtime, even when routing uses the `agent:`
+prefix. `work-issue` owns the claim and the full development/review/QA loop.
 `work-issue` and `daily-ticket-manager` stay venue-neutral and run wherever the
 user starts them.
 
@@ -319,8 +323,7 @@ user-supplied cap under the hard cap; magnus:iterate-pr), and
 `--inspect '<cmd>'` (the diff command every prompt cites when the target is
 not a committed branch diff — `git diff HEAD` for uncommitted work,
 `gh pr diff <n>` for a PR reviewed without a checkout). `collect` lists
-reviewers whose output file is `missing` (re-run once, re-collect, or state
-degraded coverage).
+reviewers whose output is missing/invalid. Retry once; still incomplete prevents a clean/converged verdict and preserves the pending round for resume.
 
 Run state lives in the host repo's gitignored `.context/<slice-id>/`:
 `ledger.json` (the ledger + loop state), `contract.md` (the run contract),
@@ -328,23 +331,24 @@ Run state lives in the host repo's gitignored `.context/<slice-id>/`:
 inbox reviewers write JSON into), fix/validator/adjudication artifacts beside
 them. `node --test '<plugin-root>/engine/test/*.test.mjs'` covers the loop.
 
-**Fan-out is mechanism-agnostic.** `plan` emits one task prompt per selected
-reviewer plus the matching roster file in `agents/`; the host runs them however
-its runtime allows — Claude spawns subagents (in parallel) from the agent
-definitions, Codex spawns background `codex exec` children with the agent-file
-body as the system prompt, and inline-sequential is the disclosed fallback.
-Either way every reviewer writes its findings JSON to the `outputFile` the
-manifest names, and `collect` ingests them identically. Losing parallelism is
-never a licence to drop a reviewer.
+**Worker execution is shared across runtimes.** Each task persists its prompt,
+output path, schema, cwd and explicit Claude/Codex execution profiles in a task
+manifest. Native Claude subagents keep the vendored personas and tool inheritance;
+native Codex workers use the same persona bodies with the Codex profile. The
+`engine run --task ... --runtime claude|codex` adapter is the tested CLI fallback.
+The parent stores validated JSON, so read-only workers do not need output-file
+write permission. Read-only tasks may fan out; writers run serially with fresh
+context. Missing worker/tool support blocks the task; no inline persona fallback.
 
-**Writers are one fresh agent per pass.** The same ladder carries every
-code-editing pass — the implement pass, each gate-fix, each round's fix, the
-closeout adjudicator, and a skill's own fix passes (Playwright rounds,
-`magnus:babysit-stack`'s CI and thread fixes). The CLI holds no agent handles:
-it emits a prompt file, the host spawns something to run it, and the result
-comes back as JSON. Hosts must keep it that way — never continue, re-prompt or
-resume a spent pass's agent, so round N never inherits round N-1's reasoning.
-Handoff between passes is files only (`contract.md`, the emitted prompt, prior
-result JSONs). With no spawn mechanism at all, inline is the disclosed
-fallback: each pass re-reads its prompt as a fresh persona, and the degraded
-isolation is stated once.
+`status` lists unfinished tasks. Config is pinned in the ledger at init and
+survives branch changes. Legacy ledgers recover task manifests from their saved
+prompts; legacy success without coverage is collected again before trusting it.
+Cloud supervision and tracker publication use
+[the cloud relay contract](skills/feature-goal/references/cloud-relay.md).
+
+Bot/CI satisfaction is tied to the current PR head. The GitHub snapshot helper
+pages reviews, comments, threads and thread comments before checking the verdict.
+Every changed head invalidates its CI and bot evidence, including restacked PRs.
+Media manifests record `sourceHead`; capture once per verified head, refresh
+stale manifests after current-head GOAL MET, then update the same PR body and
+QA handoff. Scratch cleanup deletes only paths recorded before creation.

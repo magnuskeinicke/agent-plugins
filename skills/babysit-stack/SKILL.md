@@ -16,6 +16,14 @@ argument-hint: "[PRD issue id | feature issue id | PR numbers…]"
 
 # Babysit Stack
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `babysit-stack`; supporting skills inherit the caller’s resolved role.
+
+At entry, resolve bootstrap/checkpoint configuration under the shared runtime
+contract **before** placeholders, tracker reads or stage detection. A pinned
+config takes precedence over the checked-out branch for every setting and is
+passed to all constituent skills; a missing named snapshot blocks the run.
+
+
 Take open draft PRs and drive them to the terminal state: **every PR CI-green,
 every configured review bot satisfied, every review thread resolved (or
 replied-to and explicitly flagged for the human)**. This is the finish stage
@@ -80,7 +88,7 @@ that's `/feature-goal` / `/work-slice`'s job.
 
 **State file:** `.context/babysit-<parent>.json` — per PR: CI attempt counters
 + failure signatures + first-seen-pending timestamps; per bot: `rounds`,
-`lastTriggerAt`, `satisfied`, `stuck`; per thread: attempt counters; plus
+`lastTriggerAt`, `triggerHead`, `satisfiedHead`, `stuck`; each PR also records `requiredBots` and `ciHead`; per thread: attempt counters; plus
 **one record per fix attempt** (`outcome`, `summary`, `whyItFailed`) — the next
 attempt's fixer is a fresh agent and only knows what was tried because this
 file says so. Missing file = first run. Before writing it, make sure
@@ -101,7 +109,7 @@ Phase D  zero unresolved threads  (human / other-bot threads)
 
 A later phase never starts while an earlier one is red: bots review green
 code only, and every fix push inside Phase B/C sends the PR back through
-Phase A (bounded CI watch) before the next bot round is triggered.
+Phase A (bounded CI watch) before restarting at Phase B. A fix in Phase C or D invalidates Phase B too.
 
 ### Waiting — bounded, never busy
 
@@ -128,11 +136,11 @@ commit / push / reply from what it reports. **You never edit code yourself**,
 and attempt 2 of the same failure is a **new** agent, never the previous one
 re-prompted — that is what makes the caps mean anything.
 
-Mechanism is the writer-spawn ladder from the work-slice review loop, and fixes
-are writer work (**strongest model**): **Claude** → a subagent per attempt;
-**Codex** → a `codex exec` child per attempt, model from
-`routing.codexModelAliases`' `opus` alias; **neither** → run it inline from the
-brief alone, as a fresh persona, and disclose the degraded isolation once.
+Use the shared runtime contract's `fixer` profile for a fresh native worker or
+CLI task. Prepare the brief below, then emit a standalone task with `--role
+fixer --schema babysit-fix`; run its manifest with the adapter for the current
+runtime. The same schema supports native Claude workers. Return JSON to the
+parent; the parent validates and saves it. No inline persona fallback.
 
 **The brief** (`.context/babysit-<parent>/<pr>-<slot>-<n>.md`, `<slot>` = check
 name or thread id, `<n>` = attempt) contains only:
@@ -151,7 +159,7 @@ name or thread id, `<n>` = attempt) contains only:
   with evidence; and **no `git` writes at all** — no commit, push, checkout,
   stash, rebase or `.git` edits. Git is yours.
 
-**The result** — the fixer writes JSON to
+**The result** — the parent saves the fixer's returned JSON to
 `.context/babysit-<parent>/<pr>-<slot>-<n>.json`:
 
 ```json
@@ -182,7 +190,7 @@ Read check state as JSON and classify by `bucket` — never eyeball the table:
 gh pr checks <n> --json name,state,bucket,link,workflow
 ```
 
-- **All `pass`/`skipping`** → Phase A done.
+- **All `pass`/`skipping`** → re-read the PR head; only if unchanged throughout this check, record `ciHead` and mark Phase A done. Check run `head_sha` must match; no checks is a blocker unless the repo explicitly has no CI.
 - **`cancel`** → never turns green on its own. Re-run once (`gh run rerun
   <run-id>`); still cancelled or now failing → treat as `fail`.
 - **`pending`** → wait: `timeout 1200 gh pr checks <n> --watch --interval 30
@@ -222,7 +230,7 @@ Phase B runs first (`<BOT>`, the review-request bot); Phase C starts only once
 Phase B is satisfied (or `n/a`). Skip a phase entirely when its bot is
 unconfigured — record `n/a`.
 
-**Trigger** (record `lastTriggerAt` = now, `rounds += 1` in the state file):
+**Trigger** (read the current PR head, record `triggerHead`, `lastTriggerAt` = now, `rounds += 1` in the state file):
 
 - `<BOT>` (Copilot's login is `copilot-pull-request-reviewer[bot]`):
   ```bash
@@ -235,26 +243,26 @@ unconfigured — record `n/a`.
 - `<COMMENT-BOT>`: `gh pr comment <n> --body '<command>'` (CodeRabbit:
   `@coderabbitai review`). Same command after every fix push.
 
-**Wait** for the round to land. A round has landed when **either** a review by
-the bot's login was submitted after `lastTriggerAt`, **or** the bot posted an
-issue comment after `lastTriggerAt` that closes the round without a review
-object — CodeRabbit answers a re-review with nothing to add as a plain comment
-(`Review finished`, or a summary reporting zero actionable comments), never as
-a review. Poll both in the same condition, or the wait runs to its full bound
-on every clean round:
+**Wait** for a result bound to this trigger's head. Read a complete snapshot:
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/<n>/reviews \
-  --jq '[.[] | select(.user.login=="<login>" and .submitted_at > "<lastTriggerAt>")] | length'
-gh api repos/{owner}/{repo}/issues/<n>/comments \
-  --jq '[.[] | select(.user.login=="<login>" and .created_at > "<lastTriggerAt>"
-         and (.body | test("Review finished|Actionable comments posted|no actionable")))] | length'
+node "<plugin-root>/engine/github.mjs" <n> > .context/babysit-<parent>/<n>-snapshot.json
 ```
 
-Either count > 0 → the round landed; read the threads. Bounded wait (above);
-stuck rule applies (`needs-human`: "<login> never delivered round N") — but a
-`Review finished` comment with no threads is a **delivered, satisfied** round,
-never `stuck`.
+This helper pages REST reviews/comments, GraphQL threads **and** each thread's
+comments, and rejects a head change during the read. A review delivers the round
+only when its author matches, `commit_id == triggerHead == snapshot.head`, and
+`submitted_at >= lastTriggerAt`. An earlier round arriving late cannot satisfy
+this one. For edited bot summary comments, inspect `updated_at` as well.
+
+A comment-only completion (such as CodeRabbit reporting no actionable changes)
+needs an explicit reviewed SHA in the bot output or its associated completed
+check run, matching `triggerHead`. A timestamp or “Review finished” string alone
+cannot prove which commit was reviewed. An ambiguous comment keeps the bounded
+wait pending; request a review on the current head, then apply the usual stuck
+cap if no attributable completion arrives. Once current-head completion is
+proved, a no-action round is delivered and may be satisfied without a review
+object. Never infer success from an empty page or an API error.
 
 **Address** every unresolved thread on the PR (Phase D's classification and
 mechanics — fix / dispute-with-evidence / outdated / needs-human), the bot's
@@ -265,10 +273,10 @@ the next round reviews green code.
 **Decide:**
 
 - **Fix commits were pushed this round** → the bot has not seen the fixed code:
-  **trigger the next round** (Phase A green first).
+  **restart Phase A → B → C → D**, invalidating CI and every bot's old `satisfiedHead`. Keep attempt caps across head changes.
 - **No code changed** — the round delivered zero new threads, or every thread it
   raised was closed with evidence / as outdated → the bot is **satisfied**:
-  record `satisfied: true`, move on. (A review state of `APPROVED`, or a
+  record `satisfiedHead: <current SHA>` with the supporting review/check ID, move on. (A review state of `APPROVED`, or a
   CodeRabbit summary reporting zero actionable comments, is the same thing.)
 - Threads left `needs-human` don't block the bot's *satisfied* flag (it said
   its piece) — they block the final verdict in Phase D.
@@ -279,19 +287,9 @@ that phase. Caps are a safety boundary, not a target — most PRs settle in 1–
 
 ## Phase D — review threads
 
-Fetch unresolved threads (`gh api`'s `{owner}`/`{repo}` placeholders only
-expand in **REST paths**; in GraphQL pass them as variables — `-F
-owner=':owner'` resolves, `-f owner='{owner}'` sends the literal braces):
-
-```bash
-gh api graphql -F owner=':owner' -F repo=':repo' -F pr=<n> -f query='
-query($owner:String!,$repo:String!,$pr:Int!){
-  repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
-    reviewThreads(first:100){ nodes{
-      id isResolved isOutdated path line
-      comments(first:20){ nodes{ databaseId author{login} body createdAt } }
-    }}}}}' --jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved|not))'
-```
+Use `unresolved` from a fresh `engine/github.mjs <n>` snapshot. Never use an
+unpaged `first:100` query as proof that all threads were read. Resolve and reply
+using the IDs in the snapshot; after mutations fetch it again.
 
 For each unresolved thread — same discipline as the review loop: fix or
 dispute with evidence, never silently drop:
@@ -344,7 +342,7 @@ Fix commits must land on the *owning* PR's branch:
   <old-tip> <higher-branch>` + `git push --force-with-lease`), bottom → top.
   A non-mechanical conflict → abort (`gh stack rebase --abort` / `git rebase
   --abort`) and flag `needs-human`.
-- End on the top branch.
+- After any push or restack, invalidate `ciHead` and every bot `satisfiedHead` for all changed PR heads. Restart each affected PR at Phase A, bottom → top. Preserve attempt counters so a new SHA cannot reset caps. End on the top branch.
 
 ## Verdict (every run ends with this)
 
@@ -370,9 +368,22 @@ Blockers (needs-human): <list, or none>
 VERDICT: GOAL MET | NOT MET — <the one-line reason: n needs-human threads / missing PRs / stuck bot / capped CI signature>
 ```
 
+Before the verdict, write a per-PR JSON view of its state with `requiredBots`,
+`ciHead` and `bots.<login>.satisfiedHead`, then run:
+
+```bash
+node "<plugin-root>/engine/github.mjs" <n> <per-pr-state.json>
+```
+
+The helper re-reads all pages and compares recorded CI/bot evidence with the
+live head. Reconstruct `requiredBots` from the pinned config; never leave the
+array empty to skip configured bots. Legacy `satisfied: true` flags without a
+SHA require a fresh round. Its GOAL MET also requires zero unresolved threads.
+Recheck every non-merged PR after the final restack, not only the last PR visited.
+
 **GOAL MET** requires ALL of, for every non-merged slice: an open PR, CI
-green, `<BOT>` **satisfied** (`n/a` when unconfigured), `<COMMENT-BOT>`
-**satisfied** (`n/a` when unconfigured), and **zero unresolved threads — no
+green on the current head, `<BOT>` **satisfied on that head** (`n/a` when unconfigured), `<COMMENT-BOT>`
+**satisfied on that head** (`n/a` when unconfigured), and **zero unresolved threads — no
 exceptions**. `needs-human` threads therefore always mean NOT MET, named as the
 reason so the human knows the loop waits on them. Merged slices count as done.
 A run ends NOT MET **only** when nothing actionable is left — it never ends

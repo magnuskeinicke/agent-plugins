@@ -100,6 +100,6 @@ test('config merge: two levels deep, empty never wins, arrays replace wholesale'
   assert.deepEqual(cfg.areaPaths.frontend, [], '[] replaces wholesale (disables triggers)');
 });
 
-test('loadRepoConfig: missing file and missing block are supported states', () => {
+test('loadRepoConfig: an absent optional file uses defaults', () => {
   assert.deepEqual(loadRepoConfig('/nonexistent/repo-config.md'), {});
 });

@@ -7,10 +7,10 @@ import { conventionsFile, sourceRootsText } from './config.mjs';
 import { ledgerHistoryText, fmtFeedback } from './ledger.mjs';
 
 const READ_ONLY =
-  'You are READ-ONLY: never create, edit, delete, move, or rename repo files; never stage, commit, stash, reset, or check out; never run formatters, --fix linters, codemods, installs, or test runners that rewrite snapshots. The findings file below is the ONLY file you write.';
+  'You are READ-ONLY: never create, edit, delete, move, or rename repo files; never stage, commit, stash, reset, or check out; never run formatters, --fix linters, codemods, installs, or test runners that rewrite snapshots. Return JSON; the orchestrator writes the result file.';
 
 function outputContract(outputFile) {
-  return `Write your report as JSON to \`${outputFile}\` (create parent dirs if needed). Shape:
+  return `Return your report as JSON for the orchestrator to save at \`${outputFile}\`. Shape:
 {
   "reviewer": "<your roster id>",
   "blockingFindings": [{"title", "file", "line", "detail", "suggestedFix", "rootCause"}],
@@ -115,7 +115,7 @@ Give every observation a disposition:
 
 End scopeNote with one sentence naming what you looked at: the diff command you ran, the number of changed files the manifest covered (always all of them), and any file whose hunks you did not fully read.
 
-Write your result as JSON to \`${outputFile}\`:
+Return your result as JSON for the orchestrator to save at \`${outputFile}\`:
 {"observations": [{"title", "file", "line", "detail", "disposition", "routeArea", "rootCause"}], "scopeNote": "..."}`;
 }
 
@@ -131,7 +131,7 @@ The diff under review: \`${diffCmd}\`. Open the cited files and check every find
 Findings to classify:
 ${findingsText}
 
-Write one verdict per finding as JSON to \`${outputFile}\`:
+Return one verdict per finding as JSON for the orchestrator to save at \`${outputFile}\`:
 {"verdicts": [{"id": "<the [id] tag, echoed verbatim>", "diffCaused": true|false, "confidence": 0-100, "note": "..."}]}
 diffCaused: introduced by this diff vs pre-existing/out-of-scope — a real problem the diff merely sits next to is NOT diff-caused. confidence: 0–100 that the finding is real and correctly located (90–100 only when you traced or reproduced it; below 60 means unverified). Classify every finding — a missing verdict means the finding passes through unfiltered.`;
 }
@@ -151,10 +151,10 @@ ${fmtFeedback(targets)}
 Rules:
 - You may DISPUTE a finding instead of fixing it — only with concrete evidence (file:line, test output, spec text). Everything else must be fixed. When torn, fix.
 - Run the repo's tests + lint/typecheck and see them pass IN THIS SESSION before reporting testsGreen=true — never assume.
-- Commit everything${commitRule ? ` (${commitRule})` : ''} and record the new HEAD.
+- Commit only your edited files${commitRule ? ` (${commitRule})` : ''} and record the new HEAD. If runtime permissions prevent git writes, return committed=false and the exact editedFiles; the orchestrator verifies and commits those files before apply-fix. Never bypass permissions.
 
-Write your result as JSON to \`${outputFile}\`:
-{"summary", "committed": true|false, "head": "<git rev-parse HEAD after committing>", "testsGreen": true|false, "testEvidence": "<commands + final summary lines>", "addedFiles": [...], "provenance": [{"file", "mirroredFrom"|"deviation"}], "disputed": [{"id", "title", "evidence"}]}`;
+Return your result as JSON for the orchestrator to save at \`${outputFile}\`:
+{"summary", "committed": true|false, "head": "<git rev-parse HEAD>", "testsGreen": true|false, "testEvidence": "<commands + final summary lines>", "editedFiles": [...], "addedFiles": [...], "provenance": [{"file", "mirroredFrom"|"deviation"}], "disputed": [{"id", "title", "evidence"}]}`;
 }
 
 // Independent closeout adjudicator for disputed entries — self-contained
@@ -182,6 +182,6 @@ Rule EACH finding:
 - "dismissed": the implementer's dispute evidence holds — the finding is factually wrong.
 When the evidence is genuinely inconclusive, rule "upheld": a wrong dismissal silently removes a real finding, a wrong uphold costs one human glance.
 
-Write your rulings as JSON to \`${outputFile}\`:
+Return your rulings as JSON for the orchestrator to save at \`${outputFile}\`:
 {"rulings": [{"id", "ruling": "upheld"|"dismissed", "reason"}]}`;
 }

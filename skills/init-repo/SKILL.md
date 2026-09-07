@@ -15,6 +15,8 @@ argument-hint: "[dry-run|apply]"
 
 # Init Repo
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `init-repo`; supporting skills inherit the caller’s resolved role.
+
 Every skill in this plugin reads one host file: **`docs/agents/repo-config.md`**.
 This skill creates it — filled in with *this* repo's actual values, not a
 template full of TODOs. Read `CONTRACT.md` at the plugin root for the full key
@@ -53,7 +55,7 @@ generic default, which is always better than a wrong guess.
 | `pr.stackTool` | `gh extension list`; a `.git/av` or similar tool dir; else empty |
 | `pr.botReviewer` / `pr.commentReviewer` | which review-request bot (e.g. Copilot) has reviewed recent PRs; which comment-summoned bot (e.g. CodeRabbit — `login` `coderabbitai[bot]`, `command` `@coderabbitai review`) has posted reviews. Bots run on GitHub only; no review CLI is configured |
 | `pr.mediaBranch` | an existing orphan branch holding `pr/<n>/` media (`git ls-remote --heads origin \| grep -i media`); none → keep the default `pr-media` — the suite creates it on first publish |
-| `skills.*` | `ls .claude/skills/` (and `.codex/skills/`) — map each role to a skill that actually exists; leave empty otherwise |
+| `skills.*` | `ls .claude/skills/`, `.agents/skills/`, and `.codex/skills/` — map each role to a skill that actually exists; leave empty otherwise |
 | `devServerCommand` / `e2eDir` / `browserGuidePath` | the dev script in the package manifest; a Playwright/Cypress project dir; any existing browser-testing guide |
 | `areaPaths` | the repo's real layout — replace the generic patterns wholesale rather than appending to them |
 | `reviewers` | an **additive focus overlay**, not a lane list — the plugin's vendored roster is the lane source. For each area, name the repo skills that own it (`skills.*` and anything else under `.claude/skills/`) and write a focus line in the repo's own vocabulary; the engine appends it to the prompts of the roster reviewers covering that area. Leave an area empty to keep the generic lens |

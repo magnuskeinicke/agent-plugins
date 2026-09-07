@@ -29,6 +29,8 @@ Sibling: `grill-me` is the lightweight, docs-free variant of this interview — 
 
 ## Domain awareness
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `grill-with-docs`; supporting skills inherit the caller’s resolved role.
+
 During codebase exploration, also look for existing documentation:
 
 ### File structure

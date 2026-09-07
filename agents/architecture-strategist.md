@@ -1,7 +1,8 @@
 ---
 name: architecture-strategist
 description: "Use this agent to review code changes from an architectural perspective, focusing on system boundaries, dependency direction, layering, abstractions, service interfaces, and alignment with existing patterns. Best for structural refactors, new services, or cross-cutting features; not for style-only or narrowly local implementation feedback."
-model: inherit
+model: opus
+effort: xhigh
 color: purple
 ---
 

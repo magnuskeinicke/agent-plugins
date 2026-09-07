@@ -5,6 +5,14 @@ description: Pick up the next-slice sub-issue from a PRD, implement it test-firs
 
 # Work Slice
 
+Runtime and model selection: read [the shared runtime contract](references/runtime.md) before launching workers or sessions. Use the registry role for `work-slice`; supporting skills inherit the caller’s resolved role.
+
+At entry, resolve bootstrap/checkpoint configuration under the shared runtime
+contract **before** placeholders, tracker reads or stage detection. A pinned
+config takes precedence over the checked-out branch for every setting and is
+passed to all constituent skills; a missing named snapshot blocks the run.
+
+
 Drive **one** slice from a PRD to a stacked **draft PR**. The slices were produced by `/to-issues` as sub-issues of the **PRD ticket** (the `PRD: …` sub-issue of the human's feature ticket — its description is the PRD), ordered into a stack. This skill picks the next one up, implements it test-first inside a bounded **targeted review ⇄ fix loop**, **opens a stacked draft PR automatically**, **babysits that PR** (Step 7 — `/babysit-stack`) until CI is green, the review bots are satisfied and every thread is resolved, and **only then captures the visual evidence** (Step 8) into the PR body. **There is no human gate anywhere in this skill**: no confirmation before the PR, no stop on a HITL label, no stop on a routing label — the only stops are safety stops (dirty worktree, no committed diff, gut-check hard-stop) and `needs-human` escalations babysit cannot resolve. Run it once per slice; the next run stacks on the last.
 
 ## Repo contract — resolve this first
@@ -113,29 +121,16 @@ git config remote.pushDefault origin
 
 `gh stack` keeps **no local tracking state until PRs exist** in this flow — the branch is plain git here, and Step 5 links it into the stack after `<PR-SKILL>` opens the PR. That is deliberate: it makes the flow safe across Conductor's one-worktree-per-slice layout, where the predecessor's branch is checked out in a *different* worktree and cannot be checked out here. (`/feature-goal` runs the whole stack in **one** worktree — its pipeline workspace, one session per PR — and there it substitutes this step: it cuts the branch with `gh stack init` / `gh stack add` on top of the predecessor and hands in at Step 3, so local tracking exists and Step 5 pushes with `gh stack push`. See `feature-goal/references/pr-session.md`.)
 
-The slice's branch is **whatever Conductor checked out** (a `start-work` slug like `proj-1234-…`, or a Conductor-generated name) — you will **rename it in place** to the stack branch name below. `git branch -m` only renames the branch already checked out; it does not create a branch or a worktree. Before renaming, sanity-check you're in the slice's intended worktree (HEAD should be fresh off the base, not carrying another slice's commits).
+**Keep the branch Conductor checked out.** Record its actual name with the slice id and stack position in the checkpoint; never rename it unless the user explicitly requests a rename. The PR number/head branch and checkpoint are the identity, not a naming convention.
 
-**Resolve the base branch and the stack position** — base feeds the reviewers' `git diff <base>...HEAD` and the stacked PR; the position gives the branch its number:
-
-- **Skeleton slice** (first in the stack) → base = `<BASE>`; stack position **`01`**.
-- **Downstream slice** → base = the **predecessor slice's stack branch** (the blocked-by ticket — the skeleton for fanned-out deltas, the chained predecessor otherwise) — the renamed `<project-slug>/NN-<issue-id>` branch a previous `/work-slice` run created. Find it on the remote by the predecessor's issue id: `git ls-remote --heads origin '<project-slug>/*'` (match the predecessor's id suffix), or read the predecessor's open PR head with `gh pr list --state open --json number,headRefName,baseRefName`. This slice's position `NN` is its **index in the PRD's published stack order** (the `/to-issues` numbering) — NOT predecessor+1: with fan-out, several deltas share the skeleton as predecessor, and only the stack-order index stays unique. If the predecessor has already merged, base off `<BASE>` instead and note it.
-
-### Rename the branch to the stack name
-
-Derive `<project-slug>` once per stack: kebab-case the PRD ticket's **project name** (e.g. project "Summary feature" → `summary-feature`). If the PRD has no project, fall back to a kebab-case of the feature ticket's short title. The branch name is `<project-slug>/<NN>-<issue-id>` — the project-slug namespace prefix, the zero-padded stack number, then this slice's issue id lower-cased: `summary-feature/01-proj-1234` for the skeleton, `summary-feature/02-proj-1290` for the next in stack order, and so on. The `<project-slug>` segment is the shared namespace prefix that groups the stack's branches under one name (and lets you list them with `git ls-remote --heads origin '<project-slug>/*'`); `NN` keeps the stack readable in order; the id suffix ties each branch to its ticket. Rename in place:
-
-```bash
-git branch -m "$(git rev-parse --abbrev-ref HEAD)" summary-feature/01-proj-1234
-```
-
-The rename is the **only** branch mutation — no new branch, no worktree change. **Leave the Conductor worktree directory name as-is** — renaming the dir breaks any path-keyed local service stack, Conductor's workspace tracking, and the running dev server. Conductor may have already pushed the pre-rename name; the stale remote branch is cleaned up at push time (Step 5).
+Resolve the base: skeleton → `<BASE>`; downstream → the predecessor’s actual PR head branch, found from its ticket/PR/checkpoint. If the predecessor merged, use `<BASE>`. Record the zero-padded stack-order index for display only. Do not infer a predecessor by a synthetic branch-name suffix.
 
 ### Base the branch on its predecessor
 
 Conductor branches the worktree off `<BASE>`, not off the predecessor — so a downstream slice must be **moved onto** its predecessor before any code is written, or the diff and the PR both show the predecessor's commits as this slice's.
 
 - **Skeleton slice** → nothing to do; it is already based on `<BASE>`.
-- **Downstream slice** → the renamed branch is still **empty** (zero commits ahead of `<BASE>`), so re-point it at the predecessor rather than rebasing history:
+- **Downstream slice** → the current branch must still be **empty** (zero commits ahead of `<BASE>`), so re-point it at the predecessor rather than rebasing history:
 
   ```bash
   git fetch origin <predecessor-stack-branch>
@@ -150,17 +145,13 @@ Verify with `git log --oneline -1` that HEAD is the predecessor's tip. From here
 
 ## Step 3 — Implement + targeted review loop (engine CLI)
 
-**Precondition:** Step 2 must have already renamed the branch to its stack name and, for a downstream slice, based it on the predecessor (`git log --oneline -1` shows the predecessor's tip). Every agent in this step commits with plain `git commit` on the current branch — if the base is wrong, every review round reviews the wrong diff.
+**Precondition:** Step 2 must have recorded the actual branch and, for a downstream slice, based it on the predecessor (`git log --oneline -1` shows the predecessor's tip). Every agent in this step commits with plain `git commit` on the current branch — if the base is wrong, every review round reviews the wrong diff.
 
 The loop machinery is the plugin's **engine CLI** — a dependency-free Node CLI. **Loop control is deterministic CLI output, never prose discipline:** run each command from the host repo root, read the JSON it prints, and do exactly what its `action` / `next` field says. Never re-derive reviewer selection, finding suppression, classification thresholds, or stop conditions yourself — the CLI owns them, and its run state lives in the host repo's gitignored `.context/<slice-id>/` (ledger, emitted prompts, findings inbox). Which reviewers exist and when they trigger: `references/reviewer-roster.md` (documentation; `engine/lib/roster.mjs` is the source of truth).
 
 Resolve `<ENGINE>` once — it lives in the **plugin install root**, not the host repo:
 
-```bash
-engine="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/engine/cli.mjs}"
-[ -n "$engine" ] && [ -f "$engine" ] || engine="$(realpath "<this-skill-dir>/../..")/engine/cli.mjs"  # symlinked install
-[ -f "$engine" ] || engine="$(ls -d "$HOME"/.claude/plugins/cache/*/magnus/*/engine/cli.mjs 2>/dev/null | sort -V | tail -1)"
-```
+Resolve `engine` from the loaded skill’s real path using the shared runtime contract. Do not search another runtime’s cache or pick a version by sorting paths.
 
 ### 3.0 Write the run contract
 
@@ -173,7 +164,7 @@ engine="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/engine/cli.mjs}"
 
 **Capture nothing here.** Visual evidence is produced once, by Step 8, after babysit reports GOAL MET (`references/pr-evidence.md`) — no before shots, no pre-capture, no media of any kind before the PR is done.
 
-One implementer, the **strongest model**, obtained through the writer-spawn ladder in 3.3 — a freshly spawned agent whenever the runtime has any spawn mechanism, inline only as the disclosed last resort. TDD discipline: one tracer-bullet test → impl per acceptance criterion (vertical slice — never all-tests-then-all-impl), using "Where to look" as the starting map. Binding rules: mirror the convention contract's exemplars (a deviation is allowed only when declared in the provenance table with a concrete reason — silent deviation is a review-blocking offence); no new helper/util/hook/component without first searching `<SRC>` (and the design system, and `repoConfig.libMap`) for an existing equivalent; consolidation is in-scope only within this slice's own new code plus at most ONE existing call site — anything wider is a noted candidate, not a refactor; stay strictly inside this slice's scope and note anything a later slice owns instead of pulling it forward. For UI: fetch the Figma screenshot fresh via the Figma MCP from the slice's node deep-link and reuse design-system tokens/components, not magic numbers. Run tests + lint/typecheck with `<GATE>` and see them pass **in-session** before claiming green. Commit (message starts with the slice id; never push).
+One implementer, the **configured implementer model**, obtained through the writer-spawn ladder in 3.3 — a freshly spawned agent whenever the runtime has any spawn mechanism, the shared CLI adapter when native workers are unavailable. TDD discipline: one tracer-bullet test → impl per acceptance criterion (vertical slice — never all-tests-then-all-impl), using "Where to look" as the starting map. Binding rules: mirror the convention contract's exemplars (a deviation is allowed only when declared in the provenance table with a concrete reason — silent deviation is a review-blocking offence); no new helper/util/hook/component without first searching `<SRC>` (and the design system, and `repoConfig.libMap`) for an existing equivalent; consolidation is in-scope only within this slice's own new code plus at most ONE existing call site — anything wider is a noted candidate, not a refactor; stay strictly inside this slice's scope and note anything a later slice owns instead of pulling it forward. For UI: fetch the Figma screenshot fresh via the Figma MCP from the slice's node deep-link and reuse design-system tokens/components, not magic numbers. Run tests + lint/typecheck with `<GATE>` and see them pass **in-session** before claiming green. Commit (message starts with the slice id; never push).
 
 Record the result as JSON at `.context/<slice-id>/implement-result.json`:
 
@@ -184,6 +175,8 @@ Record the result as JSON at `.context/<slice-id>/implement-result.json`:
  "provenance": [{"file": "", "mirroredFrom": "", "deviation": ""}],
  "touchedAreas": [], "userFacingImpact": true, "diffStat": "", "notes": []}
 ```
+
+If sandbox git writes were denied, first follow the shared runtime contract's parent-owned commit procedure using the returned `editedFiles`; recompute `head` and gate evidence before checking for a committed diff.
 
 `changedFiles`/`addedFiles`/`deletedFiles` from `git diff --name-only [--diff-filter=A|D] <base>...HEAD`; one provenance row per added file (`mirroredFrom` = the exemplar actually followed, or `deviation` = why none fits — never both blank); `userFacingImpact` biases **true**; `testsGreen=true` only after running the gates in-session — and every gate command run lands as a row in `.context/<slice-id>/evidence/verification.jsonl` (`references/pr-evidence.md`), the implementer's `testEvidence` included; gate-fix and fix passes append their runs the same way. No committed diff → stop and tell the user (nothing to review or PR). Checkpoint: `IMPLEMENTED`.
 
@@ -215,28 +208,28 @@ node "$engine" decide --slice <id> --verdicts <verdicts.json> --commit-rule '<sl
 #                     → plan again with the fix range's files (git diff --name-only <prevHead>..<newHead>, etc.)
 # action=adjudicate → adjudicate → run ONE fresh agent with the emitted prompt (never the fix implementer)
 #                     → apply-adjudication --rulings <rulings.json>
-# action=converged|stalled|hard-stop → the loop is over:
+# action=incomplete → preserve the pending round; retry missing tasks once, then report a blocker.
+# action=converged|stalled|hard-stop → report the terminal loop result:
 node "$engine" report --slice <id>
 ```
 
-**Running an emitted task.** Every task names an `agentFile` (the roster file — its body is the agent's system prompt), a `promptFile` (the task), an `outputFile` (the JSON the agent must write — path and schema are in the prompt), and a `model` when the roster file pins one. Mechanism is runtime-dependent; **subagents are an optional accelerator, the loop is sequential-first**:
-
-- **Claude:** spawn each reviewer as a subagent from its agent definition (the definition's `model`/`effort` pins apply); reviewers are read-only, so run a round's reviewers **in parallel**.
-- **Codex:** background `codex exec` children, the agent-file body prepended to the task prompt; map the task's `model` alias through `routing.codexModelAliases` and pass it with the task's `effort` as the child's model/effort flags (unmapped alias → session model, disclose once).
-- **Neither:** run each reviewer yourself, one at a time, adopting the roster file's persona fresh per reviewer — and disclose the fallback once. Sequential costs wall-clock only; it is **never a licence to drop a reviewer**.
-
-**Writers spawn the same way — one fresh agent per pass.** The ladder applies to every code-editing pass too (3.1's implementer, each gate-fix, each round's fix implementer, the adjudicator, each Playwright fix): Claude → a subagent per pass; Codex → a `codex exec` child per pass; neither → inline, disclosed once. Two rules make the freshness real:
-
-- **Never continue, re-prompt, or resume a previous pass's agent** — no `SendMessage`, no "same subagent, round 2". Round N's fixer is a new agent that has never seen round N-1's reasoning; that is the point of the round.
-- **State travels as files, never as a live context** — `contract.md`, the emitted `promptFile`, and the prior result JSONs are the whole handoff. Anything a later pass needs must be written into one of them.
-- **Inline fallback:** each pass is still a fresh persona — re-read `contract.md` and the emitted prompt and work from those plus the repo, not from your memory of the pass before. Isolation is degraded (one context holds every pass); say so once, alongside the sequential-reviewer disclosure.
+**Running an emitted task.** Use the shared runtime contract: every task has
+resolved profiles for Claude and Codex, a schema and a persisted `taskFile`.
+Claude native subagents remain supported; Codex native subagents may be used
+when they expose the required controls. Otherwise run
+`node "$engine" run --task <taskFile> --runtime <claude|codex>`.
+Each worker returns JSON; the parent validates and saves it. Writers and the
+adjudicator get a fresh worker per pass, never a resumed prior worker. If a
+writer cannot commit, the parent verifies and commits only its `editedFiles`
+as described in the runtime contract. No inline persona fallback: report
+unavailable worker capability explicitly.
 
 Ground rules, regardless of mechanism:
 
 - **Gut-check runs first** (round 1). If its JSON contains any `"disposition": "block"` observation, skip the reviewers and run `collect` immediately — it hard-stops for the human before any reviewer spend. Otherwise run the reviewers.
-- **Every emitted reviewer must report before `collect`.** A missing or invalid `outputFile` is a dead reviewer: re-run it once; still nothing → proceed, but state the degraded coverage explicitly (it rides into the PR notes as such) — zero findings only counts when every reviewer actually reported.
+- **Every emitted reviewer must report.** Retry missing/invalid results once, then report `incomplete` and preserve the round for resume. Never advance to PR creation with incomplete coverage.
 - **Reviewers are read-only** — only the implement/fix agents edit code. Every writer pass is a **freshly spawned agent**: the implement pass, each gate-fix, each round's fix, the adjudicator (never the fix implementer's context), and each Playwright fix.
-- **Model roles:** writers (implement, every fix pass) and the adjudicator get the strongest model; reporters (reviewers, gut-check, validator) run leaner. Aliases only, never exact model ids; honor a task's `model` field when present.
+- Use the shared model registry: implementer/fixer/adjudicator roles for those passes, reviewer/verifier roles for reports. Apply the resolved model and effort explicitly.
 - `--head` = the implement pass's commit on the **first** `plan` only; `apply-fix` records each fix head itself, so later `plan` calls omit it. After each `apply-fix`, update the checkpoint's `Head`, and recompute the next `plan`'s file flags from the **fix range** (`<prevHead>..<newHead>`) with the whole-slice provenance from the fix result.
 - Never hand-edit `.context/<slice-id>/ledger.json` or a findings file — findings enter through reviewer output files, decisions exit through the CLI.
 
@@ -244,7 +237,7 @@ The stop conditions live in the CLI (convergence, two-round stall, per-fingerpri
 
 ### 3.4 Read out the result
 
-`report` returns the verdict, the ledger report (open / addressed / deferred / disputed entries with `CR-NNN` ids, dispute evidence, adjudication rulings), and the advisory notes. Also gather the `consolidations` arrays from `.context/<slice-id>/round-*/findings/*.json` (reuse-audit follow-up candidates) and the notes from the implement/fix results. Checkpoint: `REVIEWED`, with the verdict verbatim. A `hard-stop` (gut-check block) goes straight to the user — no PR.
+`incomplete` preserves the round and stops advancement until missing workers recover. `report` returns the verdict, the ledger report (open / addressed / deferred / disputed entries with `CR-NNN` ids, dispute evidence, adjudication rulings), and the advisory notes. Also gather the `consolidations` arrays from `.context/<slice-id>/round-*/findings/*.json` (reuse-audit follow-up candidates) and the notes from the implement/fix results. Checkpoint `REVIEWED` only for a completed review verdict. On `incomplete`, keep the prior stage and pending task manifests; never mark it reviewed. A `hard-stop` (gut-check block) goes straight to the user — no PR.
 
 ### 3.5 Playwright user-story loop (skill-owned, max 3 rounds) — verification only, no evidence
 
@@ -259,7 +252,7 @@ Each verify round — read `browserGuidePath` first (login steps, seeded users, 
 3. Restore the parked spec (`<e2eDir>/test-output/slice-verify.spec.ts.parked`, gitignored) when it exists; otherwise author a throwaway Playwright spec (reuse the `e2eDir` config + its login-spec dev-login pattern) driving isolated headless Chromium, `video: 'off'`, `baseURL` = the running app, plus any fake-media flags the browser guide names.
 4. Dev-login as the seeded user matching the slice, then exercise **this slice's acceptance-criterion user stories** and judge each one PASS or FAIL. A scratch screenshot is allowed where the verifier needs one to judge; it is not evidence and is deleted with the spec.
 5. **Design-fidelity check** (only when `<FIDELITY>` is configured AND the slice has design deep-links): invoke the repo's `<FIDELITY>` skill/command with the slice's routes, ACs, and design links (I/O contract in the plugin's CONTRACT.md). Its `blocking` deviations are failed acceptance criteria — same treatment, same rounds; `advisory` deviations are recorded for the Step 4 QA evidence and listed under the PR body's `## Visual verification` scenes when Step 8 writes it, unfixed. No `<FIDELITY>` key → this point doesn't exist; never improvise a design comparison.
-6. **Clean up before returning:** nothing untracked may remain in a source dir (the pre-push lint hook fails on it). On a passing or final round, delete the throwaway spec (and any parked copy); on a failing non-final round, park it in the gitignored test-output dir. Only gitignored scratch shots (and a parked spec) stay.
+6. **Clean up before returning:** delete only files recorded before creation in the run's `scratch-files.json`. On a passing or final round, delete the owned throwaway spec (and its owned parked copy); on a failing non-final round, park it in the gitignored test-output dir. Only gitignored scratch shots (and a parked spec) stay.
 7. Record PASS/FAIL per criterion (blocking fidelity deviations count as FAIL). "Couldn't verify" is a FAIL, not a pass. **A broken user story = a failed acceptance criterion = a blocking finding**: hand the failures to one **freshly spawned** fix agent (writer-spawn ladder, 3.3 — never the round before's), commit, re-verify with a fresh round. Round 3 still failing → stop and escalate; the failures ride into the PR as outstanding.
 
 Checkpoint: `VERIFIED`. Before Step 4, run the slice's tests + lint/typecheck green with `<GATE>` one final time and append those runs to `evidence/verification.jsonl` — they are the rows the PR's `## Verification` table is rendered from.
@@ -281,7 +274,7 @@ Checkpoint: `VERIFIED`. Before Step 4, run the slice's tests + lint/typecheck gr
 
 **Consolidation follow-ups → the tracker (when the loop surfaced `consolidations`):** file each as its own ticket on the team (same create flow as `tracker.docPath`): title from the consolidation, body = the detail + targetLib + a link back to this slice's PR, labels = the chore type label + `<SKIP>`. This is the strict boundary that keeps the slice diff small — generalisation happens in its own reviewed change, never by scope-creeping this slice. List the created ticket ids in the terminal summary and as `## Notes` bullets in the PR body (Step 5). Checkpoint: `EVIDENCE_POSTED`.
 
-Then open the draft PR (Step 5) **without asking**. Open it even when the loop stalled — carry the unresolved blocking findings + judgement-call notes into the PR body / a review comment so they surface on the draft. The **only** things that skip Step 5: no committed diff (nothing to PR), or a gut-check `hard-stop` — in either case stop and tell the user.
+Then open the draft PR (Step 5) **without asking**. Open it even when the loop stalled — carry the unresolved blocking findings + judgement-call notes into the PR body / a review comment so they surface on the draft. Do not reach Step 5 with incomplete coverage or a failed verification gate. Other stops: no committed diff (nothing to PR), or a gut-check `hard-stop` — report the blocker.
 
 ## Step 5 — Open the stacked draft PR (automatically)
 
@@ -294,15 +287,9 @@ No `pr.stackTool` and no `skills.createPr`? Then open the PR with `gh pr create 
 
 The mechanism that makes this work: `gh stack link` **only creates a PR for a branch that has none** — a branch whose PR is already open is linked, not duplicated. So `<PR-SKILL>` opens the PR first and `link` reconciles it. Two rules make it safe: **always link by PR number** (never by branch name — a branch name races the "no PR yet → create one" path if the PR lookup lags), and **never pass `--open`** (it would mark the drafts ready for review).
 
-**0. Scrub worktree artifacts first.** The Playwright rounds clean up after themselves, but guard anyway: an untracked throwaway e2e spec left in `<e2eDir>` makes the repo's pre-push lint hook lint it and fail the push. Run `git status --porcelain` — for each `??` line, remove it (the implementer committed its work, so anything still untracked is review scaffolding, never the shipped change). Then confirm the tree is clean. Do **not** touch tracked/committed files.
+**0. Remove only owned scratch artifacts.** Read `scratch-files.json`; delete only paths this run recorded before creating them. Preserve unknown untracked files and report them. Never infer ownership from `??`.
 
-**1. Clean up the stale remote branch.** Conductor pushed the pre-rename name. If it still exists on the remote, delete it so only the stack branch remains — and **close any PR that was opened against it**. This matters: two open PRs for one slice make the Step 5.3 PR-number lookup ambiguous and leave a zombie PR in the reviewer's queue.
-
-```bash
-old=<conductor-branch-name>
-git ls-remote --exit-code --heads origin "$old" >/dev/null 2>&1 && git push origin --delete "$old"
-gh pr list --head "$old" --state open --json number --jq '.[].number' | xargs -r -n1 gh pr close
-```
+**1. Preserve remote branches.** There is no stale renamed Conductor branch to remove. Do not delete remote branches or close PRs as automatic cleanup; existing PR identity comes from the current branch and recorded PR number.
 
 **2. Push the branch, run `<PR-SKILL>` (verbatim), then make it a draft.** Push first so it has a remote head: `git push -u origin "$(git rev-parse --abbrev-ref HEAD)"`. Then `<PR-SKILL>` runs the conflict check, enforces the title, writes the test plan onto the tracker issue, and opens the PR against `<BASE>`. Let it do all of that — for a downstream slice the base (`<BASE>`) and the whole-stack Summary it computes are both "wrong" right now; step 3 fixes the base. (The Summary bullets stay `<PR-SKILL>`'s. The base retarget makes GitHub show the correct per-slice diff regardless — a downstream body that still reads whole-stack is a known cosmetic, not a correctness, issue.)
 
@@ -362,7 +349,7 @@ The draft PR is the review surface, and this skill stays with it until it is in 
 
 ## Step 8 — Capture the evidence, once, now that the PR is done
 
-Reached only on a babysit **GOAL MET** verdict. This is the **only** place this skill captures anything visual, and it runs once per PR — full mechanics in `references/pr-evidence.md` ("The capture stage"):
+Reached only on a babysit **GOAL MET** verdict. This is the **only** place this skill captures anything visual, and it runs once per verified PR head — full mechanics in `references/pr-evidence.md` ("The capture stage"):
 
 1. **Skip conditions, stated not guessed.** Internal-only slice (no user-facing surface) or `devServerCommand` empty / no stack in this workspace → write the section's one-line form (`No user-facing change — no visual verification.` / the one-line reason) and go to point 5. Never substitute a Storybook or design image.
 2. **Capture.** On this PR's branch at the head CI went green on, with the one dev server serving it: a throwaway Playwright spec (`e2eDir` config, dev-login as the seeded user), the **secret preflight** before any shot, then the fewest scenes that prove the change (aim 1–3, video for behaviour, still for appearance, never both of the same thing, finished state only — there are no before shots). Write `evidence/media/` + `media.json` with the criteria each scene covers. A user story that fails here is a **real regression** on a green PR: stop and report it, never doctor the capture.
@@ -370,19 +357,19 @@ Reached only on a babysit **GOAL MET** verdict. This is the **only** place this 
 4. **One `gh pr edit`** inserting `## Visual verification` between `## Verification` and `## Notes`. Nothing else in the body changes; the bots are already satisfied, so the CI restart this triggers costs nothing.
 5. **Clean up:** delete the throwaway spec — nothing untracked may remain in a source dir. Checkpoint `COMPLETE` (verdict + media commit sha). Report: the PR, the babysit table, the scenes published, the assumptions recorded.
 
-The captured files stay in `.context/<slice-id>/evidence/media/` and on `<MEDIA-BRANCH>` — `/feature-goal` re-uses exactly these for the feature ticket's `## QA handoff` after the stack-wide babysit. It never recaptures, and this skill never posts them on a ticket itself.
+The captured files stay in `.context/<slice-id>/evidence/media/` and on `<MEDIA-BRANCH>` — `/feature-goal` re-uses exactly these for the feature ticket's `## QA handoff` after the stack-wide babysit. It requests Step 8 again if a later stack fix changes the recorded `sourceHead`, and this skill never posts them on a ticket itself.
 
 ## Boundaries
 
 - One slice per run. Don't batch slices.
-- **Never create a worktree or a new branch.** Operate in the current (e.g. Conductor) worktree; you may **rename** the already-checked-out branch to the stack name and `git reset --hard` it onto its predecessor while it is still empty (Step 2), but never create additional branches or worktrees (no `gh stack add`/`gh stack init` — they create and check out branches), and never rename the Conductor worktree directory. If it isn't a clean worktree, stop and tell the user (Step 2).
+- **Never create a worktree or a new branch.** Operate in the current (e.g. Conductor) worktree; keep its branch name and only rebase its empty starting point onto the predecessor after Step 2's clean/zero-commit checks, but never create additional branches or worktrees (no `gh stack add`/`gh stack init` — they create and check out branches), and never rename the Conductor worktree directory. If it isn't a clean worktree, stop and tell the user (Step 2).
 - **`<STACK>` owns stacking.** Commits are plain `git commit` on the current branch; the stack is linked server-side at PR time (Step 5.3). Every stack call must be non-interactive (`--json`, `--auto`, explicit args) per the `<STACK>` skill. Never `--prune` a sync while sibling stack branches are checked out in other Conductor worktrees.
 - **`<PR-SKILL>` is a repo skill — never edit it.** It opens the PR verbatim (title regex, conflict check, Summary, tracker test plan). Then **`gh stack link` adopts that PR** — retargets the base to the predecessor and records the chain (Step 5.3). **Always link by PR number, never by branch name** (a branch name can take `link`'s create-a-PR path and duplicate the PR skill's), and **never pass `--open`** (it marks the drafts ready). Never `gh stack submit` in this flow — it opens its own auto-titled PRs. Post the convention audit as a comment, not `gh pr edit --body` — the suite writes the body exactly twice: `## Verification` (+ `## Notes`) at 5.2b, and `## Visual verification` at Step 8 (`references/pr-evidence.md`).
 - Never merge, approve, or mark the PR ready — Step 5 opens it as a **draft** (`<PR-SKILL>` opens ready → `gh pr ready --undo`); promoting to ready is the human's call after review.
 - **No human gates.** A `<HITL>` label or routing mismatch is disclosed and recorded (Step 1), never waited on; the PR opens without confirmation (Step 4→5); babysit runs to a terminal verdict (Step 7). The only stops are safety stops — dirty/missing worktree, no committed diff, gut-check hard-stop — and babysit's `needs-human` escalations.
 - **The CLI owns the loop.** Reviewer selection, suppression, the relevance gate's thresholds, gate injection, stall/cap stops, dispute adjudication flow, and the verdict all come from `<ENGINE>`'s JSON output — never re-derive them in prose, never hand-edit `.context/<slice-id>/ledger.json` or a findings file, and never skip a command because you "know" what it will say.
-- **Fan-out is mechanism-agnostic; subagents are an optional accelerator.** Parallel subagents, `codex exec` children, or inline-sequential all satisfy the same contract: every emitted task's `outputFile` written before `collect`. Losing parallelism is never a licence to drop a reviewer; a dead reviewer (missing/invalid output after one re-run) means degraded coverage stated explicitly, never silent convergence.
-- **Model roles are fixed, models are aliases:** writers (implement + every fix pass, including Playwright fixes) and the closeout adjudicator get the strongest model; every read-only reporter — gut-check, roster reviewers, validator, Playwright verifier — runs leaner. Never pin exact model ids or effort levels.
+- **Every emitted task must complete with its resolved model and valid JSON.** Native workers and the shared CLI adapter use the same contract; incomplete coverage blocks advancement.
+- Use the shared model registry: implementer/fixer/adjudicator roles for those passes, reviewer/verifier roles for reports. Apply the resolved model and effort explicitly.
 - Reviewers are **read-only** — only the implement/fix agents edit code; **every writer pass is a freshly spawned agent** (implement, gate-fix, each round's fix, adjudicator, Playwright fixes), never a previous pass's agent continued. Handoff is files only.
 - **Tests + commit gate:** reviewers never see red or uncommitted code — the CLI turns a red gate into a gate-fix pass mechanically, and implementers must prove green with `testEvidence` (commands + summary lines run in-session), never assert it.
 - Playwright runs as a **skill-owned loop, only after the CLI's loop converges**, and only on user-facing slices (max 3 rounds), **verification only — no artifacts kept**. A broken user story is a **blocking** finding (failed AC), not advisory.
@@ -408,12 +395,12 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 
 **This skill drives exactly one PRD slice to a stacked draft PR.**
 
-- **DOES**: claim the `<NEXT>` slice (recording HITL decisions as assumptions), rename/base the existing branch, implement test-first, drive the engine-CLI review loop, run the artifact-free Playwright user-story loop, post the text-only QA evidence + consolidation tickets, open the draft PR with `## Verification` in its body, stack-link it, advance `<NEXT>`, run `/babysit-stack` on its PR to a terminal verdict, and — only on GOAL MET — capture, publish and insert `## Visual verification` (Step 8).
+- **DOES**: claim the `<NEXT>` slice (recording HITL decisions as assumptions), record/base the existing branch, implement test-first, drive the engine-CLI review loop, run the artifact-free Playwright user-story loop, post the text-only QA evidence + consolidation tickets, open the draft PR with `## Verification` in its body, stack-link it, advance `<NEXT>`, run `/babysit-stack` on its PR to a terminal verdict, and — only on GOAL MET — capture, publish and insert `## Visual verification` (Step 8).
 - **DOES NOT**: ask the human anything, capture / publish / post any visual evidence before babysit GOAL MET, put images on a slice ticket, create worktrees or branches (Conductor owns them), own CI/bot/thread mechanics (`/babysit-stack` does — this skill only invokes it), re-derive loop decisions (the engine CLI owns rounds, suppression, verdicts), merge or mark ready (the human's call on the draft), batch slices.
 
 ## Red Flags — STOP
 
-- About to create a worktree or a new branch — stop: rename/reset the existing checkout only (Step 2); a dirty or missing worktree goes back to the user.
+- About to create a worktree or a new branch — stop: keep the existing branch name; base it only after the empty-branch checks (Step 2); a dirty or missing worktree goes back to the user.
 - About to stop for a `<HITL>` label, a "needs a human decision" line, or an `<AGENT:><other-agent>` label — stop stopping: decide + record under `## Assumptions` / disclose the routing mismatch, and proceed.
 - About to run `gh pr comment` on this slice's own PR — stop: the suite never comments on its own PRs; human-relevant residue is `## Notes` in the body, everything else stays in `.context/`.
 - About to end the run after Step 6 with no orchestrator having claimed the babysit — stop: Step 7 runs `/babysit-stack <PR>` to its terminal verdict, and Step 8 captures the evidence after it.

@@ -7,10 +7,12 @@ user says `local` (argument or conversation), or neither the Conductor MCP nor
 the `conductor` CLI is reachable (fallback, announced once). Every slice is
 then implemented in **this one worktree**, walking up the stack, each by a
 **freshly spawned subagent** that has never seen another slice's reasoning —
-the same writer-spawn ladder work-slice uses (Claude → a subagent per slice,
-strongest model; Codex → a `codex exec` child per slice; neither → inline as a
-fresh persona, disclosed once). You, the orchestrator, do the tracker + git
-choreography around it and **never implement a slice yourself**.
+the shared runtime contract's native/CLI workers, with explicit `implementer`
+model and effort. No inline persona fallback. The worker needs the tracker,
+GitHub and browser tools for the full slice; verify those capabilities first.
+You own the tracker/git choreography around it and never implement the slice
+yourself. Pin the planning config with `engine snapshot` before cutting branches
+and pass its path and docs commit OID in every slice brief.
 
 The mode choice never forks work: a slice already claimed by a cloud relay
 session (its `## Cloud dispatch` ticket comment exists) stays cloud-owned even
@@ -20,7 +22,7 @@ The stack is the same as in cloud mode: **one linear `gh stack` stack in
 stack order**, branches cut with `gh stack init` / `gh stack add` in this
 worktree, PRs opened by the repo's PR skill and adopted with `gh stack link`
 by PR number. Work-slice assumes Conductor handed it a fresh worktree per
-slice and *renames* the branch checked out there; here branches are
+slice and keeps the branch checked out there; here branches are
 **created** instead, so its Step 2 is substituted below. Everything else is
 work-slice verbatim.
 
@@ -35,10 +37,7 @@ work-slice verbatim.
 
    **Slice reserved for another agent** (`<AGENT:><name>`, `<name>` ≠ this
    runtime): `routing.delegate.<name>` configured → **delegate**: run that
-   command template as a child process with the prompt `/work-slice
-   <slice-id>` (it does its own Steps 1–2 in the child — skip step 2 below),
-   wait for exit, then verify the slice's durable markers exactly as in step
-   4. No delegate configured → this runtime works it via the loop below and
+   command template as the worker in step 3, after the parent prepares the branch in step 2. Give it the full step-3 handoff, including the pinned config and starting stage; wait for exit and verify step 4's durable markers. No delegate configured → this runtime works it via the loop below and
    the report and the slice ticket's `## Assumptions` say `routing label <AGENT:><name> not honoured: no
    routing.delegate.<name> configured`. Never delegate below slice granularity.
 2. **Branch with `gh stack` (replaces work-slice Step 2)** — exactly
@@ -58,7 +57,7 @@ work-slice verbatim.
 
    Write the slice checkpoint `.context/<slice-id>/workflow-state.md` at
    `BRANCH_READY` (full OIDs).
-3. **Spawn the slice subagent** — one fresh writer, strongest model, prompt:
+3. **Spawn the slice subagent** — one fresh writer with the resolved implementer profile, prompt:
 
    > Run the `magnus:work-slice` skill for slice `<slice-id>` (PRD ticket
    > `<PRD-ISSUE>`, feature ticket `<ISSUE>`), **starting at Step 3**. Steps 1–2 are done: the slice is

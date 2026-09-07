@@ -40,7 +40,7 @@ sub-sections, no prose:
 Anything that needs more than a line does not belong on the PR — it belongs in
 the diff, in a follow-up ticket, or nowhere.
 
-## Captured once, after the PR is done
+## Captured after current-head GOAL MET
 
 **Nothing visual is captured, published or posted before `/babysit-stack`
 reports GOAL MET for the PR.** Bot rounds change code, and any capture taken
@@ -64,6 +64,10 @@ The order is fixed, in every flow:
    capture run → publish to `<MEDIA-BRANCH>` → **one** body edit inserting
    `## Visual verification`;
 5. the ticket's `## QA handoff` is composed from those same files.
+
+Later pushes/restacks invalidate manifests whose `sourceHead` differs. The
+caller runs this stage again after fresh GOAL MET and replaces the existing
+visual section and ticket handoff. Never label stale media as current.
 
 A PR that never reaches GOAL MET carries no visual section at all — the run is
 Blocked, and nothing is captured for it.
@@ -165,19 +169,18 @@ a cropped component.
 
 Reached only on a `/babysit-stack` **GOAL MET** verdict, on the PR's own branch
 with every bot fix already merged into it. It is the **only** place the suite
-captures anything, and it runs once per PR:
+captures anything, and it runs once per verified PR head:
 
-1. Check out the PR's branch, up to date with what CI went green on
+1. Compare the media manifest's `sourceHead` with the live PR head. Reuse matching media; otherwise check out the PR's branch, up to date with what CI went green on
    (`git status --porcelain` clean, head = the pushed head).
 2. Start the dev server (`devServerCommand`) if one is not already serving —
    one instance, never a second.
-3. Author (or restore) a throwaway Playwright spec on the `e2eDir` config, dev-login
+3. Record the unused temporary spec path in `scratch-files.json` before creating it; author (or restore an already owned) throwaway Playwright spec on the `e2eDir` config, dev-login
    as the seeded user the ticket's story needs, drive the acceptance-criterion
    stories once more and capture the scenes below into
-   `.context/<run-id>/evidence/media/`, plus `media.json`.
+   `.context/<run-id>/evidence/media/`, plus `media.json`. Each manifest entry records `sourceHead` (the full verified PR OID). Verify the head is unchanged before publication; a changed head requires a fresh verdict and capture.
 4. Publish to `<MEDIA-BRANCH>` (below), insert `## Visual verification` into the
-   body with **one** `gh pr edit`, then delete the throwaway spec — nothing
-   untracked may remain in a source dir.
+   body with **one** `gh pr edit`, then delete only the owned throwaway spec. Existing untracked files stay untouched.
 
 The change is already reviewed and green, so the capture is a recording, not a
 check: **a story that fails here is a real regression** — stop, report it, do

@@ -1,23 +1,5 @@
 #!/usr/bin/env node
-// Reviewer-engine CLI — the deterministic loop controller for the review
-// skills (work-slice, iterate-pr, review-code, solve-ready-tickets). The
-// orchestrating agent runs reviewers however its runtime allows (Claude Agent
-// tool, Codex `codex exec` children, or inline-sequential as the disclosed
-// fallback); every decision — reviewer selection, suppression, classification
-// thresholds, fix targets, stall/cap stops, the final verdict — comes from
-// this CLI's JSON output, never from prose discipline.
-//
-// State lives in the HOST repo's gitignored `.context/<slice-id>/`:
-//   ledger.json                    the run state + finding ledger
-//   contract.md                    the run contract (ticket AC etc.), init input
-//   round-N/prompts/<id>.md        emitted task prompts
-//   round-N/findings/<id>.json     the findings inbox reviewers write into
-//   round-N/validate/…             validator input/output
-//   round-N/fix.md / fix-result.json
-//
-// Usage: node cli.mjs <command> --slice <id> [options]  (run from the host
-// repo root; `--dir` overrides the `.context` parent). Every command prints a
-// single JSON object on stdout.
+// State and task manifests live in the host repo's gitignored .context directory.
 import {
   readFileSync,
   writeFileSync,
@@ -27,10 +9,11 @@ import {
   copyFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { resolveRepoConfig, loadRepoConfig, focusOverlay, buildLibMap, buildGoldenPaths } from './lib/config.mjs';
+import { resolveRepoConfig, loadRepoConfig, parseRepoConfig, focusOverlay, buildLibMap, buildGoldenPaths } from './lib/config.mjs';
 import { compileAreaPaths, selectAreas } from './lib/areas.mjs';
 import { ROSTER, selectReviewers, overlayFor } from './lib/roster.mjs';
 import {
@@ -51,8 +34,10 @@ import {
   LEDGER_HARD_CAP,
   LEDGER_STALL_LIMIT,
 } from './lib/ledger.mjs';
-import { FINDINGS_SCHEMA, VALIDATION_SCHEMA, ADJUDICATION_SCHEMA, FIX_RESULT_SCHEMA, GUT_CHECK_SCHEMA, validate } from './lib/schemas.mjs';
+import { FINDINGS_SCHEMA, VALIDATION_SCHEMA, ADJUDICATION_SCHEMA, FIX_RESULT_SCHEMA, IMPLEMENT_RESULT_SCHEMA, BABYSIT_FIX_SCHEMA, GUT_CHECK_SCHEMA, validate } from './lib/schemas.mjs';
 import * as prompts from './lib/prompts.mjs';
+import { taskModels, resolveModel, SKILL_ROLES } from './lib/models.mjs';
+import { runTask } from './lib/runner.mjs';
 
 const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -69,7 +54,7 @@ const UNCOMMITTED_FINDING = {
   source: 'gate',
   title: 'Work not committed',
   detail:
-    'The implementer reported committed=false. Reviewers inspect `git diff <base>...HEAD`, which cannot see uncommitted work. Commit everything and report committed=true plus the new `head`.',
+    'The implementer reported committed=false. Reviewers inspect `git diff <base>...HEAD`, which cannot see uncommitted work. Commit only the owned edited files and report committed=true plus the new `head`; if sandbox git writes are denied, return the owned file list for the parent to commit.',
 };
 
 // ── plumbing ─────────────────────────────────────────────────────────────────
@@ -118,7 +103,32 @@ function statePath(args) {
 function loadState(args) {
   const p = statePath(args);
   if (!existsSync(p)) die(`no run state at ${p} — run \`init\` first`);
-  return JSON.parse(readFileSync(p, 'utf8'));
+  const state = JSON.parse(readFileSync(p, 'utf8'));
+  if (!state.tasks) {
+    state.config = loadCfg(args, state);
+    state.tasks = [];
+    const round = join(runDir(args), `round-${state.round}`);
+    if (!state.coverage && (state.phase === 'decide' || ['clean', 'converged'].includes(state.verdict))) {
+      state.phase = 'collect';
+      state.verdict = 'incomplete — legacy coverage requires collection';
+    }
+    const add = (id, promptFile, outputFile, role, schema) => {
+      if (!existsSync(promptFile)) return;
+      const agentFile = join(PLUGIN_ROOT, 'agents', `${id}.md`);
+      state.tasks.push(persistTask(args, state, { id, promptFile, outputFile,
+        ...(existsSync(agentFile) ? { agentFile, model: agentModel(id), effort: agentEffort(id) } : {}) }, role, schema));
+    };
+    if (state.phase === 'collect') {
+      const dir = join(round, 'prompts');
+      for (const file of existsSync(dir) ? readdirSync(dir).filter((file) => file.endsWith('.md')) : []) {
+        const id = file.slice(0, -3);
+        add(id, join(dir, file), join(round, 'findings', `${id}.json`), 'reviewer', id === 'gut-check' ? GUT_CHECK_SCHEMA : FINDINGS_SCHEMA);
+      }
+    } else if (state.phase === 'fix') add('fixer', join(round, 'fix.md'), join(round, 'fix-result.json'), 'fixer', FIX_RESULT_SCHEMA);
+    else if (state.phase === 'adjudicate') add('adjudicator', join(runDir(args), 'adjudication/prompt.md'), join(runDir(args), 'adjudication/rulings.json'), 'adjudicator', ADJUDICATION_SCHEMA);
+    saveState(args, state);
+  }
+  return state;
 }
 
 function saveState(args, state) {
@@ -148,11 +158,25 @@ function contractText(args, state) {
   return `Change under review: slice ${state.slice} (no contract file recorded — judge against the diff and repo conventions alone, and say so in notes).`;
 }
 
-function loadCfg(args) {
+function loadCfg(args, state) {
+  if (!args.config && state?.config) return state.config;
+  if (args.config && !existsSync(args.config)) die(`Config snapshot not found: ${args.config}`);
   const raw = args.config
     ? loadRepoConfig(args.config)
     : loadRepoConfig('docs/agents/repo-config.md');
   return resolveRepoConfig(raw);
+}
+
+function persistTask(args, state, task, role, schema) {
+  const execution = taskModels(loadCfg(args, state), role, { modelAlias: task.model, effort: task.effort });
+  const result = {
+    ...task, role, execution, schema, cwd: process.cwd(),
+    model: execution.claude.model, effort: execution.claude.effort,
+    promptFile: resolve(task.promptFile), outputFile: resolve(task.outputFile),
+    taskFile: resolve(/\.md$/.test(task.promptFile) ? task.promptFile.replace(/\.md$/, '.task.json') : `${task.promptFile}.task.json`),
+  };
+  writeFileSync(result.taskFile, JSON.stringify(result, null, 2) + '\n');
+  return result;
 }
 
 // The commands every prompt uses to see the change. Default is the committed
@@ -205,7 +229,7 @@ function cmdInit(args) {
   const dir = runDir(args);
   const p = statePath(args);
   if (existsSync(p)) {
-    const state = JSON.parse(readFileSync(p, 'utf8'));
+    const state = loadState(args);
     out({ resumed: true, slice: state.slice, round: state.round, phase: state.phase });
     return;
   }
@@ -216,6 +240,8 @@ function cmdInit(args) {
   mkdirSync(dir, { recursive: true });
   if (args['contract-file']) copyFileSync(args['contract-file'], join(dir, 'contract.md'));
   const state = {
+    config: loadCfg(args),
+    tasks: [],
     slice: args.slice,
     base: args.base,
     // Review-only: one classified reviewer round, no fix pass — findings are
@@ -271,18 +297,19 @@ function cmdPlan(args) {
     );
     state.phase = 'fix';
     state.fixTargets = gateFindings.map((f) => f.id);
+    state.tasks = [persistTask(args, state, { id: 'gate-fix', promptFile, outputFile }, 'fixer', FIX_RESULT_SCHEMA)];
     saveState(args, state);
     out({
       action: 'gate-fix',
       round: state.round,
       gateFindings: gateFindings.map((f) => f.title),
-      fix: { promptFile, outputFile },
+      fix: state.tasks[0],
       next: 'run one fix implementer with the prompt, then `apply-fix --result <outputFile>` — no reviewers run while a gate is red',
     });
     return;
   }
 
-  const cfg = loadCfg(args);
+  const cfg = loadCfg(args, state);
   const changedFiles = list(args['changed-files']);
   const addedFiles = list(args['added-files']);
   const provenance = args['provenance-file']
@@ -342,14 +369,14 @@ function cmdPlan(args) {
     });
     const promptFile = join(promptsDir, `${r.id}.md`);
     writeFileSync(promptFile, text);
-    return {
+    return persistTask(args, state, {
       id: r.id,
       agentFile: join(PLUGIN_ROOT, 'agents', `${r.id}.md`),
       model: agentModel(r.id),
       effort: agentEffort(r.id),
       promptFile,
       outputFile,
-    };
+    }, 'reviewer', FINDINGS_SCHEMA);
   });
 
   // Round-1 one-shot: the gut-check pre-pass (must run BEFORE the reviewers —
@@ -359,11 +386,13 @@ function cmdPlan(args) {
     const gutOut = join(findingsDir, 'gut-check.json');
     const gutPrompt = join(promptsDir, 'gut-check.md');
     writeFileSync(gutPrompt, prompts.gutCheckPrompt(contract, inspect, gutOut));
-    prePass = { id: 'gut-check', promptFile: gutPrompt, outputFile: gutOut };
+    prePass = persistTask(args, state, { id: 'gut-check', promptFile: gutPrompt, outputFile: gutOut }, 'reviewer', GUT_CHECK_SCHEMA);
   }
 
   if (args.head) state.headHistory.push(args.head);
   state.phase = 'collect';
+  state.tasks = [...(prePass ? [prePass] : []), ...reviewers];
+  state.coverage = { expected: state.tasks.map((task) => task.id), completed: [], missing: state.tasks.map((task) => task.id), invalid: [] };
   state.planMeta = { areas, changedFiles: changedFiles.length, fixRange, reuseFp: fp };
   saveState(args, state);
   out({
@@ -372,7 +401,7 @@ function cmdPlan(args) {
     prePass,
     reviewers,
     skipped,
-    next: 'run the pre-pass first (round 1), then the reviewers in parallel if the runtime allows; every agent writes its JSON to its outputFile, then run `collect`',
+    next: 'run the pre-pass first (round 1), then fresh reviewers; persist every returned JSON using the task manifest, then run `collect`',
   });
 }
 
@@ -390,11 +419,12 @@ function cmdCollect(args) {
   // A reviewer that never wrote its outputFile is a dead reviewer — surfaced
   // here mechanically (emitted prompt with no findings file), never inferred.
   const promptsDir = join(roundDir, 'prompts');
-  const emitted = existsSync(promptsDir)
+  const emitted = state.coverage?.expected || (existsSync(promptsDir)
     ? readdirSync(promptsDir)
         .filter((f) => f.endsWith('.md'))
         .map((f) => f.replace(/\.md$/, ''))
-    : [];
+    : []);
+  if (!emitted.length) die('No reviewer plan found; restore this round before collecting');
   const present = new Set(
     (existsSync(findingsDir) ? readdirSync(findingsDir) : [])
       .filter((f) => f.endsWith('.json'))
@@ -423,6 +453,8 @@ function cmdCollect(args) {
       continue;
     }
     const errors = validate(parsed, FINDINGS_SCHEMA);
+    if (parsed?.reviewer !== f.replace(/\.json$/, '')) errors.push('reviewer identity does not match the expected task');
+    if (!emitted.includes(f.replace(/\.json$/, ''))) errors.push('report does not belong to an emitted task');
     if (errors.length) {
       invalid.push({ file: path, errors });
       continue;
@@ -431,6 +463,11 @@ function cmdCollect(args) {
     for (const bf of parsed.blockingFindings)
       raw.push({ ...bf, source: parsed.reviewer });
   }
+
+  state.coverage = {
+    expected: emitted, completed: [...(gut ? ['gut-check'] : []), ...reports.map((report) => report.reviewer)],
+    missing, invalid,
+  };
 
   // Gut-check `block` → hard stop for the human, before any validator spend.
   if (gut) {
@@ -451,6 +488,17 @@ function cmdCollect(args) {
       return;
     }
   }
+
+  if (missing.length || invalid.length) {
+    state.phase = 'decide';
+    state.verdict = 'incomplete — missing or invalid reviewer reports';
+    saveState(args, state);
+    out({ action: 'incomplete', findingCount: raw.length, missing, invalid, coverage: state.coverage,
+      validator: null, missingReports: 're-run those reviewers once; incomplete coverage cannot converge',
+      next: 're-run missing/invalid tasks, then collect again; if still incomplete, report the blocker and resume this round later' });
+    return;
+  }
+  state.verdict = null;
 
   // Reuse-audit clean pass: unchanged added-file set + provenance since this
   // clean report → the reviewer is skipped on later fix rounds.
@@ -474,16 +522,17 @@ function cmdCollect(args) {
       promptFile,
       prompts.validatorPrompt(contractText(args, state), fmtFeedback(kept), inspectCmds(state).diffCmd, outputFile),
     );
-    validator = {
+    validator = persistTask(args, state, {
       id: 'pr-relevance-validator',
       agentFile: join(PLUGIN_ROOT, 'agents', 'pr-relevance-validator.md'),
       model: agentModel('pr-relevance-validator'),
       effort: agentEffort('pr-relevance-validator'),
       promptFile,
       outputFile,
-    };
+    }, 'reviewer', VALIDATION_SCHEMA);
   }
   state.pendingFindings = kept;
+  state.tasks = validator ? [validator] : [];
   saveState(args, state);
   out({
     round: state.round,
@@ -491,10 +540,7 @@ function cmdCollect(args) {
     suppressed: suppressed.map((f) => f.title),
     missing,
     invalid,
-    missingReports:
-      missing.length || invalid.length
-        ? 'missing/invalid reports listed above are EXCLUDED — re-run those reviewers once, or accept degraded coverage explicitly (zero findings only counts as clean when every reviewer reported)'
-        : '',
+    missingReports: '',
     validator,
     next: kept.length
       ? 'run the validator, then `decide --verdicts <outputFile>`'
@@ -505,6 +551,14 @@ function cmdCollect(args) {
 function cmdDecide(args) {
   const state = loadState(args);
   if (state.phase !== 'decide') die(`phase is "${state.phase}", expected "decide"`);
+  if (!state.coverage || state.coverage.missing.length || state.coverage.invalid.length) {
+    state.phase = 'collect';
+    state.verdict = 'incomplete — missing or invalid reviewer reports';
+    saveState(args, state);
+    out({ action: 'incomplete', verdict: state.verdict, coverage: state.coverage,
+      next: 'complete the missing/invalid tasks and collect again; do not open a PR from this run yet' });
+    return;
+  }
   const dir = runDir(args);
   const roundDir = join(dir, `round-${state.round}`);
 
@@ -524,6 +578,11 @@ function cmdDecide(args) {
   const verdicts = args.verdicts
     ? readJson(args.verdicts, VALIDATION_SCHEMA, 'verdicts').verdicts
     : [];
+  const expected = (state.pendingFindings || []).map((finding) => finding.id);
+  if (verdicts.length !== expected.length || new Set(verdicts.map((v) => v.id)).size !== verdicts.length ||
+      verdicts.some((v) => !expected.includes(v.id))) {
+    die('Incomplete validator result: classify every pending finding exactly once before deciding');
+  }
   const validated = classifyFindings(state.pendingFindings || [], verdicts);
   ledgerIngest(state.ledger, state.round, validated);
   state.pendingFindings = [];
@@ -577,13 +636,14 @@ function cmdDecide(args) {
     );
     state.phase = 'fix';
     state.fixTargets = targets.map((t) => t.id);
+    state.tasks = [persistTask(args, state, { id: 'fix', promptFile, outputFile }, 'fixer', FIX_RESULT_SCHEMA)];
     saveState(args, state);
     out({
       action,
       round: state.round,
       gateFindings: gateFindings.map((f) => f.title),
       targets,
-      fix: { promptFile, outputFile },
+      fix: state.tasks[0],
       next: 'run one fresh fix implementer with the prompt, then `apply-fix --result <outputFile>`',
     });
     return;
@@ -602,6 +662,7 @@ function cmdDecide(args) {
     return;
   }
   state.phase = 'done';
+  state.tasks = [];
   state.verdict = ledgerVerdict(state.ledger, action === 'converged');
   saveState(args, state);
   out({ action, verdict: state.verdict, open: open.map(ledgerEntryFinding) });
@@ -621,6 +682,7 @@ function cmdApplyFix(args) {
   state.gates = { testsGreen: fix.testsGreen, committed: fix.committed };
   state.round += 1;
   state.phase = 'plan';
+  state.tasks = [];
   saveState(args, state);
   out({
     action: 'review',
@@ -649,10 +711,11 @@ function cmdAdjudicate(args) {
     promptFile,
     prompts.adjudicatorPrompt(contractText(args, state), disputed, inspectCmds(state).diffCmd, outputFile),
   );
+  state.tasks = [persistTask(args, state, { id: 'adjudicator', promptFile, outputFile }, 'adjudicator', ADJUDICATION_SCHEMA)];
   saveState(args, state);
   out({
     disputed: disputed.map(ledgerEntryFinding),
-    adjudicator: { promptFile, outputFile },
+    adjudicator: state.tasks[0],
     next: 'run ONE fresh agent with the prompt (never the fix implementer), then `apply-adjudication --rulings <outputFile>`',
   });
 }
@@ -686,6 +749,7 @@ function cmdReport(args) {
     round: state.round,
     phase: state.phase,
     verdict: state.verdict ?? '(loop still running)',
+    coverage: state.coverage ?? null,
     report: ledgerReport(state.ledger),
     blocking: entries
       .filter((e) => e.status === 'open' && e.severity === 'blocking')
@@ -708,7 +772,54 @@ function cmdStatus(args) {
     stalledRounds: state.stalledRounds,
     openBlocking: ledgerOpenBlocking(state.ledger).map((e) => e.id),
     entries: state.ledger.entries.length,
+    coverage: state.coverage ?? null,
+    tasks: state.phase === 'done' ? [] : (state.tasks || []).filter((task) => {
+      try {
+        const result = JSON.parse(readFileSync(task.outputFile, 'utf8'));
+        return validate(result, task.schema).length > 0 || (result?.reviewer && result.reviewer !== task.id);
+      } catch { return true; }
+    }),
   });
+}
+
+function cmdModel(args) {
+  const role = args.role || SKILL_ROLES[args.skill];
+  if (role === 'inherit') {
+    out({ role, next: 'inherit the caller\'s explicitly resolved model role' });
+    return;
+  }
+  out(resolveModel(loadCfg(args), { role, runtime: args.runtime, cloud: bool(args.cloud) }));
+}
+
+async function cmdRun(args) {
+  if (!args.task || !args.runtime) die('run requires --task <task.json> --runtime claude|codex');
+  const task = readJson(args.task, null, 'task');
+  out(await runTask(task, args.runtime, { dryRun: bool(args['dry-run']) }));
+}
+
+function cmdTask(args) {
+  const schemas = { implement: IMPLEMENT_RESULT_SCHEMA, fix: FIX_RESULT_SCHEMA, findings: FINDINGS_SCHEMA,
+    validation: VALIDATION_SCHEMA, adjudication: ADJUDICATION_SCHEMA, gut: GUT_CHECK_SCHEMA, 'babysit-fix': BABYSIT_FIX_SCHEMA };
+  if (!args['prompt-file'] || !args['output-file'] || !args.role || !schemas[args.schema]) {
+    die('task requires --role, --prompt-file, --output-file, --schema implement|fix|findings|validation|adjudication|gut');
+  }
+  const agentFile = args.agent ? join(PLUGIN_ROOT, 'agents', `${args.agent}.md`) : undefined;
+  if (agentFile && !existsSync(agentFile)) die(`Unknown agent: ${args.agent}`);
+  out(persistTask(args, {}, { id: args.agent || args.role, agentFile,
+    promptFile: args['prompt-file'], outputFile: args['output-file'] }, args.role, schemas[args.schema]));
+}
+
+function cmdSnapshot(args) {
+  if (!args.output) die('snapshot requires --output <config.md>');
+  let cfg;
+  if (args.ref) {
+    if (String(args.ref).startsWith('-')) die('Invalid planning ref');
+    const raw = execFileSync('git', ['show', `${args.ref}:docs/agents/repo-config.md`], { encoding: 'utf8' });
+    cfg = resolveRepoConfig(parseRepoConfig(raw, String(args.ref)));
+  } else cfg = loadCfg(args);
+  mkdirSync(dirname(resolve(args.output)), { recursive: true });
+  writeFileSync(args.output, `## Config\n\n\`\`\`json\n${JSON.stringify(cfg, null, 2)}\n\`\`\`\n`);
+  out({ configFile: resolve(args.output), ref: args.ref || null });
 }
 
 const COMMANDS = {
@@ -721,10 +832,18 @@ const COMMANDS = {
   'apply-adjudication': cmdApplyAdjudication,
   report: cmdReport,
   status: cmdStatus,
+  model: cmdModel,
+  run: cmdRun,
+  task: cmdTask,
+  snapshot: cmdSnapshot,
 };
 
 const [, , cmd, ...rest] = process.argv;
 const handler = COMMANDS[cmd];
 if (!handler)
   die(`unknown command "${cmd || ''}" — one of: ${Object.keys(COMMANDS).join(', ')}`);
-handler(parseArgs(rest));
+try {
+  await handler(parseArgs(rest));
+} catch (error) {
+  die(error.message);
+}

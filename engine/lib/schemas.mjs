@@ -135,6 +135,7 @@ export const FIX_RESULT_SCHEMA = {
         'True ONLY if tests + lint/typecheck were RUN in this session and seen passing — never assumed.',
     },
     testEvidence: { type: 'string' },
+    editedFiles: { type: 'array', items: { type: 'string' } },
     addedFiles: { type: 'array', items: { type: 'string' } },
     provenance: {
       type: 'array',
@@ -172,6 +173,32 @@ export const FIX_RESULT_SCHEMA = {
     },
   },
   required: ['summary', 'committed', 'head', 'testsGreen'],
+};
+
+export const IMPLEMENT_RESULT_SCHEMA = {
+  ...FIX_RESULT_SCHEMA,
+  properties: {
+    ...FIX_RESULT_SCHEMA.properties,
+    changedFiles: { type: 'array', items: { type: 'string' } },
+    deletedFiles: { type: 'array', items: { type: 'string' } },
+    touchedAreas: { type: 'array', items: { type: 'string' } },
+    userFacingImpact: { type: 'boolean' },
+    diffStat: { type: 'string' },
+    notes: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+export const BABYSIT_FIX_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    outcome: { type: 'string', enum: ['fixed', 'dispute', 'blocked'] },
+    summary: { type: 'string' },
+    editedFiles: { type: 'array', items: { type: 'string' } },
+    testEvidence: { type: 'string' },
+    evidence: { type: 'string' },
+    whyItFailed: { type: 'string' },
+  },
+  required: ['outcome', 'summary', 'editedFiles', 'testEvidence'],
 };
 
 export const GUT_CHECK_SCHEMA = {

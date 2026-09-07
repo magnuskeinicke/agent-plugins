@@ -5,6 +5,8 @@ description: Find deepening opportunities in a codebase, informed by the domain 
 
 # Improve Codebase Architecture
 
+Runtime and model selection: read [the shared runtime contract](../work-slice/references/runtime.md) before launching workers or sessions. Use the registry role for `improve-codebase-architecture`; supporting skills inherit the caller’s resolved role.
+
 Surface architectural friction and propose **deepening opportunities** — refactors that turn shallow modules into deep ones. The aim is testability and AI-navigability.
 
 ## Glossary
@@ -59,7 +61,7 @@ The `apply` flag is the authorization — on `apply` proceed with the writes (sh
 
 Read the project's domain glossary and any ADRs in the area you're touching first. Their well-known locations (the plugin CONTRACT.md's host-repo files): `CONTEXT.md` at the repo root and `docs/adr/` — both committed in the repo, both optional. When this skill later says to add a term to `CONTEXT.md`, edit that repo file (create it lazily).
 
-Then use the Agent tool with `subagent_type=Explore` to walk the codebase. Don't follow rigid heuristics — explore organically and note where you experience friction:
+Then launch a read-only worker with the shared `explorer` role (Claude native Explore or the Codex worker adapter) to walk the codebase. Don't follow rigid heuristics — explore organically and note where you experience friction:
 
 - Where does understanding one concept require bouncing between many small modules?
 - Where are modules **shallow** — interface nearly as complex as the implementation?
@@ -81,7 +83,7 @@ The deliverable is **`<TRACKER>` issues assigned to the user** — one parent co
 
 **ADR conflicts**: if a candidate contradicts an existing ADR, only surface it when the friction is real enough to warrant revisiting the ADR. Mark it clearly in the child body (e.g. an `> ADR / convention note` callout: _"contradicts ADR-0007 — but worth reopening because…"_). Don't list every theoretical refactor an ADR forbids.
 
-Do NOT propose interfaces yet — that is what the grilling loop is for. **Filing issues is an outward-facing write: confirm the planned parent + child titles and strengths with the user before creating, unless they've said "just file them."** After the issues exist, ask: "Which of these would you like to grill?"
+Do NOT propose interfaces yet — that is what the grilling loop is for. **On `apply`, the user has authorized filing the planned issues; proceed without another confirmation. In dry-run, show the plan only.** After the issues exist, ask: "Which of these would you like to grill?"
 
 ### 3. Grilling loop
 
@@ -100,13 +102,13 @@ The candidate's child issue is the live document — keep it in sync as the desi
 
 **This skill surfaces deepening opportunities and files them as tracker issues — it designs through grilling, it never implements.**
 
-- **DOES**: explore via an Explore subagent, apply the deletion test, build + open the HTML report from the OS temp dir; on `apply`, file parent + child issues with the report attached, then grill picked candidates and keep the child issue / `CONTEXT.md` / ADRs in sync
+- **DOES**: explore via a worker with the shared explorer profile, apply the deletion test, build + open the HTML report from the OS temp dir; on `apply`, file parent + child issues with the report attached, then grill picked candidates and keep the child issue / `CONTEXT.md` / ADRs in sync
 - **DOES NOT**: implement refactors, propose interfaces before the grilling loop, slice oversized candidates (hand to `/grill-with-docs` → `/to-prd` → `/to-issues`), write the report into the repo, or touch the tracker in dry run
 
 ## Red Flags — STOP
 
 - About to create issues, upload the attachment, or write `CONTEXT.md`/ADRs without an `apply` token — stop; print the file plan and end with "Re-run with `apply` to file these."
-- On `apply`, about to file without confirming parent + child titles and strengths — stop; filing is an outward-facing write; confirm unless the user said "just file them."
+- On `apply`, show the concrete parent/child titles and strengths, then file without another confirmation. Without `apply`, keep the tracker unchanged.
 - About to write the HTML report inside the repo, or commit/publish it on GitHub — stop; it belongs in `<tmpdir>/architecture-review-<timestamp>.html`; GitHub gets the temp path noted in the parent body.
 - About to propose concrete interfaces while filing candidates — stop; that's the grilling loop's job.
 - About to file a refactor an existing ADR forbids without real friction — stop; surface it only when worth reopening, marked with an `> ADR / convention note` callout.

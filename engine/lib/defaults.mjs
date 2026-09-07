@@ -75,19 +75,9 @@ export const REPO_CONFIG_DEFAULTS = {
   design: {
     fidelityCheck: '',
   },
-  // Slice agent routing (e.g. frontend slices reserved for a stronger-at-UI
-  // agent). labelPrefix '' → routing disabled everywhere. delegate maps an
-  // agent name to a headless command template; {} → mismatched slices are
-  // reported/skipped, never delegated. dispatch: where feature-goal runs
-  // everything after planning (slice loop + babysit) — 'cloud' (default: one
-  // Conductor cloud workspace per slice via the Conductor MCP, babysit in the
-  // skeleton's workspace; falls back to local when the MCP is unreachable) or
-  // 'local' (opt-in: the sequential single-worktree loop, one fresh subagent
-  // per slice). cloudModels: per-agent
-  // Conductor model/effort passed on every cloud session feature-goal
-  // creates; an agent key set to {} (or absent) → Conductor's own default.
-  // A host's per-agent object replaces the default one wholesale.
+  // Legacy routing keys remain compatible; explicit worker profiles live in models.mjs.
   routing: {
+    models: {},
     labelPrefix: '',
     frontendAgent: '',
     delegate: {},
@@ -96,10 +86,7 @@ export const REPO_CONFIG_DEFAULTS = {
       claude: { model: 'opus-5-1m', effort: 'xhigh' },
       codex: { model: 'gpt-5.6-sol', effort: 'xhigh' },
     },
-    // Roster files pin reviewer models with Claude alias names (`sonnet`,
-    // `opus`); a Codex runtime maps an emitted alias through this table for
-    // its `codex exec` children. Unmapped alias → child runs on the session
-    // model (disclosed, not fatal).
+    // Translate the existing Claude roster pins for Codex workers.
     codexModelAliases: {
       sonnet: 'gpt-5.6-terra',
       opus: 'gpt-5.6-sol',
