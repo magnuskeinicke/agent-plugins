@@ -1,9 +1,12 @@
-# Cloud bootstrap and supervision
+# Cloud bootstrap and dispatch
 
-The planning or dispatching caller owns supervision until the work completes or
-has a concrete blocker. Relay workers still handle one PR each and end after a
-successful handoff. The caller stays available to recover a crashed worker and
-publish queued tracker writes; it does not implement in a second workspace.
+The caller's job is to hand work over, prove it started, and **end the run**.
+Relay workers handle one PR each and start their own successor, so the relay
+propels itself with nothing alive outside the pipeline workspace. A caller that
+sits and polls a cloud worker is pure waste — and in a local worktree it defeats
+the point of cloud dispatch, which is that the user's machine can be closed.
+Recovery and queued tracker publication happen at the **next invocation**, not
+in a watch loop.
 
 ## Prepare a reproducible handoff
 
@@ -64,9 +67,18 @@ After success, start a **fresh** work session with `/feature-goal <ISSUE>` or
 `/work-issue <ISSUE>`; it reads the persisted bootstrap state. Never launch a
 runtime whose plugin or required capabilities failed the checks.
 
-## Watch and recover
+## Confirm the start, then stop
 
-Persist `.context/<ISSUE>/supervisor.json` in the caller's workspace:
+Confirming the start is the caller's last act: after creating the work session,
+check its status at 60-second intervals until it reports working, bounded at
+three minutes. A session that never leaves a pre-run status inside that bound is
+a blocker (deep link + last observed status), never a reason to keep polling.
+Once it is working, record the state below, report the workspace and session
+deep links, end with the resume line, and **stop** — do not read its transcript,
+do not wait for its PR, do not schedule a local follow-up.
+
+Persist `.context/<ISSUE>/supervisor.json` in the caller's workspace as the
+**carrier between invocations**, not as a watch-loop cursor:
 
 ```json
 {"state":"watching","workspaceId":"<id>","sessionId":"<id>",
@@ -75,37 +87,50 @@ Persist `.context/<ISSUE>/supervisor.json` in the caller's workspace:
  "restarts":0,"maxSessionMs":21600000}
 ```
 
-Populate the model fields from resolution, not from this example. The message
-file contains the same workflow invocation, so a replacement resumes durable
-stages in the existing workspace. With the local Conductor CLI:
+Populate the model fields from resolution, not from this example. `watching` is
+the engine's literal for "relay running, reconcile at the next invocation" — it
+never means a process is watching. The message file contains the same workflow
+invocation, so a replacement resumes durable stages in the existing workspace.
+
+## Reconcile at re-entry
+
+Every later invocation of the workflow from outside the pipeline workspace runs
+**one** reconcile step against that state, acts on its outcome, and ends:
 
 ```bash
 node "<plugin-root>/engine/supervise.mjs" .context/<ISSUE>/supervisor.json --once
 ```
 
-Run a step every 60 seconds, flush pending writes, and give the user progress.
-The command also supports a bounded continuous watch when the host can yield
-its output. It locks the state file against concurrent supervisors. After an
-interrupted supervisor, inspect the PID in `<state>.lock/pid`; remove that lock
-only after proving the recorded process is gone. Resume with the same state.
-For an MCP-only caller, follow the same state transitions using session status,
-paged transcript reads and session creation; persist before making mutations.
+The command takes exactly one step and exits — there is no watch mode to reach
+for, and `--once` is only kept for compatibility. Never wrap it in a loop, a
+`sleep`, or a background process. It locks the state file against a concurrent
+reconcile. After an interrupted step, inspect the PID in `<state>.lock/pid`;
+remove that lock only after proving the recorded process is gone. For an
+MCP-only caller, take the same single step using session status, one paged
+transcript read and at most one session creation; persist before mutating.
 
-- Working → keep watching. A session exceeding six hours (configurable in the
-  state) is a blocker; inspect it before starting another writer.
-- Idle with a handoff marker → follow the named successor, including its
-  runtime/model/effort. Reset the crash allowance for that new PR session.
-- Idle without a marker → restart once in the **same** workspace. Persist the
-  intended session/message UUIDs before creation; after an uncertain response,
-  look up that session ID before retrying. Never create two replacement writers.
+- Working → nothing to do: report the deep link and stop. A session exceeding
+  six hours (configurable in the state) is a blocker; inspect it before starting
+  another writer.
+- Idle with a handoff marker → the relay already created its successor: adopt
+  that session id (with its runtime/model/effort), reset the crash allowance,
+  and stop.
+- Idle without a marker → restart once in the **same** workspace, confirm the
+  replacement reaches working, and stop. Persist the intended session/message
+  UUIDs before creation; after an uncertain response, look up that session ID
+  before retrying. Never create two replacement writers.
 - A second silent death → blocked with the transcript and workspace link.
 - Explicit `blocked` → report that blocker. `tracker-pending` → flush and verify
-  completion below. `complete` → verify the live PR/ticket state before claiming
-  DONE; a terminal marker alone is not verification evidence.
+  completion below, then finish. `complete` → verify the live PR/ticket state
+  before claiming DONE; a terminal marker alone is not verification evidence.
 
-For ticket fan-out, keep one state per workspace and step them fairly. Existing
-working workspaces are adopted and watched, never duplicated. On caller resume,
-read these states before selecting any new work.
+Between invocations the relay is unattended by design. A stalled worker costs
+one re-invocation, which the user (or a schedule) triggers — that is the price
+of running nothing locally, and it is the intended trade.
+
+For ticket fan-out, keep one state per workspace and reconcile each once per
+invocation. Existing working workspaces are adopted, never duplicated. Read
+these states before selecting any new work.
 
 ## Relay result protocol
 
@@ -123,8 +148,9 @@ identity recorded in the pipeline checkpoint:
 
 Choose one, using actual resolved values. Record intended successor UUIDs before
 creation and recover uncertain creation by ID. The PR worker ends after passing
-the baton; the original caller keeps monitoring. An existing open PR is checked
-out on its owning branch before resuming review, babysit or evidence capture.
+the baton; no caller is listening, so the marker is the only record a later
+invocation can read. An existing open PR is checked out on its owning branch
+before resuming review, babysit or evidence capture.
 
 ## Tracker writes from the sandbox
 
@@ -141,14 +167,17 @@ message` reads; it cannot ask a worker to print a file. If a payload is missing,
 send a maintenance request with `conductor message create` to an idle worker,
 then read its response; never start a competing implementation session.
 
-The caller flushes in order, upserting comments by ID/heading and applying only
-the named label/status change. Read back each effect before recording its
-operation ID as applied in local supervisor state. Repeating a flush must not
-duplicate a comment or replay an older status over a later acknowledged one.
-An unexpected permission change switches to planning mode only if the caller
-can write; otherwise report the blocker with the queue intact.
+Flushing is part of a reconcile step, never a reason to stay alive: an
+invocation that finds queued writes applies them in order, upserting comments by
+ID/heading and applying only the named label/status change, then ends. Read back
+each effect before recording its operation ID as applied in local supervisor
+state. Repeating a flush must not duplicate a comment or replay an older status
+over a later acknowledged one. An unexpected permission change switches to
+planning mode only if the caller can write; otherwise report the blocker with
+the queue intact.
 
-At `tracker-pending`, flush the final QA handoff, verify it on the ticket and
-verify the current-head PR verdicts and media. Only then mark supervisor state
-`complete`. This caller stays active through publication; users do not need a
-second invocation solely to flush the queue.
+A worker that reports `tracker-pending` leaves the queue durable in the
+workspace; the next invocation flushes the final QA handoff, verifies it on the
+ticket, verifies the current-head PR verdicts and media, and only then marks
+supervisor state `complete`. Queued writes are never lost by stopping — they
+wait in the queue for the invocation that can apply them.

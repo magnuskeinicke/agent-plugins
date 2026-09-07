@@ -187,12 +187,12 @@ babysit uses); `gh stack view --json` shows the chain; `git status
   slice.
 
 If the spawn call fails: retry once; still failing → report Blocked with the
-error verbatim (the supervising caller, or a `/feature-goal <ISSUE>` from anywhere,
-restarts the relay from the markers).
+error verbatim (a later `/feature-goal <ISSUE>` from anywhere restarts the relay
+from the markers).
 
 Read `cloud-relay.md` for the required terminal result marker at every exit.
 Resolve the successor's profile with the registry (`implementer` for a PR,
 `dispatcher` for the stack babysit), using the pinned config. Persist intended
 session/message UUIDs before creation, pass explicit model/effort, and check
-that its runtime passed bootstrap. The caller follows the recorded baton and
-keeps supervising after this worker ends.
+that its runtime passed bootstrap. Nothing is watching this handoff live: the
+recorded baton is what a later invocation follows.

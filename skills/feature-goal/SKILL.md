@@ -4,7 +4,7 @@ description: >
   Run the feature pipeline from grilling through PRD and sliced issues to a
   green draft PR stack and QA handoff. Grilling is the one human gate. A cloud
   relay uses one fresh Claude or Codex session per PR with explicit model
-  roles; the caller supervises recovery and tracker publication. Each PR is
+  roles; the caller dispatches, confirms the relay started and stops. Each PR is
   babysat through CI, review bots and threads before the next layer starts.
   Resumes saved stages, configuration and current-head evidence. Opt-in local
   mode uses one worktree with fresh workers. Use when the user says "run the
@@ -42,7 +42,9 @@ and ends. Each layer is cut on a bot-reviewed, green PR — a finding in slice
 N is fixed before slice N+1 exists, so it never ripples up the stack. **No
 session ever does more than one PR**, so no agent accumulates the whole
 stack's context, and the pipeline keeps running unattended once the user
-walks away. The planning session plans, dispatches, supervises and publishes queued tracker writes.
+walks away. The planning session plans, dispatches, confirms the first worker
+is running, and **ends** — nothing local stays alive while the cloud works.
+Recovery and queued tracker publication happen at the next invocation.
 
 **One human gate, ever: the grilling session.** Everything downstream of it is
 autonomous — no approval prompts, no "does this look right?", no HITL slices,
@@ -101,16 +103,18 @@ Conductor MCP nor the `conductor` CLI is reachable) is documented in
 ## Persistence — run again to resume
 
 One invocation advances the pipeline as far as it can, then ends with a report.
-A run ends at exactly four kinds of boundary:
+A run ends at exactly five kinds of boundary:
 
 - **The grilling gate** — the user disengaged mid-grill or the grill surfaced a
   decision they must take away. Name what they must decide; they act, then
   re-invoke. This is the **only** point where the pipeline waits on the human
   for input.
+- **Relay dispatched (outside sessions)** — the pipeline workspace is
+  bootstrapped and a worker session is confirmed working. Report the deep links
+  and stop; the relay runs unattended and the next invocation reconciles it
+  (`references/cloud-relay.md`).
 - **Baton passed (PR workers only)** — a PR worker created and recorded its
-  successor. It emits the handoff marker and ends. The original planning caller
-  keeps supervising under `references/cloud-relay.md`, including when the
-  caller adopted the same cloud workspace after grilling.
+  successor. It emits the handoff marker and ends. Nothing waits on it.
 - **Blocked** — nothing actionable remains but the goal isn't met: a PR
   session's babysit of its own PR, or the stack-wide babysit, ended NOT MET
   with only `needs-human` items (judgement-call threads, a stuck bot, an
@@ -138,7 +142,7 @@ wrote:
 - Feature ticket: PROJ-1200
 - PRD ticket: (none | PROJ-1201)
 - Docs branch: <pushed planning-docs branch>
-- Supervisor session: <caller session id>
+- Dispatcher session: <session id that last dispatched or reconciled>
 - Pipeline workspace: (none | <workspace deep link> / <workspace id>)
 - Tracker writes: (sandbox | planning — <reason, e.g. GitHub App token: 403 on issue writes>)
 - Slice cursor: PROJ-1234 (03 of 05) | (none)
@@ -179,7 +183,7 @@ Resolve the highest completed stage, with these rules in order:
 
 ### Which session am I? (cloud mode, stages SLICE-LOOP / BABYSIT)
 
-The checkpoint records `Supervisor session` and `Relay`. The recorded supervisor keeps monitoring even if it shares the pipeline workspace; the rules below identify worker sessions. The relay only works if each session knows its role. Decide it from where you
+The checkpoint records `Dispatcher session` and `Relay`. The relay only works if each session knows its role. Decide it from where you
 run, never from the conversation:
 
 - **In the pipeline workspace** — a Conductor cloud sandbox
@@ -191,9 +195,9 @@ run, never from the conversation:
   **PR session** (`references/pr-session.md`), BABYSIT makes you the
   **babysit session** (stage BABYSIT below).
 - **Anywhere else** (a local worktree, a different cloud workspace) → you are
-  a **planning / monitoring session**: you never work a slice or babysit in
-  cloud mode. You start, resume or check the relay (SLICE-LOOP "From outside
-  the pipeline workspace" below) and supervise through completion or a concrete blocker.
+  a **planning / dispatching session**: you never work a slice or babysit in
+  cloud mode. You start, reconcile or read the relay (SLICE-LOOP "From outside
+  the pipeline workspace" below) in **one step**, then end the run.
 
 ## Stage GRILL / PRD — the one human gate
 
@@ -281,19 +285,21 @@ MET`) = babysit owed to that PR first · **`## Cloud dispatch` comment** on
 the ticket with no PR = a relay session claimed it (its session id is in the
 comment) · none of those = not yet worked.
 
-### From outside the pipeline workspace (planning / monitoring session)
+### From outside the pipeline workspace (planning / dispatching session)
 
-Follow [cloud bootstrap and supervision](references/cloud-relay.md): transfer
+Follow [cloud bootstrap and dispatch](references/cloud-relay.md): transfer
 an immutable planning config, install every required runtime, start or adopt
-the relay, then keep supervising through its terminal verdict and tracker
-publication. One PR per worker; one continuing caller owns monitoring.
+the relay, confirm the worker session reaches working — then **stop**. One PR
+per worker; workers start their own successors, so no caller stays behind to
+watch them. A later invocation takes exactly one reconcile step (recover a
+silent death, adopt a handoff, flush queued writes, read a terminal verdict).
 
 ### Tracker writes from the sandbox
 
 Use the queue and flush protocol in [cloud-relay.md](references/cloud-relay.md).
-The caller applies queued writes while supervising and verifies the final QA
-handoff before DONE. Runtime tool access is checked during bootstrap; a denied
-tracker write is never silently dropped.
+Queued writes are durable in the workspace: the invocation that finds them
+applies them and verifies the final QA handoff before DONE. Runtime tool access
+is checked during bootstrap; a denied tracker write is never silently dropped.
 
 ### Inside the pipeline workspace (PR session)
 
@@ -350,10 +356,11 @@ agents per its own rules. It returns with a terminal verdict:
   answers on the PR), then re-invokes; the next invocation starts a fresh
   babysit session in the same home — its state file carries the caps.
 
-From outside the pipeline workspace, keep supervising the babysit session under
-`references/cloud-relay.md`. A working session is watched; an unexplained idle
-session gets one recovery in the same workspace. Explicit NOT MET is a blocker;
-GOAL MET still requires current-head evidence and the published QA handoff.
+From outside the pipeline workspace, take one reconcile step on the babysit
+session under `references/cloud-relay.md` and end: a working session is left
+alone with its deep link reported; an unexplained idle session gets one recovery
+in the same workspace. Explicit NOT MET is a blocker; GOAL MET still requires
+current-head evidence and the published QA handoff.
 
 ## Stage QA-HANDOFF — the feature ticket's one comment for QA
 
@@ -395,8 +402,8 @@ read GOAL MET:
    method, no sha's. Checkpoint stage DONE only after it is on the feature
    ticket. Under `Tracker writes: planning` the babysit session **stages** it
    (`.context/<ISSUE>/tracker-writes-pending/`) and ends with stage
-   QA-HANDOFF, not DONE; the supervising caller flushes the queue, posts
-   it, and claims DONE.
+   QA-HANDOFF, not DONE; the next invocation from outside flushes the queue,
+   posts it, and claims DONE.
 
 Local mode does the same in this worktree. A worker that died before media
 publication resumes Step 8; missing evidence is not silently waived. If capture
@@ -456,14 +463,17 @@ head and use the reference's one-line form. Otherwise finish capture before QA.
   whose artifacts exist (PRD ticket, slice sub-issues, dispatch markers, open PRs)
   — repair forward. Durable markers always win over the checkpoint file.
 - **Persistence is re-invocation, never a stop-hook.** A run ends only at the
-  grilling gate, baton passed, Blocked, or DONE — always with the resume
-  line. Never spin-poll sessions inside one invocation.
+  grilling gate, relay dispatched, baton passed, Blocked, or DONE — always with
+  the resume line. Never spin-poll sessions inside one invocation: from outside
+  the pipeline workspace the only polling allowed is the bounded three-minute
+  start confirmation (and the same bound on bootstrap), after which the run ends
+  whatever the cloud is doing.
 
 ## Workflow Boundaries
 
 **This skill orchestrates the feature pipeline as a re-entrant stage machine with the grill as its only human gate — planning here, then a relay of one-PR sessions in one cloud workspace (each babysitting its own PR to GOAL MET before the next is cut), then a stack-wide babysit session — sequencing the constituent skills, never re-implementing them.**
 
-- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` (PRD ticket under the feature ticket) and `/to-issues` (slices under the PRD ticket) in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–8 (link the PR, babysit it to GOAL MET, capture + publish its evidence, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict and post the QA handoff; from outside, check / resume the relay; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
+- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` (PRD ticket under the feature ticket) and `/to-issues` (slices under the PRD ticket) in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–8 (link the PR, babysit it to GOAL MET, capture + publish its evidence, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict and post the QA handoff; from outside, start / reconcile the relay in one step and stop; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
 - **DOES NOT**: answer the grill for the human, ask the human anything after the grill, write anything but labels and the one `## QA handoff` on the feature ticket, treat `<HITL>` as a stop, work more than one PR in a worker session, implement / fix / review / babysit code outside the pipeline workspace (cloud mode), own review-loop internals (the engine CLI does) or CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark issues done, or relocate the venue-neutral standalone commands (`/work-issue` and `/daily-ticket-manager` run wherever the user starts them; `/solve-ready-tickets` does its own fan-out and is none of this skill's business).
 
 ## Red Flags — STOP
@@ -471,7 +481,8 @@ head and use the reference's one-line form. Otherwise finish capture before QA.
 - About to reuse media whose `sourceHead` differs from the PR head — stop: run Step 8 on the owning branch after current-head GOAL MET and replace the stale block before QA-HANDOFF.
 - About to start the next session while this PR's babysit is not GOAL MET (bot round pending, thread open, verdict NOT MET) — stop: babysit waits for the bots itself; NOT MET is Blocked, not a baton pass.
 - About to cut a slice's branch on a predecessor whose `## Cloud dispatch` lacks `babysit: GOAL MET` — stop: resume that slice's Step 7 first.
-- About to implement from the planning caller — stop: a PR worker owns implementation; the caller supervises and flushes tracker writes.
+- About to implement from the planning caller — stop: a PR worker owns implementation; the caller dispatches, reconciles and flushes tracker writes.
+- About to poll, watch or sit on a running cloud session from outside the pipeline workspace — stop: confirm it is working, report the deep link, end the run. The relay starts its own successors; a local process waiting on it is the failure this design exists to prevent.
 - About to send `/feature-goal` into a **fresh** cloud workspace whose plugin was never installed — stop: the sandbox has no plugin and skills load only at session start; bootstrap session (or inline install in the handed-off workspace) first.
 - About to paste slice instructions inline into a cloud session because bootstrap failed — stop: a failed bootstrap is Blocked (deep link + reason), not a workaround invitation.
 
@@ -483,7 +494,7 @@ Before reporting done:
 - [ ] The reported stage matches live markers (`PRD:` sub-issue of the feature ticket, slice sub-issues of the PRD ticket, `## Cloud dispatch` comments, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
 - [ ] After the grill, the human was asked nothing: `/to-prd` and `/to-issues` ran in pipeline mode; every assumption made downstream is recorded on its ticket/PR and listed in the report.
 - [ ] Planning docs (`CONTEXT.md`, `docs/adr/**`, `docs/agents/**`) were committed **and pushed** before the relay started; `git status --porcelain` shows none left over; the docs branch is in the checkpoint and every dispatch comment.
-- [ ] Cloud mode: the checkpoint records `Tracker writes: sandbox | planning` from the bootstrap probe; under `planning`, every denied tracker write is a staged file and the outside session flushed them (no marker silently dropped). Exactly one pipeline workspace for the stack; every worked slice's ticket carries exactly one `## Cloud dispatch` comment (workspace deep link, the session that worked it, docs branch); this session worked at most one PR and, if it did, started exactly one successor session before ending.
+- [ ] Cloud mode: the run ended as soon as the relay was confirmed working — no invocation waited on, polled or babysat a cloud session from outside beyond the bounded start confirmation. The checkpoint records `Tracker writes: sandbox | planning` from the bootstrap probe; under `planning`, every denied tracker write is a staged file that an outside invocation flushed (no marker silently dropped). Exactly one pipeline workspace for the stack; every worked slice's ticket carries exactly one `## Cloud dispatch` comment (workspace deep link, the session that worked it, docs branch); this session worked at most one PR and, if it did, started exactly one successor session before ending.
 - [ ] Every completed slice has a draft PR verified from durable markers (remote branch, `gh pr view`: draft, base = predecessor's branch), `gh stack view --json` shows the chain bottom → top, and `<NEXT>` has exactly one carrier or the report names why none does (stack complete).
 - [ ] Every PR a session opened was babysat to a terminal verdict in that same session before any successor was started; `babysit: GOAL MET` is stamped on its slice's `## Cloud dispatch` comment (local: slice checkpoint `COMPLETE`); no slice branch was cut on a predecessor short of that.
 - [ ] The stack-wide babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.
@@ -493,4 +504,4 @@ Before reporting done:
 
 Every cloud worker exit emits the terminal relay marker from
 `references/cloud-relay.md`. QA-HANDOFF with queued publication emits
-`tracker-pending`; it is not DONE until the caller verifies publication.
+`tracker-pending`; it is not DONE until an invocation verifies publication.

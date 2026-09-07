@@ -188,7 +188,7 @@ shared role registry. Durable checkpoints and result files allow either runtime
 to resume work.
 
 `routing.dispatch` decides the venue, not the agent: by default (`cloud`)
-`magnus:feature-goal` moves implementation to the pipeline workspace after planning while the caller supervises —
+`magnus:feature-goal` moves implementation to the pipeline workspace after planning and the caller then stops —
 **one** Conductor cloud pipeline workspace for the stack (Conductor MCP
 `create_workspace`, or the workspace the grilling session was handed off to),
 then a **relay of fresh sessions**: each session works exactly one slice to a
@@ -199,7 +199,7 @@ rounds, `pr.commentReviewer` rounds, threads — so the next layer is cut on a
 reviewed PR; NOT MET blocks the relay), starts the next session
 (`create_session` / `conductor session create`, the `<AGENT:>` label picking
 that session's agent) and ends; the last PR session starts the stack-wide
-babysit session in the same workspace. No PR worker handles more than one PR. The caller monitors across the whole relay. Opting into `local` runs the sequential single-worktree loop with a
+babysit session in the same workspace. No PR worker handles more than one PR. The relay is self-propelling: the caller ends its run once a worker is confirmed working, and a later invocation reconciles the relay in one step (crash recovery, queued tracker writes, terminal verdict). Nothing runs locally while the cloud works. Opting into `local` runs the sequential single-worktree loop with a
 fresh subagent per slice and consults `routing.delegate` for slices reserved
 for another agent (no delegate → it works the slice itself and discloses that
 on the PR — the pipeline never waits on a human after the grill).
@@ -214,7 +214,7 @@ plugin stays personal to the dispatching user.
 filters, then triages them. It creates one workspace per eligible ticket, named `<ISSUE> <slug>`
 (the name is the ownership marker — there is no dispatch comment on a
 human-facing ticket), bootstrap session, then one session whose entire prompt is
-`/work-issue <ISSUE>`. It supervises those workspaces to completion or a concrete blocker, recovering one silent crash per worker and flushing denied tracker writes. A caller re-run adopts the same supervisor state.
+`/work-issue <ISSUE>`. It confirms each session started, reports the deep links and ends; a later run adopts the same supervisor state, recovering one silent crash per worker and flushing denied tracker writes.
 The trigger label never selects a runtime, even when routing uses the `agent:`
 prefix. `work-issue` owns the claim and the full development/review/QA loop.
 `work-issue` and `daily-ticket-manager` stay venue-neutral and run wherever the

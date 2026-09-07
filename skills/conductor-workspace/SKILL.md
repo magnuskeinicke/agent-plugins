@@ -79,7 +79,7 @@ MET, the ticket's one QA handoff.
 has no implicit assignee or ready-for-dev filter. The trigger label does not
 select a runtime, even when agent routing also uses the `agent:` prefix.
 
-The dispatcher **supervises** each selected workspace until complete or blocked, using `feature-goal/references/cloud-relay.md`. There is no dispatch comment (a standalone ticket
+The dispatcher **dispatches and stops**, using `feature-goal/references/cloud-relay.md`: it confirms each selected workspace started working, then ends; a later run reconciles it in one step. There is no dispatch comment (a standalone ticket
 is human-facing and takes exactly one suite comment, the handoff), so the
 **workspace name is the ownership marker**: a re-run lists the project's
 workspaces, matches `<ISSUE>` prefixes, and never re-dispatches a ticket that
