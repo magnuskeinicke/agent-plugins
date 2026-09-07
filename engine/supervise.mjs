@@ -2,10 +2,10 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, renameSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { setTimeout } from 'node:timers/promises';
 import { superviseStep } from './lib/supervisor.mjs';
 
 const file = process.argv[2];
+// `--once` is accepted for compatibility; a single step is the only behaviour.
 if (!file) throw new Error('Usage: node engine/supervise.mjs <supervisor-state.json> [--once]');
 const stateFile = resolve(file);
 const lock = `${stateFile}.lock`;
@@ -50,9 +50,7 @@ const save = async (value) => {
   writeFileSync(`${stateFile}.tmp`, JSON.stringify(value, null, 2) + '\n');
   renameSync(`${stateFile}.tmp`, stateFile);
 };
-while (true) {
-  state = await superviseStep(state, transport, save);
-  process.stdout.write(JSON.stringify({ state: state.state, sessionId: state.sessionId, reason: state.reason }) + '\n');
-  if (process.argv.includes('--once') || ['complete', 'blocked', 'tracker-pending'].includes(state.state)) break;
-  await setTimeout(60_000);
-}
+// One step per invocation, by design: the cloud relay starts its own successors,
+// so nothing supervises it between invocations of the calling skill.
+state = await superviseStep(state, transport, save);
+process.stdout.write(JSON.stringify({ state: state.state, sessionId: state.sessionId, reason: state.reason }) + '\n');

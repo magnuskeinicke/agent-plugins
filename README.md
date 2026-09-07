@@ -141,7 +141,9 @@ Standalone entry points onto the same machinery:
 
 `/work-issue`, `/review-code`, `/iterate-pr`, and `/babysit-stack` run wherever
 you invoke them. `/solve-ready-tickets` dispatches to Conductor cloud workspaces
-by default and supervises them, as `/feature-goal` does after planning.
+by default, then ends — as `/feature-goal` does after planning. Re-invoke (or
+schedule) either one to reconcile the workers; nothing runs on your machine
+while they work.
 
 Under all of them sits the engine CLI (next section): skills run it from the host repo root, obey
 its JSON output, and resume from durable markers — `## Workflow State` checkpoints, the ledger in
@@ -202,6 +204,7 @@ Worker models and runtime execution are defined in
 [the shared runtime contract](skills/work-slice/references/runtime.md): explicit
 Claude/Codex role profiles, native agents or the schema-validating CLI adapter,
 and resumable task manifests. Missing review results cannot produce success.
-[Cloud supervision](skills/feature-goal/references/cloud-relay.md) keeps the
-caller monitoring through crash recovery and tracker publication. GitHub checks
+[Cloud dispatch](skills/feature-goal/references/cloud-relay.md) hands work over,
+confirms it started and stops; crash recovery and tracker publication happen on
+the next invocation. GitHub checks
 and visual evidence are tied to each PR's current head.

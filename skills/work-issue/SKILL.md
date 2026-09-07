@@ -189,5 +189,6 @@ tracker mode in `.context/<ISSUE>/pipeline-state.md` before preflight. Apply the
 queue and terminal marker protocol in
 `../feature-goal/references/cloud-relay.md`: emit `complete` only after current
 PR verification and the published QA handoff, `tracker-pending` when its exact
-payload awaits the caller, or `blocked` with a concrete reason. The caller owns
-crash recovery and denied tracker writes; this session owns implementation.
+payload awaits a caller invocation, or `blocked` with a concrete reason. No
+caller is listening while this session runs: the marker and the queued files are
+what a later invocation reads for crash recovery and denied tracker writes.

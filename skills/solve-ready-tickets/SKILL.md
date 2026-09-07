@@ -5,7 +5,7 @@ description: >
   labels.agentReady label) into one Conductor cloud workspace per eligible
   issue by default. Each workspace runs work-issue, which claims the issue,
   implements it, opens a draft PR, completes review and CI, and writes the QA
-  handoff. The dispatcher checks eligibility and supervises; work-issue owns
+  handoff. The dispatcher checks eligibility, dispatches and stops; work-issue owns
   the development loop. Re-runs adopt existing workspaces. Use when I say "solve my ready
   tickets", "run the autonomous solver", "fan out the agent-ready queue", "pick
   up the agent-ready tickets", or run `/solve-ready-tickets`. Built to run
@@ -99,7 +99,8 @@ Check supported/configured runtimes and model IDs through `list_models` (CLI:
 ## Mode — cloud dispatch is the default
 
 - **Default / `apply`** — select the queue, triage, decline the escalations,
-  create one cloud workspace per eligible issue, and supervise the sessions.
+  create one cloud workspace per eligible issue, confirm each session started,
+  and stop.
   An invocation without a mode authorizes this workflow; do not ask for an
   extra `apply` confirmation.
 - **`dry-run`** (or an explicit request to preview only) — select the queue,
@@ -110,14 +111,17 @@ Check supported/configured runtimes and model IDs through `list_models` (CLI:
 Without `max N`, dispatch **every eligible issue in the queue snapshot**.
 `max N` is an optional positive-integer cap on **new workspaces**; existing
 workers and their recovery do not consume it. Select oldest-first. Independent
-workspaces run **in parallel**; start the selected workers before waiting for
-any one implementation to finish. Record per-ticket failures and continue with
-the others. Supervise adopted workers even when there is no new work.
+workspaces run **in parallel**; start every selected worker, confirm each
+reaches working, then end the run — never wait on an implementation. Record
+per-ticket failures and continue with the others. Reconcile adopted workers once
+even when there is no new work.
 
 ## Resume — sweep the workspaces you already dispatched (first, always)
 
-The run is **re-entrant: run it again to resume**. Each invocation supervises
-its fan-out; a re-run adopts that work after an interrupted caller.
+The run is **re-entrant: run it again to resume**. Each invocation reconciles
+its fan-out in one pass and ends; the next run (usually the schedule) adopts
+whatever is still in flight. Nothing local stays alive between runs — that is
+the point of cloud workspaces.
 
 **The durable ownership marker is the cloud workspace itself.** There is no
 dispatch comment: a standalone ticket is human-facing and carries exactly one
@@ -129,19 +133,18 @@ space or end of name, so `PROJ-12` never matches `PROJ-123`: a workspace named
 **`<ISSUE> …`** means this ticket is already dispatched and is **never
 re-dispatched**.
 
-In `dry-run`, inspect and report existing workspaces without restarting,
-flushing queued writes, or entering the watch loop; then continue to preview
-the new queue below.
+In `dry-run`, inspect and report existing workspaces without restarting or
+flushing queued writes; then continue to preview the new queue below.
 
 In dispatch mode, for each already-dispatched ticket, adopt its persisted
 supervisor state (or reconstruct it from the latest session and durable markers) and
-follow `../feature-goal/references/cloud-relay.md`. Working → watch. Idle without
-a relay result → one recovery in that workspace, regardless of whether a PR
-already exists. Explicit blocked → report it; complete → verify current-head
-GOAL MET and the ticket's QA handoff. Never infer completion from a PR's mere
-existence. A second silent death is blocked; no duplicate workspace.
-Register adopted workers for supervision, then select and launch new work
-before waiting for terminal results; existing workers must not serialize fan-out.
+take **one** reconcile step per `../feature-goal/references/cloud-relay.md`.
+Working → report the deep link, nothing else. Idle without a relay result → one
+recovery in that workspace, regardless of whether a PR already exists. Explicit
+blocked → report it; complete → verify current-head GOAL MET and the ticket's QA
+handoff. Never infer completion from a PR's mere existence. A second silent
+death is blocked; no duplicate workspace. Reconcile adopted workers, then select
+and launch new work in the same pass; nothing serializes on a terminal result.
 
 A ticket in `<IN-PROGRESS>` with a branch or PR but **no** dispatch workspace is
 someone else's work (mine, or a hand-run `/work-issue`) — leave it alone and
@@ -191,7 +194,7 @@ criteria, write a contract, or plan an implementation: that is the dispatched
 session's job, from the same ticket.
 
 **An empty queue is a normal outcome** — report "no new `<AGENT-READY>` tickets
-to pick up" and finish supervising any adopted workers. Never widen scope to
+to pick up" and reconcile any adopted workers once. Never widen scope to
 invent work.
 
 ## Step 2 — Triage: dispatch or decline
@@ -278,7 +281,7 @@ For each `dispatch` ticket, in parallel:
      this session too: pass the bootstrap prompt as `message` and a bootstrap
      `sessionName` in that call; do not start a second bootstrap concurrently.
 2. **Bootstrap and work session** — follow
-   [cloud bootstrap and supervision](../feature-goal/references/cloud-relay.md).
+   [cloud bootstrap and dispatch](../feature-goal/references/cloud-relay.md).
    Prepare a separate dispatch configuration from the resolved repo config,
    setting only `labels.agentReady` to the resolved `<AGENT-READY>` value
    (including the `agent:ready` fallback). Preserve every other setting and
@@ -294,11 +297,11 @@ For each `dispatch` ticket, in parallel:
    removing only `<AGENT-READY>` and moving it to `<IN-PROGRESS>`, then runs
    the existing `work-issue` implement → review/fix → draft PR → babysit → QA
    handoff loop. Do not copy or shorten that loop in the dispatch prompt.
-3. **Supervise** — persist one supervisor state per workspace, then step them
-   every 60 seconds until each is complete or concretely blocked. The worker
-   claims, implements, reviews, babysits and writes the QA handoff. The caller
-   recovers one silent crash and flushes queued tracker writes if sandbox access
-   is denied. Keep the user informed while work proceeds.
+3. **Confirm and detach** — persist one supervisor state per workspace, confirm
+   each work session reaches working (bounded, per the reference), report the
+   deep links and **end the run**. The worker claims, implements, reviews,
+   babysits and writes the QA handoff on its own. A later invocation recovers a
+   silent crash and flushes queued tracker writes if sandbox access was denied.
 
 **The claim window is real and accepted:** between dispatch and the session's
 claim the ticket still carries `<AGENT-READY>`, so two dispatcher runs racing in
@@ -341,7 +344,8 @@ the dispatcher writes nothing to a PR.
 
 In `dry-run`, the table shows what *would* be dispatched and in what order; no
 Outcome column actions are taken. Include existing workers' observed status in
-the preview. Dispatch reports follow supervision to terminal results.
+the preview. A dispatch report states each worker's status at the moment the
+run ended — in-flight is a normal outcome, not an unfinished report.
 
 ## Scheduling
 
@@ -353,15 +357,17 @@ authorize creating or editing a schedule.
 
 A schedule prompt should identify the repository/team and any narrower scope
 or cap the user wants. `daily-ticket-manager` can populate the queue beforehand,
-but is not a prerequisite. Allow time for supervision through implementation,
-CI, bot reviews and the QA handoff; this is a long-running invocation. Re-runs
-adopt existing workspaces before selecting new tickets.
+but is not a prerequisite. Each invocation is short — dispatch, confirm, report
+— so schedule it at an interval that fits implementation, CI, bot reviews and
+the QA handoff (workers usually need hours, so a run every few hours reconciles
+them promptly without any of it running locally). Re-runs adopt existing
+workspaces before selecting new tickets.
 
 ## Workflow Boundaries
 
 **This skill drains the agent-ready queue by fanning it out: it selects, triages, and gives each ticket its own cloud workspace running `/work-issue`. It writes no code.**
 
-- **DOES**: sweep existing workspaces, select the repo's unclaimed `<AGENT-READY>` queue, triage, decline escalations, and by default create one cloud workspace per eligible ticket (optional `max N`); bootstrap the selected runtime, invoke `/work-issue <ISSUE>`, supervise to terminal results, apply exact queued tracker operations, and report deep links. Explicit `dry-run` only inspects and previews.
+- **DOES**: sweep existing workspaces, select the repo's unclaimed `<AGENT-READY>` queue, triage, decline escalations, and by default create one cloud workspace per eligible ticket (optional `max N`); bootstrap the selected runtime, invoke `/work-issue <ISSUE>`, confirm each session started, apply exact queued tracker operations found from earlier runs, and report deep links. Explicit `dry-run` only inspects and previews.
 - **DOES NOT**: write, review, or fix code; create git branches or worktrees itself; run the development/review loop, Playwright, or gates; open, comment on, or babysit a PR; originate claims (the worker owns them); write to the tracker beyond declines and worker-authored queued operations; merge, mark PRs ready, approve, mark issues done, run compliance, or create/close tickets.
 
 ## Red Flags — STOP
@@ -374,7 +380,7 @@ adopt existing workspaces before selecting new tickets.
 - About to put anything but `/work-issue <ISSUE>` in the work session's prompt — stop: no context paste, no criteria, no plan.
 - About to compose a `## QA handoff`, a `## QA evidence` table, acceptance criteria, a dispatch marker, or any comment other than a decline note on a ticket — stop: the ticket's one comment is the handoff, and its session writes it after GOAL MET.
 - About to call `create_attachment_from_upload` or attach media to a ticket — stop: this skill produces no media.
-- About to end with a newly dispatched worker still running — keep supervising; a work session finishing its PR does not replace the caller's monitoring responsibility.
+- About to wait on, poll, or babysit a dispatched worker — stop: confirm it is working, report the deep link, end the run. Ending with workers still running is the **expected** outcome; the next invocation reconciles them.
 - About to re-dispatch a ticket that already has an `<ISSUE>`-named workspace — stop: restart a session *in that workspace* if it died, nothing more; a second silent death is Blocked.
 - About to write labels without reading the current set first — `save_issue.labels` replaces the whole set; on a decline write it back minus exactly `<AGENT-READY>` and `<RISK:>`, nothing else. For dispatch, let the worker claim; only apply its exact queued label operations when tracker access requires the caller.
 - About to stamp `<HITL>` or route an `escalate` ticket yourself — decline instead: the note, cleared trigger/risk labels, unchanged status.
@@ -384,7 +390,7 @@ adopt existing workspaces before selecting new tickets.
 
 Before reporting done:
 
-- [ ] The Resume sweep ran **before** selection: every `<ISSUE>`-named workspace on the project was matched against the queue, adopted for supervision, and reported; no ticket with such a workspace was re-dispatched.
+- [ ] The Resume sweep ran **before** selection: every `<ISSUE>`-named workspace on the project was matched against the queue, reconciled in one step, and reported; no ticket with such a workspace was re-dispatched.
 - [ ] Selection paged the repo-scoped trigger queue to exhaustion, applied no implicit assignee/ready-for-dev filter, and treated `agent:ready` as a trigger rather than a runtime. Only explicit `max N` capped new workspaces.
 - [ ] Nothing in this run wrote, tested, or committed code, created a git branch/worktree itself, ran the development/review loop, or touched a PR.
 - [ ] No ticket was claimed here — the worker performed its own claim; the caller only applied queued operations when tracker access required it.
