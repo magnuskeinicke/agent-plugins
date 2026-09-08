@@ -12,12 +12,16 @@ export const ROLE_MODELS = {
   verifier: profile('sonnet', 'gpt-5.6-terra', 'high', 'read-only'),
   explorer: profile('sonnet', 'gpt-5.6-terra', 'medium', 'read-only'),
   triage: profile('sonnet', 'gpt-5.6-terra', 'medium', 'read-only'),
+  babysitter: {
+    claude: { model: 'sonnet', effort: 'medium', access: 'workspace-write' },
+    codex: { model: 'gpt-5.6-sol', effort: 'xhigh', access: 'workspace-write' },
+  },
   dispatcher: profile('sonnet', 'gpt-5.6-luna', 'medium', 'workspace-write'),
 };
 
 export const SKILL_ROLES = {
   'feature-goal': 'planner', 'work-issue': 'implementer', 'work-slice': 'implementer',
-  'iterate-pr': 'fixer', 'babysit-stack': 'dispatcher', 'solve-ready-tickets': 'dispatcher',
+  'iterate-pr': 'fixer', 'babysit-stack': 'babysitter', 'solve-ready-tickets': 'dispatcher',
   'daily-ticket-manager': 'triage', 'grill-with-docs': 'planner', 'to-prd': 'planner',
   'to-issues': 'planner', 'improve-codebase-architecture': 'planner', 'review-code': 'reviewer',
   'gut-check': 'reviewer', 'split-pr': 'planner', 'init-repo': 'planner',
@@ -38,7 +42,7 @@ export function resolveModel(cfg, { role, runtime, modelAlias, effort, cloud = f
   if (modelAlias && modelAlias !== 'inherit') {
     result.model = runtime === 'claude' ? modelAlias : cfg.routing?.codexModelAliases?.[modelAlias];
     if (!result.model) throw new Error(`Unmapped ${runtime} model alias: ${modelAlias}`);
-  } else if (runtime === 'codex' && role !== 'dispatcher') {
+  } else if (runtime === 'codex' && !['dispatcher', 'babysitter'].includes(role)) {
     const alias = ROLE_MODELS[role].claude.model;
     result.model = cfg.routing?.codexModelAliases?.[alias] || base.model;
   }

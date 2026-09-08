@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'no
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runTask, buildInvocation, strictOutputSchema } from '../lib/runner.mjs';
-import { taskModels, resolveModel, ROLE_MODELS } from '../lib/models.mjs';
+import { taskModels, resolveModel, ROLE_MODELS, SKILL_ROLES } from '../lib/models.mjs';
 import { resolveRepoConfig } from '../lib/config.mjs';
 import { FINDINGS_SCHEMA } from '../lib/schemas.mjs';
 
@@ -38,6 +38,31 @@ test('legacy aliases and role overrides remain effective for both runtimes', () 
   assert.equal(taskModels(cfg, 'fixer').codex.model, 'gpt-6-astra');
   assert.equal(taskModels(cfg, 'fixer').claude.effort, 'high');
   assert.equal(resolveModel(cfg, { role: 'fixer', runtime: 'claude', cloud: true }).model, 'opus-5-1m');
+});
+
+test('babysitting selects Sol independently of lightweight dispatch and legacy aliases', () => {
+  const cfg = resolveRepoConfig({ routing: { codexModelAliases: { sonnet: 'gpt-5.6-terra' } } });
+  const role = SKILL_ROLES['babysit-stack'];
+  for (const cloud of [false, true]) {
+    const babysitter = resolveModel(cfg, { role, runtime: 'codex', cloud });
+    assert.equal(babysitter.model, 'gpt-5.6-sol');
+    assert.equal(babysitter.effort, 'xhigh');
+    assert.equal(babysitter.access, 'workspace-write');
+    assert.equal(resolveModel(cfg, { role: SKILL_ROLES['solve-ready-tickets'], runtime: 'codex', cloud }).model, 'gpt-5.6-luna');
+    const claude = resolveModel(cfg, { role, runtime: 'claude', cloud });
+    assert.equal(claude.model, cloud ? 'sonnet-5-1m' : 'sonnet');
+    assert.equal(claude.effort, 'medium');
+  }
+});
+
+test('babysitter role overrides control local and cloud profiles', () => {
+  const cfg = resolveRepoConfig({ routing: { models: { babysitter: {
+    codex: { model: 'gpt-6-astra', cloudModel: 'gpt-5.6-sol', effort: 'high' },
+  } } } });
+  assert.equal(resolveModel(cfg, { role: 'babysitter', runtime: 'codex' }).model, 'gpt-6-astra');
+  const cloud = resolveModel(cfg, { role: 'babysitter', runtime: 'codex', cloud: true });
+  assert.equal(cloud.model, 'gpt-5.6-sol');
+  assert.equal(cloud.effort, 'high');
 });
 
 test('CLI adapters use distinct effort flags, explicit cwd and stdin without a shell', (t) => {

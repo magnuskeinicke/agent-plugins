@@ -183,8 +183,19 @@ Resolve the highest completed stage, with these rules in order:
 
 ### Which session am I? (cloud mode, stages SLICE-LOOP / BABYSIT)
 
-The checkpoint records `Dispatcher session` and `Relay`. The relay only works if each session knows its role. Decide it from where you
-run, never from the conversation:
+The checkpoint records `Dispatcher session` and `Relay`. Determine your current
+workspace and session identity from Conductor before checking another session's
+status. `Dispatcher session` records who last dispatched; it does not assign
+the current session's role.
+
+If `Relay` names your current session, **you are that worker**. At BABYSIT,
+run `/babysit-stack <PRD-ISSUE>` here and continue to QA-HANDOFF. Your own
+`working` status is expected; it is never a reason to report a progressing
+babysitter and stop, reconcile yourself, or create a replacement for yourself.
+
+Use workspace identity when the relay checkpoint has not caught up with session
+creation; do not infer that a recorded worker is someone else merely because
+you could not obtain your session ID:
 
 - **In the pipeline workspace** — a Conductor cloud sandbox
   (`/conductor/bin/conductor` exists) whose workspace id (`conductor workspace
@@ -329,9 +340,10 @@ babysat to GOAL MET by its own PR session, so this leg is the **stack-wide
 sweep**: it re-walks the whole stack bottom → top, catches anything that moved
 since (a restack, a late bot round, a thread reopened by a human) and yields
 the one verdict QA-HANDOFF keys on — usually short. The babysit session is
-the last relay leg: the final PR session starts it with `/feature-goal
-<ISSUE>` (a session outside the workspace that finds stage BABYSIT with no
-babysit session recorded starts it the same way). Inside the pipeline
+the last relay leg: the final PR session starts it with the `babysitter` model
+role and explicit handoff in `references/cloud-relay.md` (a session outside the
+workspace that finds stage BABYSIT with no babysit session recorded starts it
+the same way). Inside the pipeline
 workspace at stage BABYSIT: run **`/babysit-stack <PRD-ISSUE>`** (the PRD
 ticket — its sub-issues are the slices) here, now, in this session — it is
 fresh, and this is its one job. Local mode runs `/babysit-stack <PRD-ISSUE>`

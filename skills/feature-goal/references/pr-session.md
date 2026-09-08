@@ -176,8 +176,9 @@ babysit uses); `gh stack view --json` shows the chain; `git status
   that agent. Prompt exactly `/feature-goal <ISSUE>` — it re-detects the
   stage and finds itself here.
 - **This was the last slice**: start the **babysit session** the same way,
-  name `babysit-<ISSUE>`, prompt `/feature-goal <ISSUE>` (stage detection
-  lands in BABYSIT inside the pipeline workspace). It is the stack-wide
+  name `babysit-<ISSUE>`, using the explicit babysitter handoff from
+  `cloud-relay.md` (stage detection lands in BABYSIT inside the pipeline
+  workspace). It is the stack-wide
   sweep: every PR was already babysat on its own, so it mostly confirms and
   yields the one verdict QA-HANDOFF keys on.
 - Record the started session in the pipeline checkpoint (`Relay`), report
@@ -192,7 +193,7 @@ from the markers).
 
 Read `cloud-relay.md` for the required terminal result marker at every exit.
 Resolve the successor's profile with the registry (`implementer` for a PR,
-`dispatcher` for the stack babysit), using the pinned config. Persist intended
+`babysitter` for the stack babysit), using the pinned config. Persist intended
 session/message UUIDs before creation, pass explicit model/effort, and check
 that its runtime passed bootstrap. Nothing is watching this handoff live: the
 recorded baton is what a later invocation follows.

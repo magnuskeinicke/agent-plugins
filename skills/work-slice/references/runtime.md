@@ -52,7 +52,12 @@ inherit the caller's resolved role.
 | planner, implementer, fixer, adjudicator | opus | gpt-5.6-sol | xhigh |
 | reviewer, verifier | sonnet | gpt-5.6-terra | high |
 | explorer, triage | sonnet | gpt-5.6-terra | medium |
+| babysitter | sonnet | gpt-5.6-sol | Claude medium; Codex xhigh |
 | dispatcher | sonnet | gpt-5.6-luna | medium |
+
+`babysit-stack` and the feature pipeline's final babysit session use `babysitter`.
+Its Codex default is independent of legacy model aliases; configure
+`routing.models.babysitter.codex` to override it.
 
 Host overrides: `routing.models.<role>.<runtime>` may set `model`, `effort`,
 `cloudModel`, `timeoutMs`, or `access` (`read-only` / `workspace-write`). Existing

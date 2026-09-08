@@ -14,8 +14,18 @@ Before creating work, read the routing labels on all selected tickets and
 resolve every destination with the shared runtime contract's `model --cloud`.
 Pass explicit model and effort on **every** session, including bootstrap,
 replacement workers and the final babysit session. A slice uses `implementer`;
-the stack babysit session uses `dispatcher`. Labels choose the runtime, the
+the stack babysit session uses `babysitter`. Labels choose the runtime, the
 registry chooses its model. Verify these IDs against `conductor model --json`.
+
+For every final babysit session, including recovery, use this handoff in the
+message file (substitute the actual IDs):
+
+```text
+/feature-goal <ISSUE>
+You are the final stack babysitter in pipeline workspace <workspace-id>.
+Resume stage detection from the checkpoint. At BABYSIT, run /babysit-stack <PRD-ISSUE> in this session, then complete QA-HANDOFF.
+If the recorded Relay session is this session, its working status is your own. Continue the work; do not report yourself as an external worker and stop.
+```
 
 For a feature pipeline, commit and push planning documents first. Record the
 docs branch and its full commit OID, then pin its config:
