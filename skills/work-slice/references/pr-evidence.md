@@ -95,7 +95,7 @@ written at **different moments** (above):
    by the time anything is captured. One scene per *logical group* of acceptance
    criteria, never one per criterion, and never both a video and a picture of
    the same thing. Every scene names the surface, the route, and the viewport
-   width.
+   dimensions.
 
 Both sections rest on the same rule as `/verify-before-done`: **a row or an
 image exists only for something that ran or was captured in this run.** No
@@ -114,8 +114,8 @@ work happens; `media/` is written only by the capture stage, after GOAL MET.
 .context/<run-id>/evidence/
   verification.jsonl     # one line per check actually run
   media/                   # written by the capture stage only, after GOAL MET
-    <scene>@2x.png         # a surface in its finished state
-    <flow>@2x.gif          # + <flow>.webm, the Playwright source video
+    <scene>.png         # a surface in its finished state
+    <flow>.gif          # + <flow>.webm, the Playwright source video
     media.json             # scene manifest, rendered into the section
 ```
 
@@ -154,16 +154,16 @@ Rules:
 
 ```json
 [{"scene": "admin-sidebar", "kind": "still" | "flow",
-  "surface": "Administration sidebar", "route": "/administration/users", "viewport": 1440,
+  "surface": "Administration sidebar", "route": "/administration/users", "viewport": 1920, "viewportHeight": 1080,
   "caption": "the new discovery-only Forms item", "criteria": [1, 2],
-  "files": {"image": "admin-sidebar@2x.png"},
-  "displayWidth": 830}]
+  "files": {"image": "admin-sidebar.png"},
+  "displayWidth": 960}]
 ```
 
 `kind` decides the render: `still` → one image; `flow` → one GIF (or a video
-link). `displayWidth` is the `<img width>` in CSS px — about half the 2× file's
-pixel width: ~830 for a full 1440 px viewport, ~390 for a mobile frame, ~410 for
-a cropped component.
+link). Every file is `1920 × 1080` pixels. `displayWidth` is the `<img width>`
+in CSS px: use `960` for a readable inline preview without changing the file
+resolution or aspect ratio.
 
 ## The capture stage — one run, after GOAL MET
 
@@ -171,7 +171,7 @@ Reached only on a `/babysit-stack` **GOAL MET** verdict, on the PR's own branch
 with every bot fix already merged into it. It is the **only** place the suite
 captures anything, and it runs once per verified PR head:
 
-1. Compare the media manifest's `sourceHead` with the live PR head. Reuse matching media; otherwise check out the PR's branch, up to date with what CI went green on
+1. Compare the media manifest's `sourceHead` with the live PR head. Reuse matching media only when every file is also `1920 × 1080`; otherwise check out the PR's branch, up to date with what CI went green on
    (`git status --porcelain` clean, head = the pushed head).
 2. Start the dev server (`devServerCommand`) if one is not already serving —
    one instance, never a second.
@@ -197,12 +197,16 @@ Rules for what it captures:
   that slips into a capture means **discard and recapture** — never blur, crop,
   or edit it out after the fact. (The dev stack is seeded, so its data needs no
   screening.)
-- **Viewport.** Desktop at `1440 × 900`, `deviceScaleFactor: 2` → files are
-  `@2x`. Add a `390` px mobile capture when the browser guide says the surface
-  is used on mobile or the diff touches responsive styles; each viewport is its
-  own scene, named with its width.
-- **Crop to what changed.** A component, sidebar, or table → `locator.screenshot()`
-  of that element; a whole page → the viewport (`fullPage: false`).
+- **Resolution.** Capture evidence only at desktop `1920 × 1080`, with
+  `viewport: { width: 1920, height: 1080 }`, `deviceScaleFactor: 1`, and
+  `isMobile: false`. Run the capture spec in one desktop Chromium project;
+  override inherited device settings and do not run a viewport/device matrix.
+  No mobile or other resolutions, including for responsive changes.
+- **Frame.** Use `page.screenshot({ path, fullPage: false, scale: 'css' })`
+  for a complete `1920 × 1080` viewport. Scroll the target into view and name
+  it in the caption; do not use element crops, `clip`, or full-page captures.
+  Check every image and video's pixel dimensions before publishing; recapture
+  anything that is not `1920 × 1080`.
 - **Finished state only — no before shots.** By capture time the base is long
   gone, and the suite never switches branches, stashes, or adds a second
   worktree + server to manufacture a "before". A scene shows what the surface
@@ -214,15 +218,17 @@ Rules for what it captures:
   scene is added only when it shows something no other scene shows.
 - **Video** is preferred whenever the change is something the user *does*
   (a flow, a state change, feedback). Record the story end to end with
-  `video: 'on'`, keep the `.webm` as the source (the tracker handoff embeds
+  `video: { mode: 'on', size: { width: 1920, height: 1080 } }`,
+  keep the `.webm` as the source (the tracker handoff embeds
   it — `qa-handoff.md`), and convert to a GIF for the PR body when `ffmpeg` is
   available:
 
   ```bash
-  ffmpeg -y -i "<flow>.webm" -vf "fps=8,scale=1660:-1:flags=lanczos" -loop 0 "<flow>@2x.gif"
+  ffmpeg -y -i "<flow>.webm" -vf "fps=8" -loop 0 "<flow>.gif"
   ```
 
-  Keep GIFs under ~5 MB (trim with `-ss`/`-t`, or lower `fps`). No `ffmpeg` →
+  Keep GIFs at `1920 × 1080` and under ~5 MB (trim with `-ss`/`-t`, or
+  lower `fps`; never reduce the resolution). No `ffmpeg` →
   publish the `.webm` if it is under 5 MB and link it (GitHub does not inline
   raw video); larger → link the tracker upload instead and say so in the scene.
   A behaviour change shown only as stills is a gap the section must name —
@@ -310,19 +316,19 @@ Not run here, left to CI:
 <!-- magnus:visual-verification -->
 ## Visual verification
 
-Captured against the local dev stack (`<devServerCommand>` + Docker services) with Playwright — headless Chromium, 1440 px, 2× scale — signed in as a seeded admin, after the PR went green and the review bots were satisfied.
+Captured against the local dev stack (`<devServerCommand>` + Docker services) with Playwright — headless Chromium, 1920 × 1080, 1× scale — signed in as a seeded admin, after the PR went green and the review bots were satisfied.
 
-**Administration sidebar, `/administration/users`, 1440 px — the new discovery-only Forms item.**
+**Administration sidebar, `/administration/users`, 1920 × 1080 — the new discovery-only Forms item.**
 
-<img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/admin-sidebar@2x.png" width="410" alt="Administration sidebar with the Forms item">
+<img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/admin-sidebar.png" width="960" alt="Administration sidebar with the Forms item">
 
-**Form templates table, `/administration/forms`, 1440 px — a published handle.**
+**Form templates table, `/administration/forms`, 1920 × 1080 — a published handle.**
 
-<img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/forms-table-published@2x.png" width="830" alt="Form templates table showing mouth-first-triage@1 published">
+<img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/forms-table-published.png" width="960" alt="Form templates table showing mouth-first-triage@1 published">
 
-**Publish flow, `/administration/forms`, 1440 px — not published yet → upload JSON → published row and success toast → second upload → overwrite confirmation → overwritten.**
+**Publish flow, `/administration/forms`, 1920 × 1080 — not published yet → upload JSON → published row and success toast → second upload → overwrite confirmation → overwritten.**
 
-<img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/publish-flow@2x.gif" width="830" alt="Uploading a form template JSON, the published row, and the overwrite confirmation">
+<img src="https://github.com/<owner>/<repo>/raw/<sha>/pr/<n>/publish-flow.gif" width="960" alt="Uploading a form template JSON, the published row, and the overwrite confirmation">
 <!-- /magnus:visual-verification -->
 
 <!-- magnus:notes -->
@@ -346,7 +352,7 @@ Rendering rules:
 - **Not one per criterion.** A scene that covers several acceptance criteria
   says so in its caption ("covers 1–3"); no scene is duplicated as both GIF and
   still.
-- **Scene caption**: `**<Surface>, `<route>`, <width> px — <what to look at>.**`
+- **Scene caption**: `**<Surface>, `<route>`, 1920 × 1080 — <what to look at>.**`
   For a flow, the caption walks the steps with `→`.
 - **`alt` text** describes what the image shows, not the file name.
 - **Internal-only change** (no user-facing surface): the section is one line —

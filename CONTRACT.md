@@ -110,7 +110,9 @@ skill's own summary and before any trailer — the spec is
   GOAL MET**, by the capture stage: one sentence on how the captures were made
   (stack, Playwright, viewport, seeded user), then the fewest scenes that prove
   the change (1–3): a still for appearance, a GIF for a flow, each captioned
-  with surface, route and viewport width. Scenes show the **finished state** —
+  with surface, route and viewport dimensions. All evidence uses a complete
+  `1920 × 1080` desktop viewport at 1× scale, including video/GIF frames; no
+  mobile variants, other resolutions, or element crops. Scenes show the **finished state** —
   there are no before shots, and nothing visual is captured before the verdict.
   Media is committed to `pr.mediaBranch` under `pr/<n>/`, referenced by commit
   sha, and re-used verbatim by the tracker's `## QA handoff` — one capture per
