@@ -118,9 +118,17 @@ machine (run it again to resume) that chains:
 6. QA handoff — **after** the stack is GOAL MET, one concise `## QA handoff` comment on the
    feature ticket for QA (user-terms steps + one **inline-embedded** visual per group of criteria,
    under ~150 words, no dev material, no tracker attachments — see
-   `skills/work-slice/references/qa-handoff.md`); it is the only thing the suite ever writes on a
+   `skills/work-slice/references/qa-handoff.md`); it is the only suite comment on a
    human's ticket, and re-runs edit it rather than adding a second. Slice tickets stay internal;
    `/work-issue` writes the same single comment once it has babysat its PR green
+
+Both workflows claim the human parent when work starts and move it to **Dev in
+progress**. Every PR links that parent and its own generated slice (plus the PRD
+when present). After the full PR/stack and QA handoff are complete, the parent
+moves to **Dev technical review** and **all generated internal descendants,
+including the PRD, move to Done**. PRs remain drafts for human review; generated
+tickets need no human review. The repo's `tracker.statuses` maps these roles to
+its tracker. Status/link failures remain pending and are repaired on resume.
 
 Planning (steps 1–3) happens in your session (local, or a cloud workspace you handed the grill
 off to); everything after it runs as fresh one-PR sessions in the pipeline workspace. The

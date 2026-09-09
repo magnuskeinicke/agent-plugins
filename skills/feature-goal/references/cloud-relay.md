@@ -43,7 +43,8 @@ resolution, including on branches cut from `<BASE>`. The engine persists the
 resolved config in its ledger.
 
 Write a bootstrap prompt file containing the feature/PRD or ticket IDs, docs
-branch/OID where applicable, selected runtimes, resolved profiles, the exact
+branch/OID where applicable, claim owner, generated ticket inventory, PR → issue
+mapping, selected runtimes, resolved profiles, the exact
 config snapshot and this bootstrap checklist. These are machine state, not a
 second implementation brief. Use `--message-file` (MCP: its structured message
 argument) to transfer it; local `.context/` does not travel to a cloud workspace.
@@ -69,8 +70,17 @@ argument) to transfer it; local `.context/` does not travel to a cloud workspace
    destination runtime. Denied tracker writes may use the caller's queue below
    only when the caller has verified read/write access. Missing tracker reads
    or missing caller write access is a blocker.
+   For standalone planning-write mode, run `/work-issue`'s resume/preflight
+   checks now and include its exact parent claim payload in the bootstrap
+   result for the caller to apply before starting the implementation session.
 5. Report `BOOTSTRAP OK` plus installed versions, checked runtimes and
    `TRACKER WRITES: sandbox | planning`, or `BOOTSTRAP FAILED: <reason>`.
+
+Before dispatch in planning-write mode, apply and read back the parent's claim
+through the authorized caller, using `issue-lifecycle.md`. For a standalone run,
+this is the bootstrap/worker's exact claim payload after its fresh-run preflight;
+the dispatcher only relays that payload. Record the acknowledged claim in the
+destination checkpoint. A queued claim does not reserve an issue.
 
 Bootstrap has a three-minute bound, with status checks at 60-second intervals.
 After success, start a **fresh** work session with `/feature-goal <ISSUE>` or
@@ -168,7 +178,8 @@ Record `Tracker writes: sandbox | planning` in the shared checkpoint. In plannin
 mode, queue each denied operation under
 `.context/<ISSUE>/tracker-writes-pending/<NN>-<kind>-<target>.json` with a stable
 operation ID, kind, target, exact body/value and existing comment ID when known.
-Kinds: comment upsert, label add/remove, status update. Use local queued markers
+Kinds: comment upsert, label add/remove, assignee/ownership update, status update
+(including GitHub project/label status and internal issue closure). Use local queued markers
 for relay progress. Never discard a denied write or retry a known 403 repeatedly.
 
 Include the exact queued payloads in each terminal session report so the caller
@@ -179,7 +190,7 @@ then read its response; never start a competing implementation session.
 
 Flushing is part of a reconcile step, never a reason to stay alive: an
 invocation that finds queued writes applies them in order, upserting comments by
-ID/heading and applying only the named label/status change, then ends. Read back
+ID/heading and applying only the named field/state change, then ends. Read back
 each effect before recording its operation ID as applied in local supervisor
 state. Repeating a flush must not duplicate a comment or replay an older status
 over a later acknowledged one. An unexpected permission change switches to
@@ -187,7 +198,11 @@ planning mode only if the caller can write; otherwise report the blocker with
 the queue intact.
 
 A worker that reports `tracker-pending` leaves the queue durable in the
-workspace; the next invocation flushes the final QA handoff, verifies it on the
-ticket, verifies the current-head PR verdicts and media, and only then marks
-supervisor state `complete`. Queued writes are never lost by stopping — they
+workspace. Before flushing final transitions, verify current-head PR verdicts,
+media and every PR's parent/generated-issue mapping. If stale, resume the owning
+stage instead of applying a completion status. Flush the QA handoff, then all
+owned generated descendants to Done (PRD last), then the human parent to Dev
+technical review, using the resolved mapping in `issue-lifecycle.md`. Read back
+the handoff and every affected status before marking supervisor state `complete`;
+an old `complete` marker also requires this audit. Queued writes are never lost by stopping — they
 wait in the queue for the invocation that can apply them.

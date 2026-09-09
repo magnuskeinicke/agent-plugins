@@ -4,6 +4,8 @@ Every PR the suite opens carries its evidence **in its description**, so a
 reviewer can judge what was actually run and actually seen without pulling the
 branch. Shared by `/work-slice`, `/work-issue` (including the runs
 `/solve-ready-tickets` dispatches) and `/split-pr`; refreshed by `/iterate-pr` and `/babysit-stack` when they push.
+Preserve the PR's `## Issues` mapping during every refresh: the human parent
+and the generated ticket this PR implements, per [issue-lifecycle.md](issue-lifecycle.md).
 
 Visual evidence is **captured once, at the very end** — see the next section.
 
@@ -22,6 +24,7 @@ for a bot, a ledger, or a future audit:
 | Goes in the body | Stays in `.context/<run-id>/` + the terminal report |
 | --- | --- |
 | Summary / What (the PR skill's own content) | the convention provenance table |
+| `## Issues` — parent and corresponding PRD/slice links | the full workflow ticket inventory |
 | `## Verification` — what was actually run | the review ledger, `CR-NNN` ids, dispute evidence, adjudication rulings |
 | `## Visual verification` — the fewest scenes that prove it | reviewer roster, model/agent names, round counts |
 | `## Notes` — only what a human must act on (see below) | routing disclosures, "posted by" attributions, capture methodology |

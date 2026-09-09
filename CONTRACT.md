@@ -62,7 +62,7 @@ config) and **names which it used** rather than guessing silently.
 | `tracker.team` / `tracker.teamId` | string | `''` | team scope for tracker queries |
 | `tracker.issuePrefix` | string | `''` | issue-id prefix (`SER` → `SER-1234`); also the PR-title prefix |
 | `tracker.docPath` | string | `docs/agents/issue-tracker.md` | prose rules |
-| `tracker.statuses` | `{readyForDev, inProgress, inReview, done}` | all `''` | status names the skills move issues between |
+| `tracker.statuses` | `{readyForDev, inProgress, inReview, done}` | all `''` → discover from tracker | workflow status names: `inProgress` = Dev in progress, `inReview` = Dev technical review for the human parent, `done` = Done for generated internal descendants |
 
 ### `labels`
 
@@ -224,16 +224,29 @@ user starts them.
 
 ### Tracker audiences
 
+`skills/work-slice/references/issue-lifecycle.md` owns the shared lifecycle:
+`feature-goal` claims the human parent at entry (or creation), and `work-issue`
+claims it after preflight. Preserve/resolve the assignee, remove `agentReady`,
+and move it to `tracker.statuses.inProgress`. Every PR body links the human
+parent and its corresponding generated issue; each stack PR names its own
+slice plus the PRD. Use non-closing references so merging cannot auto-close the
+parent. After the entire deliverable is babysat green and its QA handoff is
+published, move all workflow-generated descendants (including the PRD) to
+`done`, then the human parent to `inReview`. Generated tickets need no human
+review. Preserve unrelated human children and unfinished follow-up tickets.
+Read back statuses and PR links before declaring completion; denied writes
+stay pending across cloud handoffs and re-entry.
+
 The tracker is documentation for the user + AI **and** the handoff surface for
 QA, who has no code access — never a dev log
 (`skills/work-slice/references/qa-handoff.md`):
 
 - **Feature ticket** — the human's ticket (PM, designers, QA): the suite
-  writes labels and, **only once the stack is GOAL MET**, exactly one
+  writes claim/assignee fields, status, labels and, **only once the stack is GOAL MET**, exactly one
   **`## QA handoff`** comment: per acceptance criterion (grouped where one
   walk-through covers several) the steps in user terms, the expected
   result, and one embedded visual per group — under ~150 words of prose.
-  Nothing else suite-authored, ever, and nothing before the PRs are done (a
+  No other suite comment, and no comment before the PRs are done (a
   handoff written earlier goes stale on the next bot round). Re-runs **edit
   that comment by id**; a second suite comment is a defect.
 - **PRD ticket** — a `PRD: <feature title>` sub-issue of the feature ticket

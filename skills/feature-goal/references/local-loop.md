@@ -28,7 +28,8 @@ work-slice verbatim.
 
 ## Per slice, in stack order, until none remain
 
-1. **Select + claim** (work-slice Step 1) — pick the `<NEXT>` carrier
+1. **Select + claim** (work-slice Step 1) — reconcile the parent/PRD claims
+   under [the shared issue lifecycle](../../work-slice/references/issue-lifecycle.md), then pick the `<NEXT>` carrier
    (fallback: earliest slice in stack order whose predecessor has an open or
    merged PR and that is not done / in progress), fetch slice + PRD ticket +
    Skeleton-map comment, clear `<NEXT>` (additive label write), set status
@@ -66,7 +67,8 @@ work-slice verbatim.
    > `<predecessor-branch | BASE>` @ `<oid>`, checkpoint `BRANCH_READY`. Do
    > NOT rename, reset, or create branches. Run Steps 3–8 verbatim (implement
    > + engine-CLI review loop, artifact-free Playwright loop, text-only QA
-   > evidence + consolidation tickets, draft PR with `## Verification` only +
+   > evidence + consolidation tickets, draft PR with `## Issues` linking the
+   > human parent/PRD/this slice and `## Verification` (no media yet) +
    > `gh stack link` by PR number, no PR comment, skeleton map + `<NEXT>`
    > pointer). Capture no media before the babysit verdict. Step 5.1 does not apply (nothing was
    > renamed); push with `gh stack push --remote origin`. If the slice body
@@ -85,7 +87,8 @@ work-slice verbatim.
 4. **Verify from durable markers, not the reply**: `.context/<slice-id>/
    workflow-state.md` reads `COMPLETE` (babysit GOAL MET), `gh pr view` shows
    an open draft PR on `<stack-name>` with the predecessor's branch as base,
-   CI green and no unresolved review threads, `gh stack view --json` shows
+   CI green and no unresolved review threads, PR body issue links correct,
+   `gh stack view --json` shows
    the chain, `git status --porcelain` is clean. Markers short of that → the
    slice is re-entrant: spawn **one more fresh** subagent with the same
    prompt (work-slice resumes from its checkpoint, the engine's `status`, and

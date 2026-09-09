@@ -113,6 +113,12 @@ Iterate until the user approves. **Pipeline mode (`/feature-goal`): skip the qui
 
 ### 6. Publish the sub-issues
 
+Read [the shared issue lifecycle](../work-slice/references/issue-lifecycle.md).
+Add/preserve `## Workflow ownership` on each generated slice with the human
+feature parent ID/URL and role `slice`; return all created/reused IDs to the
+pipeline inventory. These tickets are internal and go to Done at the whole
+deliverable's final handoff; they never need human technical review.
+
 Publish in **stack order** (skeleton first) so you can reference real ids in the "Stacked on" / blocked-by fields. For each approved slice create a sub-issue of the **PRD ticket** (`parentId` = `<PRD-ISSUE>`, never the feature ticket) using the body template below. Reuse the repo's create flow (`tracker.docPath`, via `<ISSUE-SKILL>` where one exists: team + assignee). Set the blocked-by relation to the predecessor.
 
 Labels per `labels.docPath` — a `<TYPE:>*` **and** `<SKIP>` on every slice, plus:
@@ -131,7 +137,7 @@ Do NOT modify the PRD ticket's or the feature ticket's body, status, or assignee
 <subissue-template>
 ## Parent
 
-[<PRD-ISSUE>](<prd-url>) — the PRD (its description). Read it for the full picture. Feature ticket: [<ISSUE>](<feature-url>) — the human's framing; never write there.
+[<PRD-ISSUE>](<prd-url>) — the PRD (its description). Read it for the full picture. Feature ticket: [<ISSUE>](<feature-url>) — the human's framing; claim/status updates follow `issue-lifecycle.md`, and only the final QA handoff belongs in its comments.
 
 ## Kind
 

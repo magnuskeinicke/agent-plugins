@@ -3,13 +3,17 @@
 The tracker is not a dev log, and a human's ticket is not the suite's scratch
 pad. Every ticket write in the suite must know which audience it is talking to,
 and a **human-authored ticket gets exactly one suite comment, ever**.
+Claim/assignee fields, status transitions and PR references follow
+[issue-lifecycle.md](issue-lifecycle.md); they are separate from this comment
+budget. The human parent goes to technical review at final handoff; generated
+PRD/slice tickets go to Done and require no human review.
 
 ## Who reads which ticket
 
 | Ticket | Audience | The suite may write | Never on this ticket |
 | --- | --- | --- | --- |
-| **Feature ticket** (`<ISSUE>` — the human's ticket, seed of `/feature-goal`) | PM, designers, **QA**, the user | labels, status, and **one** `## QA handoff` comment (this file) | everything else |
-| **Standalone ticket** (`/work-issue`, whether run by hand or dispatched by `/solve-ready-tickets`) | QA (and the user) | labels, status, and **one** suite comment — the `## QA handoff`, or the dispatcher's decline note that the same slot later becomes | everything else |
+| **Feature ticket** (`<ISSUE>` — the human's ticket, seed of `/feature-goal`) | PM, designers, **QA**, the user | claim/assignee fields, labels, status, and **one** `## QA handoff` comment (this file) | everything else |
+| **Standalone ticket** (`/work-issue`, whether run by hand or dispatched by `/solve-ready-tickets`) | QA (and the user) | claim/assignee fields, labels, status, and **one** suite comment — the `## QA handoff`, or the dispatcher's decline note that the same slot later becomes | everything else |
 | **PRD ticket** (`PRD: …` sub-issue of the feature ticket, `/to-prd`) | the user + AI | the PRD as its description; `## Implementation deltas` comment | QA handoff (that is the feature ticket's), per-slice machinery |
 | **Slice sub-issues** (`/to-issues`, children of the PRD ticket) | the user + AI **only** — never shown to anyone else | anything the machinery needs: Skeleton map, `## Cloud dispatch`, `## Assumptions`, **text-only** `## QA evidence` (PASS/FAIL rows, no images), acceptance-criteria notes | images or video — the only two places visual proof appears are the PR body and the human ticket's handoff |
 
@@ -51,14 +55,14 @@ reads it.
 
 Consequences, binding on every skill:
 
-- Nothing is posted to the human ticket at claim time, at PR-open time, or
+- No comment is posted to the human ticket at claim time, at PR-open time, or
   between review rounds. Not acceptance criteria, not a status note.
 - **Nothing is even captured before then** — the media is produced by the
   post-GOAL-MET capture stage (`pr-evidence.md`), which is also what fills the
   PR body's `## Visual verification`. The handoff embeds those same files; there
   is never a second set of captures and never an earlier copy of them.
-- A run that ends **Blocked** short of GOAL MET writes **nothing** on the
-  ticket; the state lives on the PR, and the resume report names it.
+- A run that ends **Blocked** short of GOAL MET posts no handoff and leaves the
+  parent in development; the blocker lives on the PR and in the resume report.
 - If a later run changes what QA would see, it re-renders the same comment.
 
 ## The `## QA handoff` comment

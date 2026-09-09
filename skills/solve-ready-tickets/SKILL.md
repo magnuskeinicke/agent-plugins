@@ -70,7 +70,7 @@ The keys `/work-issue` needs — `skills.startWork`, `skills.createPr`,
 `devServerCommand` — are **not** this skill's business. The dispatched session
 resolves them from the same file inside its own sandbox.
 
-This skill never marks an issue done, merges, approves, opens a PR, or runs
+This skill never originates a completion transition, merges, approves, opens a PR, or runs
 compliance. Its terminal state is **N completed or blocked workspaces + a report of deep
 links**. Every line of code the run produces gets human eyes on a draft PR.
 
@@ -296,7 +296,9 @@ For each `dispatch` ticket, in parallel:
    and holds the runtime metadata. The worker claims the issue by
    removing only `<AGENT-READY>` and moving it to `<IN-PROGRESS>`, then runs
    the existing `work-issue` implement → review/fix → draft PR → babysit → QA
-   handoff loop. Do not copy or shorten that loop in the dispatch prompt.
+   handoff and tracker-finalization loop. In planning-write mode, apply and read
+   back the bootstrap/worker's exact claim payload before starting the work
+   session, per `cloud-relay.md`. Do not copy or shorten the loop in the prompt.
 3. **Confirm and detach** — persist one supervisor state per workspace, confirm
    each work session reaches working (bounded, per the reference), report the
    deep links and **end the run**. The worker claims, implements, reviews,
@@ -368,7 +370,7 @@ workspaces before selecting new tickets.
 **This skill drains the agent-ready queue by fanning it out: it selects, triages, and gives each ticket its own cloud workspace running `/work-issue`. It writes no code.**
 
 - **DOES**: sweep existing workspaces, select the repo's unclaimed `<AGENT-READY>` queue, triage, decline escalations, and by default create one cloud workspace per eligible ticket (optional `max N`); bootstrap the selected runtime, invoke `/work-issue <ISSUE>`, confirm each session started, apply exact queued tracker operations found from earlier runs, and report deep links. Explicit `dry-run` only inspects and previews.
-- **DOES NOT**: write, review, or fix code; create git branches or worktrees itself; run the development/review loop, Playwright, or gates; open, comment on, or babysit a PR; originate claims (the worker owns them); write to the tracker beyond declines and worker-authored queued operations; merge, mark PRs ready, approve, mark issues done, run compliance, or create/close tickets.
+- **DOES NOT**: write, review, or fix code; create git branches or worktrees itself; run the development/review loop, Playwright, or gates; open, comment on, or babysit a PR; originate claims (the worker owns them); write to the tracker beyond declines and worker-authored queued operations; merge, mark PRs ready, approve, originate issue completion, run compliance, or create/close tickets outside exact worker-authored queued finalization.
 
 ## Red Flags — STOP
 
@@ -395,10 +397,10 @@ Before reporting done:
 - [ ] Nothing in this run wrote, tested, or committed code, created a git branch/worktree itself, ran the development/review loop, or touched a PR.
 - [ ] No ticket was claimed here — the worker performed its own claim; the caller only applied queued operations when tracker access required it.
 - [ ] Every dispatched ticket has exactly one workspace, named `<ISSUE> …`, whose work session's entire prompt is `/work-issue <ISSUE>` — after a bootstrap session that replied `BOOTSTRAP OK`.
-- [ ] The dispatcher authored only decline notes and applied only exact worker-authored queued comments, upserting by ID. No tracker attachments.
+- [ ] The dispatcher authored only decline notes and applied only exact worker-authored queued operations (comments, labels, assignee and status), reading each effect back. Finalization verified parent technical review, generated descendants Done and correct PR issue links. No tracker attachments.
 - [ ] Declined tickets: `<AGENT-READY>` **and** `<RISK:>*` cleared in one additive write, every other label preserved, no routing label added, status unchanged, no workspace created.
 - [ ] The Step 4 report accounts for every queue ticket — completed, blocked, declined, failed to dispatch, or left to another owner — with **deep links**, and names every item that needs me.
-- [ ] Nothing in the run merged, marked ready, marked done, or initiated compliance.
+- [ ] Nothing in the run merged, marked ready, originated issue completion or initiated compliance; only verified worker-authored finalization payloads changed issue completion states.
 - [ ] Explicit dry-run created no workspace/session, restarted no worker, flushed no writes, and still previewed the new queue after inspecting existing workspaces.
 
 ---

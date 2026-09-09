@@ -29,9 +29,14 @@ owns which label.
 
 ## The ticket tree
 
+Read [the shared issue lifecycle](../work-slice/references/issue-lifecycle.md)
+when publishing: record workflow ownership on the generated PRD and return its
+ID/URL and the human parent's to the caller. In pipeline mode `/feature-goal`
+owns their claims and final statuses; standalone `/to-prd` does not claim them.
+
 Three tiers, two audiences (`../work-slice/references/qa-handoff.md`):
 
-- **Feature ticket `<ISSUE>`** — the human's ticket. PM, designers and QA read it; its description and comments are theirs. The suite writes **nothing** on it except labels and, once the whole stack is babysat green, one concise `## QA handoff` comment with inline evidence (`../work-slice/references/qa-handoff.md`). No PRD, no assumptions, no dev material, no progress notes.
+- **Feature ticket `<ISSUE>`** — the human's ticket. PM, designers and QA read it; its description and comments are theirs. The suite writes claim/status fields, labels and, once the whole stack is babysat green, one concise `## QA handoff` comment with inline evidence (`../work-slice/references/qa-handoff.md`). No PRD, no assumptions, no dev material, no progress notes.
 - **PRD ticket `<PRD-ISSUE>`** — a sub-issue of the feature ticket, titled **`PRD: <feature ticket title>`**, whose **description is the PRD**. Dev-owned: `/work-slice` appends `## Implementation deltas` comments here, `/to-issues` hangs every slice off it. This is the ticket this skill produces.
 - **Slice tickets** — sub-issues of the PRD ticket, created by `/to-issues`.
 
@@ -59,7 +64,10 @@ Either way you end with exactly one feature ticket and exactly one PRD ticket un
    - Apply a `<TYPE:>*` label **and** `<SKIP>` to the **PRD ticket**, and `<SKIP>` to the **feature ticket**, per `labels.docPath`. Preserve existing labels — add, don't replace. Create `<SKIP>` first if the team lacks it (muted grey e.g. `#6b7280`).
    - `<SKIP>` is the triage opt-out: it tells `daily-ticket-manager` to leave these tickets alone. Stamp it now — before any slice exists — because a sub-issue-less PRD ticket otherwise looks standalone to the daily triage and could be wrongly routed `<AGENT-READY>`.
    - Do NOT apply any routing label. Neither ticket is a unit of agent work, so neither may carry `<AGENT-READY>` (the autonomous-loop trigger) or the `<NEXT>` work pointer. `/to-issues` puts the work pointer on the first slice instead.
-   - Do NOT create slice sub-issues, change status, or reassign. That's the next step's job.
+   - Add/preserve the PRD's `## Workflow ownership` section per
+     `issue-lifecycle.md`. Do NOT create slice sub-issues. Standalone mode does
+     not change status or reassign; in pipeline mode return newly created IDs
+     immediately so `/feature-goal` can claim the parent/PRD before continuing.
 
 5. Report the feature ticket id + URL and the PRD ticket id + URL, then hand off **by caller**:
    - **Standalone** (the user invoked `/to-prd` directly) → tell them to run `/to-issues` to slice it.
@@ -140,7 +148,7 @@ Any further notes about the feature.
 - A `PRD:` sub-issue already exists and you're about to create another — stop; update its description.
 - About to put file paths or code snippets into Implementation Decisions — stop; they go stale (only a decision-rich prototype snippet may be inlined).
 - About to apply `<AGENT-READY>` or `<NEXT>` to the feature or PRD ticket — stop; neither is a unit of agent work.
-- About to create sub-issues, change status, or reassign — stop; that's `/to-issues`'s job.
+- About to create slice sub-issues — stop; that is `/to-issues`'s job. Claim/status transitions belong to the calling workflow under `issue-lifecycle.md`.
 - About to replace the ticket's existing labels — stop; add, don't replace.
 
 ## Verification

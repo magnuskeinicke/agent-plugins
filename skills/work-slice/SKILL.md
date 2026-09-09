@@ -29,7 +29,7 @@ say so once.
 | `<PRD-ISSUE>` | derived — the `PRD:`-titled sub-issue of `<ISSUE>`; parent of every slice, its description is the PRD | — |
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
 | `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
-| `<IN-PROGRESS>` | `tracker.statuses.inProgress` | leave the status untouched |
+| `<IN-PROGRESS>` | `tracker.statuses.inProgress` | discover Dev in progress via the shared lifecycle |
 | `<NEXT>` | `labels.sliceNext` | no pointer label — the user names the next slice |
 | `<HITL>` | `labels.needsHuman` | read "needs a human decision" from the ticket body — informational, never a gate |
 | `<SKIP>` | `labels.managerSkip` | skip the triage opt-out stamp |
@@ -46,6 +46,9 @@ say so once.
 Also read the prose docs the config points at: `tracker.docPath` (how to fetch
 issues, read blocked-by relations, mark state) and `labels.docPath` (the `<NEXT>`
 work pointer vs the autonomous-loop trigger).
+Read [the shared issue lifecycle](references/issue-lifecycle.md) for resolving
+the human parent, claims and PR issue links. `/feature-goal` owns final statuses
+for the whole stack; a completed slice alone never hands the parent to review.
 
 ## Resume — the `## Workflow State` checkpoint
 
@@ -57,6 +60,9 @@ single overwritten block — full OIDs, never abbreviations:
 ## Workflow State
 - Stage: IMPLEMENTED
 - Slice: PROJ-1234
+- Parent / PRD: <IDs and URLs>
+- Claim owner: <initiating user / run or workspace>
+- PR issue mapping: <PR → parent / PRD / slice IDs and URLs>
 - Branch: summary-feature/02-proj-1234
 - Base: summary-feature/01-proj-1230 @ <full base OID>
 - Head: <full head OID>
@@ -97,9 +103,13 @@ Input is a PRD ticket id (or the feature ticket's — descend to its `PRD:` sub-
 
 **Routing disclosure** (only when `<AGENT:>` is configured): if the chosen slice carries an `<AGENT:><name>` label naming an agent **other than the runtime you are running in** (Claude Code vs Codex — you know which you are), you still work it — the user or orchestrator invoking you here made that call — but say so once in the terminal and under the slice ticket's `## Assumptions`: `routing label <AGENT:><name> not honoured: worked by <this runtime>`. A matching label, or no `<AGENT:>` label, changes nothing.
 
-Fetch the chosen slice AND the PRD ticket (the PRD is the PRD ticket's **description**; its `## Implementation deltas` comments amend it). Read, verbatim: the slice's **Kind** (skeleton vs delta), **Novel decision**, acceptance criteria, "Where to look" code-layer pointers, the **"Convention contract"** section (binding exemplars + must-use libs), "Design" Figma nodes/tokens, and "Stacked on" predecessor. For a **delta**, also read the ticket's **"Skeleton map" comment** (posted by the skeleton's `/work-slice` run — the actual files the skeleton created; the primary mirror). Read the PRD for the wider contract. The feature ticket (the PRD ticket's parent) is the human's — read it for framing and design links, never write to it.
+Fetch the chosen slice AND the PRD ticket (the PRD is the PRD ticket's **description**; its `## Implementation deltas` comments amend it). Read, verbatim: the slice's **Kind** (skeleton vs delta), **Novel decision**, acceptance criteria, "Where to look" code-layer pointers, the **"Convention contract"** section (binding exemplars + must-use libs), "Design" Figma nodes/tokens, and "Stacked on" predecessor. For a **delta**, also read the ticket's **"Skeleton map" comment** (posted by the skeleton's `/work-slice` run — the actual files the skeleton created; the primary mirror). Read the PRD for the wider contract. The feature ticket (the PRD ticket's parent) is the human's — read it for framing and design links; only claim/status fields follow `issue-lifecycle.md`.
 
 **Claim the slice.** Remove its `<NEXT>` label and set its status to **`<IN-PROGRESS>`** so it reads as actively worked and no parallel run grabs it. The pointer only moves on to the next slice after the draft PR is opened (Step 6). When removing/adding `<NEXT>`, write back the issue's full existing label set minus/plus only that label — never drop a type label, `<SKIP>`, or any product label (Linear's `save_issue.labels` replaces the whole set; see `labels.docPath`). Checkpoint: `CLAIMED`.
+
+First reconcile the human parent and PRD claims per `issue-lifecycle.md`, even
+when this slice is invoked outside `/feature-goal`. Record their IDs/URLs and
+this slice's mapping in the checkpoint; reconcile from live state on resume.
 
 ## Step 2 — Confirm the worktree & resolve the branch base
 
@@ -280,7 +290,7 @@ Then open the draft PR (Step 5) **without asking**. Open it even when the loop s
 
 Stacking is **owned by `<STACK>`**, but it does **not** open the PR — `<PR-SKILL>` does. The split:
 
-- **`<PR-SKILL>`** (repo skill, used **verbatim** — never edit it) opens the PR and owns everything it is good at: the `<TITLE-RULE>` title regex, the conflict check, the Summary body, and writing the test plan onto the tracker issue. It opens against `<BASE>`.
+- **`<PR-SKILL>`** (repo skill — preserve its title/template rules, subject to `issue-lifecycle.md`) opens the PR and owns everything it is good at: the `<TITLE-RULE>` title regex, the conflict check, the Summary body, and the test plan (on the internal slice ticket only, never the human parent). It opens against `<BASE>`.
 - **`gh stack link`** then adopts that already-open PR into the stack: it retargets the base to the predecessor's branch and records the chain server-side.
 
 No `pr.stackTool` and no `skills.createPr`? Then open the PR with `gh pr create --base <BASE> --draft`, title per `<TITLE-RULE>`, and skip the linking entirely.
@@ -291,7 +301,7 @@ The mechanism that makes this work: `gh stack link` **only creates a PR for a br
 
 **1. Preserve remote branches.** There is no stale renamed Conductor branch to remove. Do not delete remote branches or close PRs as automatic cleanup; existing PR identity comes from the current branch and recorded PR number.
 
-**2. Push the branch, run `<PR-SKILL>` (verbatim), then make it a draft.** Push first so it has a remote head: `git push -u origin "$(git rev-parse --abbrev-ref HEAD)"`. Then `<PR-SKILL>` runs the conflict check, enforces the title, writes the test plan onto the tracker issue, and opens the PR against `<BASE>`. Let it do all of that — for a downstream slice the base (`<BASE>`) and the whole-stack Summary it computes are both "wrong" right now; step 3 fixes the base. (The Summary bullets stay `<PR-SKILL>`'s. The base retarget makes GitHub show the correct per-slice diff regardless — a downstream body that still reads whole-stack is a known cosmetic, not a correctness, issue.)
+**2. Push the branch, run `<PR-SKILL>` with the issue mapping, then make it a draft.** Push first so it has a remote head: `git push -u origin "$(git rev-parse --abbrev-ref HEAD)"`. Then `<PR-SKILL>` runs the conflict check, enforces the title, writes the test plan onto the internal slice ticket, and opens the PR against `<BASE>`. Let it do all of that — for a downstream slice the base (`<BASE>`) and the whole-stack Summary it computes are both "wrong" right now; step 3 fixes the base. (The Summary bullets stay `<PR-SKILL>`'s. The base retarget makes GitHub show the correct per-slice diff regardless — a downstream body that still reads whole-stack is a known cosmetic, not a correctness, issue.)
 
 `<PR-SKILL>` opens a **ready** PR; this skill ships **drafts** (review happens on the draft PR, not before it). It can't be opened as a draft without editing that skill, so convert it immediately after — capture the number and undo-ready:
 
@@ -300,7 +310,16 @@ pr=$(gh pr view --json number --jq .number)
 gh pr ready "$pr" --undo   # ready -> draft
 ```
 
-**2b. Write `## Verification` into the body** — per `references/pr-evidence.md`. Render it from `evidence/verification.jsonl` and hand it to `<PR-SKILL>` as its verification content where it has a slot, then read the body back: marker present → done; absent → exactly **one** `gh pr edit <n> --body-file` inserting the block (plus `## Notes`, 5.4) after the skill's content and before any trailer, leaving every other byte as written. Never a row for a command not run. **No `## Visual verification` yet and no media published** — nothing is captured until Step 8, after babysit reports GOAL MET; the first body write happens before any bot is requested, the second is Step 8's.
+**2b. Write `## Verification` and `## Issues` into the body** — per
+`references/pr-evidence.md` and `references/issue-lifecycle.md`. Render
+verification from `evidence/verification.jsonl`; pass it and the parent/PRD/this
+slice's IDs and URLs to `<PR-SKILL>`. Read back both sections, repairing missing
+or incorrect content in one `gh pr edit <n> --body-file` write (plus `## Notes`,
+5.4) before any bot is requested. Remove generated auto-closing issue references;
+preserve unrelated body content. Never a row for a command not run. **No
+`## Visual verification` yet and no media published** — capture is Step 8's,
+after GOAL MET. Issue-link repair on resume is allowed when a prior write missed
+the mapping; the usual two body writes are not a reason to leave broken links.
 
 Checkpoint: `PR_OPENED`, with the PR number.
 
@@ -316,7 +335,7 @@ Checkpoint: `PR_OPENED`, with the PR number.
 
 Then verify: `gh pr view <n> --json baseRefName,isDraft` must show the **predecessor's branch** and `true`. If `isDraft` came back `false`, `--open` leaked in — re-run `gh pr ready <n> --undo`.
 
-**4. No PR comment.** The suite does not comment on its own PRs (`references/pr-evidence.md`) — the body is its only voice there, and the 5.2b write carries the human-relevant residue as `## Notes`: at most five one-line bullets covering the assumptions Step 1 recorded, any finding the loop shipped unfixed, and the consolidation tickets filed in Step 4 (id + one clause). Nothing else. The **convention provenance table**, the **review ledger** (`CR-NNN` entries, dispute evidence, adjudication rulings) and the routing disclosure are developer machinery: they stay in `.context/<slice-id>/` and the terminal summary, where the human can ask for them. Never a `gh pr comment`. The only later body write is Step 8's visual-verification insert. Checkpoint: `STACK_LINKED`.
+**4. No PR comment.** The suite does not comment on its own PRs (`references/pr-evidence.md`) — the body is its only voice there, and the 5.2b write carries the human-relevant residue as `## Notes`: at most five one-line bullets covering the assumptions Step 1 recorded, any finding the loop shipped unfixed, and the consolidation tickets filed in Step 4 (id + one clause). Nothing else. The **convention provenance table**, the **review ledger** (`CR-NNN` entries, dispute evidence, adjudication rulings) and the routing disclosure are developer machinery: they stay in `.context/<slice-id>/` and the terminal summary, where the human can ask for them. Never a `gh pr comment`. The later evidence write is Step 8's visual-verification insert; preserve `## Issues` and repair its mapping on resume when needed. Checkpoint: `STACK_LINKED`.
 
 That is the whole stack bookkeeping — no hand-maintained `### Stack` block. GitHub holds the parent/child chain and renders the navigation into each PR; later slices' `link` calls extend it.
 
@@ -328,11 +347,11 @@ The PR is open, so this slice is "ready for PR" — hand off:
 
 **If this slice was the skeleton**, first post a **"Skeleton map" comment on every downstream delta ticket**: the list of files the skeleton created/changed, one line each (`path — what it is / which layer`), taken from the final implement/fix result's `changedFiles` + provenance. This refreshes the deltas' "Where to look" with the feature's *actual* shape — a fresh delta agent mirrors these files, not a guess made before the skeleton existed. (Comments only — never edit sibling ticket bodies.) Idempotent: update an existing `Skeleton map` comment rather than adding a second.
 
-**PRD sync-back.** If implementation deviated from the PRD — a disputed finding upheld, a contract clarified, an AC amended in flight — append one line per deviation to an **`## Implementation deltas` comment on the PRD ticket** (one comment, idempotent: extend it, never add a second; never rewrite the PRD description itself, and never write on the feature ticket). This keeps `/to-issues` re-runs and `/compliance-check` reading a truthful spec. No deviations → write nothing.
+**PRD sync-back.** If implementation deviated from the PRD — a disputed finding upheld, a contract clarified, an AC amended in flight — append one line per deviation to an **`## Implementation deltas` comment on the PRD ticket** (one comment, idempotent: extend it, never add a second; never rewrite the PRD description itself, and never post implementation deltas on the feature ticket). This keeps `/to-issues` re-runs and `/compliance-check` reading a truthful spec. No deviations → write nothing.
 
 Then advance the work pointer:
 
-- Find the **next slice in the stack** — the earliest slice in the published stack order whose predecessors all have an open or merged PR. Readiness comes from **PR state, never the tracker's blocked flag**: slices aren't marked Done while the stack is in review, so the blocked relation stays formally unresolved for the whole run. With fan-out, several deltas become ready at once — the pointer marks just the earliest, and you tell the user which siblings are also ready for parallel worktrees.
+- Find the **next slice in the stack** — the earliest slice in the published stack order whose predecessors all have an open or merged PR. Readiness comes from **PR state, never the tracker's blocked flag**: internal tickets are marked Done at the whole stack's final QA handoff, so blocked relations can remain unresolved during development. With fan-out, several deltas become ready at once — the pointer marks just the earliest, and you tell the user which siblings are also ready for parallel worktrees.
 - **If there is a next slice** → add **`<NEXT>`** to it — `<HITL>`-labelled or not (HITL is a decision the next run makes and records, not a reason to hold the pointer). That is the signal the next `/work-slice` run reads to pick it up. Only ever one slice carries `<NEXT>`.
 - **If there is no next slice** → do **not** stamp `<NEXT>`; say the stack is complete.
 
@@ -364,7 +383,7 @@ The captured files stay in `.context/<slice-id>/evidence/media/` and on `<MEDIA-
 - One slice per run. Don't batch slices.
 - **Never create a worktree or a new branch.** Operate in the current (e.g. Conductor) worktree; keep its branch name and only rebase its empty starting point onto the predecessor after Step 2's clean/zero-commit checks, but never create additional branches or worktrees (no `gh stack add`/`gh stack init` — they create and check out branches), and never rename the Conductor worktree directory. If it isn't a clean worktree, stop and tell the user (Step 2).
 - **`<STACK>` owns stacking.** Commits are plain `git commit` on the current branch; the stack is linked server-side at PR time (Step 5.3). Every stack call must be non-interactive (`--json`, `--auto`, explicit args) per the `<STACK>` skill. Never `--prune` a sync while sibling stack branches are checked out in other Conductor worktrees.
-- **`<PR-SKILL>` is a repo skill — never edit it.** It opens the PR verbatim (title regex, conflict check, Summary, tracker test plan). Then **`gh stack link` adopts that PR** — retargets the base to the predecessor and records the chain (Step 5.3). **Always link by PR number, never by branch name** (a branch name can take `link`'s create-a-PR path and duplicate the PR skill's), and **never pass `--open`** (it marks the drafts ready). Never `gh stack submit` in this flow — it opens its own auto-titled PRs. Post the convention audit as a comment, not `gh pr edit --body` — the suite writes the body exactly twice: `## Verification` (+ `## Notes`) at 5.2b, and `## Visual verification` at Step 8 (`references/pr-evidence.md`).
+- **`<PR-SKILL>` is a repo skill — never edit it.** Preserve its title, conflict and Summary rules while applying `issue-lifecycle.md` to issue links, statuses and tracker writes. Then **`gh stack link` adopts that PR** by PR number, retargeting its base and recording the chain. Never link by branch name or pass `--open`; never use `gh stack submit`. Keep the convention audit in local evidence. The usual body writes are `## Issues` + `## Verification` (+ `## Notes`) at 5.2b and `## Visual verification` at Step 8; repair missing issue links idempotently on resume.
 - Never merge, approve, or mark the PR ready — Step 5 opens it as a **draft** (`<PR-SKILL>` opens ready → `gh pr ready --undo`); promoting to ready is the human's call after review.
 - **No human gates.** A `<HITL>` label or routing mismatch is disclosed and recorded (Step 1), never waited on; the PR opens without confirmation (Step 4→5); babysit runs to a terminal verdict (Step 7). The only stops are safety stops — dirty/missing worktree, no committed diff, gut-check hard-stop — and babysit's `needs-human` escalations.
 - **The CLI owns the loop.** Reviewer selection, suppression, the relevance gate's thresholds, gate injection, stall/cap stops, dispute adjudication flow, and the verdict all come from `<ENGINE>`'s JSON output — never re-derive them in prose, never hand-edit `.context/<slice-id>/ledger.json` or a findings file, and never skip a command because you "know" what it will say.
@@ -380,7 +399,7 @@ The captured files stay in `.context/<slice-id>/evidence/media/` and on `<MEDIA-
 - TDD discipline is carried in the implement/fix prompts (red-green per criterion); loop agents don't load the `tdd` skill directly.
 - **Checkpoint every stage boundary** (`## Workflow State`, full OIDs). On re-invocation resume from it — but durable markers (branch, ledger, PR state) always win over the checkpoint file.
 - Don't apply `labels.agentReady` to anything — this skill speaks `<NEXT>`, never the autonomous-loop trigger.
-- Don't modify the PRD ticket's description, the feature ticket (anything on it), or sibling slices' bodies. The only writes beyond this slice's own ticket: moving the `<NEXT>` pointer, posting/updating the "Skeleton map" comment on downstream deltas, and extending the `## Implementation deltas` comment on the PRD ticket (Step 6).
+- Don't modify the PRD ticket's description, the feature ticket's description/comments, or sibling slices' bodies. Parent/PRD claim fields follow `issue-lifecycle.md`. Besides those claim fields, the only writes beyond this slice's own ticket: moving the `<NEXT>` pointer, posting/updating the "Skeleton map" comment on downstream deltas, and extending the `## Implementation deltas` comment on the PRD ticket (Step 6).
 - **Conventions are binding, not advisory:** exemplar mirroring per the slice's Convention contract; every added file carries a provenance row (`mirroredFrom` or a declared `[deviation: reason]`) — silent deviation is a blocking finding; no new helper without a `<SRC>` search.
 - **Contract freeze:** a delta never alters the skeleton's published contract (schema/types/API shape). A needed contract change stops the slice and escalates — the stack gets restructured, not quietly edited.
 - **Consolidation never widens a slice:** in-slice extraction only within this slice's own new code + at most one existing call site; everything wider becomes a filed follow-up ticket (Step 4), named in the PR body's `## Notes` (Step 5).
@@ -425,10 +444,14 @@ Before reporting done:
 - [ ] `.context/<slice-id>/workflow-state.md` reads `COMPLETE` (babysit GOAL MET **and** Step 8 done) — or `BABYSAT` / `HANDED_OFF` with the babysit NOT MET reason / the orchestrator's stop-here instruction named — with full OIDs and the loop verdict verbatim.
 - [ ] No question was put to the human: HITL decisions and routing mismatches are recorded under the slice ticket's `## Assumptions` (and, for decisions, one `## Notes` bullet on the PR), not waited on.
 - [ ] `gh pr view <n> --json baseRefName,isDraft` shows the predecessor's branch (`<BASE>` for the skeleton) and `isDraft: true`.
+- [ ] PR body `## Issues` links the human parent, PRD and this slice by URL,
+  without auto-closing the parent; mapping survived stack/evidence body edits.
+  Parent/PRD claims are reconciled; whole-stack final statuses remain
+  `/feature-goal` QA-HANDOFF's responsibility.
 - [ ] **Zero suite comments on the PR.** Provenance and the review ledger stayed in `.context/<slice-id>/` + the terminal summary; only human-actionable residue reached the PR, as ≤5 `## Notes` bullets in the creation body write.
-- [ ] The PR body carries `## Verification` (every row backed by `evidence/verification.jsonl`) from the creation write, and `## Visual verification` from Step 8's single post-GOAL-MET write (scenes published to `<MEDIA-BRANCH>` by sha, or the one-line internal-only / uncapturable form) — two body writes, in that order, never more.
+- [ ] The PR body carries `## Verification` (every row backed by `evidence/verification.jsonl`) from the creation write, and `## Visual verification` from Step 8's single post-GOAL-MET write (scenes published to `<MEDIA-BRANCH>` by sha, or the one-line internal-only / uncapturable form) — the usual two body writes, in that order; idempotent issue-link repairs are allowed.
 - [ ] **Nothing visual existed before GOAL MET**: the Playwright loop kept no artifacts, `evidence/media/` was written only by Step 8, and no image reached a tracker comment from this skill.
-- [ ] User-facing slice: `## QA evidence` comment on the **slice** ticket — one PASS/FAIL row per acceptance criterion, **text only, no media**; nothing suite-authored was written on the PRD ticket beyond `## Implementation deltas`, and **nothing at all on the feature ticket** (its one `## QA handoff` is `/feature-goal`'s, written only after GOAL MET).
+- [ ] User-facing slice: `## QA evidence` comment on the **slice** ticket — one PASS/FAIL row per acceptance criterion, **text only, no media**; no comments were written on the PRD ticket beyond `## Implementation deltas`, and only lifecycle claim fields on the feature ticket (its one `## QA handoff` is `/feature-goal`'s, written only after GOAL MET).
 - [ ] User-facing slice: `evidence/media/` holds the fewest scenes that prove the change (video for behaviour, still for appearance, none duplicated, finished state only), each listing the criteria it covers in `media.json`, published to `<MEDIA-BRANCH>`.
 - [ ] Skeleton slice: "Skeleton map" comment posted/updated on every downstream delta ticket.
 - [ ] Exactly one slice carries `<NEXT>` — or the report says the stack is complete.

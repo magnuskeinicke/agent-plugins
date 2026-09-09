@@ -23,8 +23,8 @@ human).
   from other slices may live in `.context/<ISSUE>/tracker-writes-pending/`
   rather than on the tickets. Then the PRD ticket's
   description (`<PRD-ISSUE>`, the `PRD:` sub-issue of the feature ticket —
-  its `## Implementation deltas` comments amend it). Never write on the
-  feature ticket. Use the pinned `.context/<ISSUE>/planning/repo-config.md` for every engine init and model resolution. Planning docs are at the full docs OID in that checkpoint; read them with `git show <docs-oid>:CONTEXT.md`, never
+  its `## Implementation deltas` comments amend it). Parent/PRD claim fields follow [the shared issue lifecycle](../../work-slice/references/issue-lifecycle.md);
+  never post progress comments on the feature ticket. Use the pinned `.context/<ISSUE>/planning/repo-config.md` for every engine init and model resolution. Planning docs are at the full docs OID in that checkpoint; read them with `git show <docs-oid>:CONTEXT.md`, never
   merge that branch into a stack branch.
 
 ## 1. Claim exactly one slice
@@ -102,8 +102,9 @@ text-only QA evidence + consolidation tickets, then Step 5 with these readings:
 - **Push** with `gh stack push --remote origin` (pushes the tracked stack;
   predecessors are unchanged so only this branch moves) — or
   `git push -u origin <stack-name>` if tracking is absent.
-- **5.2** — `<PR-SKILL>` opens the draft PR verbatim (it targets `<BASE>`);
-  the `## Verification` (+ `## Notes`) insert is the body write here. No
+- **5.2** — `<PR-SKILL>` opens the draft PR with the parent/PRD/this-slice mapping per
+  `issue-lifecycle.md` (it targets `<BASE>`);
+  the `## Issues` + `## Verification` (+ `## Notes`) insert is the body write here. No
   `## Visual verification` and no media publish yet — that is Step 8, after
   §3b's verdict.
 - **5.3** — link by PR number, bottom → top, never `--open`, never `submit`:
@@ -157,7 +158,8 @@ thread replies. Then:
 Step 8 published); the PR body carries `## Visual verification` pinned to a
 `<MEDIA-BRANCH>` sha (or its one-line form); the slice's
 `## Cloud dispatch` comment carries `babysit: GOAL MET` (or its staged copy
-does, under `Tracker writes: planning`); `gh pr view` shows
+does, under `Tracker writes: planning`); the PR body links the human parent,
+PRD and this slice correctly; `gh pr view` shows
 an open **draft** PR on `<stack-name>` with the predecessor's branch as base
 (or `<BASE>` for the first), CI green, no unresolved review threads
 (`gh pr view <n> --json reviewDecision,statusCheckRollup` + the thread query
