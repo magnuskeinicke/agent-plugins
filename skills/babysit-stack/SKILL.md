@@ -88,7 +88,8 @@ that's `/feature-goal` / `/work-slice`'s job.
 
 **State file:** `.context/babysit-<parent>.json` — per PR: CI attempt counters
 + failure signatures + first-seen-pending timestamps; per bot: `rounds`,
-`lastTriggerAt`, `triggerHead`, `satisfiedHead`, `stuck`; each PR also records `requiredBots` and `ciHead`; per thread: attempt counters; plus
+`lastTriggerAt`, `triggerHead`, `satisfiedHead`, `stuck`; each PR also records
+`requiredBots` in phase order and `ciHead`; per thread: attempt counters; plus
 **one record per fix attempt** (`outcome`, `summary`, `whyItFailed`) — the next
 attempt's fixer is a fresh agent and only knows what was tried because this
 file says so. Missing file = first run. Before writing it, make sure
@@ -108,8 +109,11 @@ Phase D  zero unresolved threads  (human / other-bot threads)
 ```
 
 A later phase never starts while an earlier one is red: bots review green
-code only, and every fix push inside Phase B/C sends the PR back through
-Phase A (bounded CI watch) before restarting at Phase B. A fix in Phase C or D invalidates Phase B too.
+code only, and every fix push sends the PR back through Phase A (bounded CI
+watch). Review phases form an ordered chain: a fix in Phase B invalidates
+Phases B and C, while a fix in Phase C preserves Phase B and restarts at Phase
+C. A Phase D fix invalidates only the final configured bot and reruns it after
+CI, so the final configured bot is always the last reviewer of the final head.
 
 ### Waiting — bounded, never busy
 
@@ -272,8 +276,13 @@ the next round reviews green code.
 
 **Decide:**
 
-- **Fix commits were pushed this round** → the bot has not seen the fixed code:
-  **restart Phase A → B → C → D**, invalidating CI and every bot's old `satisfiedHead`. Keep attempt caps across head changes.
+- **Fix commits were pushed in Phase B** → the bot and every later bot have
+  not seen the fixed code: invalidate Phases B and C, then **restart Phase A →
+  B → C → D**. Keep attempt caps across head changes.
+- **Fix commits were pushed in Phase C** → preserve Phase B as a completed
+  milestone, invalidate Phase C, then **restart Phase A → C → D**. The
+  final bot reviews every fix produced by its own rounds without sending the
+  PR back to an earlier reviewer.
 - **No code changed** — the round delivered zero new threads, or every thread it
   raised was closed with evidence / as outdated → the bot is **satisfied**:
   record `satisfiedHead: <current SHA>` with the supporting review/check ID, move on. (A review state of `APPROVED`, or a
@@ -313,6 +322,10 @@ dispute with evidence, never silently drop:
 **Thread cap:** a thread that bounces (re-opened or re-objected after a fix)
 gets **2 fix attempts**, then `needs-human`.
 
+After a Phase D fix push, invalidate CI and the final configured bot only, then
+restart at Phase A and rerun that final bot before returning to Phase D. If no
+bot is configured, restart at Phase A and return directly to Phase D.
+
 **Post-hoc bot rule:** a check belonging to a service that comments only after
 it completes (coverage, error trackers, hosted analysis) still `pending` →
 wait for it (Phase A's watch) before resolving threads, or you'll redo them.
@@ -342,7 +355,13 @@ Fix commits must land on the *owning* PR's branch:
   <old-tip> <higher-branch>` + `git push --force-with-lease`), bottom → top.
   A non-mechanical conflict → abort (`gh stack rebase --abort` / `git rebase
   --abort`) and flag `needs-human`.
-- After any push or restack, invalidate `ciHead` and every bot `satisfiedHead` for all changed PR heads. Restart each affected PR at Phase A, bottom → top. Preserve attempt counters so a new SHA cannot reset caps. End on the top branch.
+- After a same-PR fix push, invalidate `ciHead` plus the current and later bot
+  phases; a Phase D fix invalidates only the final configured bot. After a
+  restack or any out-of-band head change, invalidate `ciHead` and every bot
+  `satisfiedHead` for each changed PR because no reviewer phase owns that
+  change. Restart each affected PR at the earliest invalidated phase after
+  Phase A, bottom → top. Preserve attempt counters so a new SHA cannot reset
+  caps. End on the top branch.
 
 ## Verdict (every run ends with this)
 
@@ -368,7 +387,8 @@ Blockers (needs-human): <list, or none>
 VERDICT: GOAL MET | NOT MET — <the one-line reason: n needs-human threads / missing PRs / stuck bot / capped CI signature>
 ```
 
-Before the verdict, write a per-PR JSON view of its state with `requiredBots`,
+Before the verdict, write a per-PR JSON view of its state with `requiredBots`
+(in phase order),
 `ciHead` and `bots.<login>.satisfiedHead`, then run:
 
 ```bash
@@ -376,18 +396,25 @@ node "<plugin-root>/engine/github.mjs" <n> <per-pr-state.json>
 ```
 
 The helper re-reads all pages and compares recorded CI/bot evidence with the
-live head. Reconstruct `requiredBots` from the pinned config; never leave the
-array empty to skip configured bots. Legacy `satisfied: true` flags without a
-SHA require a fresh round. Its GOAL MET also requires zero unresolved threads.
-Recheck every non-merged PR after the final restack, not only the last PR visited.
+ordered review chain. Reconstruct `requiredBots` from the pinned config in
+Phase B → Phase C order; never leave the array empty to skip configured bots.
+Every earlier bot must have a `satisfiedHead`, and the final configured bot's
+`satisfiedHead` must equal the live head. This makes the final bot the terminal
+reviewer: its current-head pass covers fixes made after earlier phases. Legacy
+`satisfied: true` flags without a SHA require a fresh round. Its GOAL MET also
+requires zero unresolved threads. Recheck every non-merged PR after the final
+restack, not only the last PR visited.
 
-**GOAL MET** requires ALL of, for every non-merged slice: an open PR, CI
-green on the current head, `<BOT>` **satisfied on that head** (`n/a` when unconfigured), `<COMMENT-BOT>`
-**satisfied on that head** (`n/a` when unconfigured), and **zero unresolved threads — no
-exceptions**. `needs-human` threads therefore always mean NOT MET, named as the
-reason so the human knows the loop waits on them. Merged slices count as done.
-A run ends NOT MET **only** when nothing actionable is left — it never ends
-merely because something is pending; pending is waited on.
+**GOAL MET** requires ALL of, for every non-merged slice: an open PR, CI green
+on the current head, every configured bot phase completed in order, the final
+configured bot **satisfied on the current head**, and **zero unresolved threads
+— no exceptions**. When both are configured, `<BOT>` may retain its earlier
+completed-phase SHA while `<COMMENT-BOT>` must match the current head; when
+only one is configured, that bot is final and must match. `needs-human` threads
+therefore always mean NOT MET, named as the reason so the human knows the loop
+waits on them. Merged slices count as done. A run ends NOT MET **only** when
+nothing actionable is left — it never ends merely because something is
+pending; pending is waited on.
 
 ## Boundaries
 
@@ -398,9 +425,11 @@ merely because something is pending; pending is waited on.
   no polling under 60 s.
 - Bot reviews are **GitHub-only**: requested via the reviewers API or summoned
   by PR comment, read back from PR reviews/threads. Never run a review CLI.
-- Bots run **in order** — `<BOT>` to satisfied, then `<COMMENT-BOT>` — and
-  only on CI-green code. Caps: 5 rounds per bot per PR, 3 fix attempts per CI
-  failure signature, 2 per bouncing thread; then `needs-human`, never grind.
+- Bots run **in order** — `<BOT>` to satisfied, then `<COMMENT-BOT>` as the
+  terminal reviewer — and only on CI-green code. Later-phase fixes never send
+  the PR back to an earlier reviewer; they rerun CI and the final configured
+  bot. Caps: 5 rounds per bot per PR, 3 fix attempts per CI failure signature,
+  2 per bouncing thread; then `needs-human`, never grind.
 - **Every fix is a freshly spawned agent, one per attempt** — you orchestrate
   and own git; you never edit code yourself and never re-prompt a spent fixer.
   Briefs and results travel as files under `.context/babysit-<parent>/`.
@@ -455,9 +484,13 @@ merely because something is pending; pending is waited on.
 Before reporting done:
 
 - [ ] The verdict block is printed: per-PR table (CI / `<BOT>` / `<COMMENT-BOT>` / unresolved threads / Notes), actions, blockers, one-line VERDICT reason.
-- [ ] GOAL MET only if every non-merged slice has an open PR, CI green, both configured bots `satisfied` (`n/a` when unconfigured), and zero unresolved threads.
+- [ ] GOAL MET only if every non-merged slice has an open PR, CI green, every
+  configured bot phase completed in order, the final configured bot satisfied
+  on the current head, and zero unresolved threads.
 - [ ] NOT MET only with nothing actionable left — every open item is `needs-human`, capped, or stuck, and the reason names it.
-- [ ] Bot rounds ran in order (B before C), each on green CI, each waited for with bounded polls; round counts per bot are in the table.
+- [ ] Bot rounds ran in order (B before C), each on green CI; a fix owned by C
+  or D did not return to B, the final configured bot reviewed the current head,
+  each wait was bounded, and round counts per bot are in the table.
 - [ ] Every thread resolved this run has a reply (commit sha, evidence, or outdated-note); `needs-human` threads are left unresolved and named.
 - [ ] `.context/babysit-<parent>.json` is updated (CI counters/signatures, per-bot rounds/satisfied/stuck, thread counters) and `.context/` is in `.git/info/exclude`.
 - [ ] Every fix came from a freshly spawned agent with brief + result on disk under `.context/babysit-<parent>/`; fix commits contain exactly its `editedFiles`.

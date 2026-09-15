@@ -113,7 +113,7 @@ machine (run it again to resume) that chains:
 5. `/babysit-stack` — each PR session runs it on its own PR first (step 4); the last PR session then
    starts a fresh babysit session in the pipeline workspace for the stack-wide sweep, to a terminal
    verdict: CI green, then Copilot review rounds until satisfied, then CodeRabbit
-   rounds (summoned by `@coderabbitai review`) until satisfied, every thread resolved. Bot
+   rounds (summoned by `@coderabbitai review`) as the terminal reviewer until satisfied, every thread resolved. Bot
    reviews happen on GitHub only — no review CLI
 6. QA handoff — **after** the stack is GOAL MET, one concise `## QA handoff` comment on the
    feature ticket for QA (user-terms steps + one **inline-embedded** visual per group of criteria,
@@ -204,7 +204,8 @@ planning in the cloud — first a workspace per slice, then (2026-09-02) a
 stacked draft PR (one linear `gh stack` chain), babysits it to GOAL MET
 (2026-09-03: per-PR bot review before the next layer is cut), starts the next
 session and ends, the last starting the stack-wide babysit session (`local` opt-in) — turned `babysit-stack` into a babysitting
-mode that runs Copilot then CodeRabbit rounds on GitHub until satisfied, and
+mode that runs Copilot then CodeRabbit rounds on GitHub until satisfied, with
+CodeRabbit covering the final head instead of returning to Copilot, and
 removed the CodeRabbit CLI lane from the engine (`pr.cliReviewer` →
 `pr.commentReviewer`).
 
