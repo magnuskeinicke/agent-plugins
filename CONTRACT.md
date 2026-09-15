@@ -85,7 +85,7 @@ without `labels.agentReady`, it judges leanness itself and infers no claim label
 | `pr.scopes` | string[] | `[]` | allowed scopes in that rule |
 | `pr.stackTool` | string | `''` → plain branches | stacking CLI (`gh-stack`) |
 | `pr.botReviewer` | string | `''` → phase skipped | the **review-request** bot (e.g. `Copilot`); `magnus:babysit-stack` requests it and runs request → wait → fix → re-request rounds until it is satisfied (cap 5 rounds per PR) |
-| `pr.commentReviewer` | `{login, command}` | both `''` → phase skipped | the **comment-summoned** bot, run after `botReviewer` is satisfied — e.g. `{"login": "coderabbitai[bot]", "command": "@coderabbitai review"}`; babysit posts `command` as a PR comment, waits for a review by `login`, fixes, re-summons, until satisfied (same cap) |
+| `pr.commentReviewer` | `{login, command}` | both `''` → phase skipped | the **comment-summoned terminal reviewer**, run after `botReviewer` is satisfied — e.g. `{"login": "coderabbitai[bot]", "command": "@coderabbitai review"}`; babysit posts `command` as a PR comment, waits for a review by `login`, fixes, and re-summons that bot without returning to `botReviewer`, until satisfied (same cap) |
 | `pr.mediaBranch` | string | `'pr-media'` | orphan branch the suite commits PR evidence media to (`pr/<n>/…`), referenced from PR bodies by commit sha; created on first publish, never merged, carries no workflows |
 
 Bot reviews happen **on GitHub only**. There is no review-CLI lane in the review
@@ -361,9 +361,11 @@ prompts; legacy success without coverage is collected again before trusting it.
 Cloud supervision and tracker publication use
 [the cloud relay contract](skills/feature-goal/references/cloud-relay.md).
 
-Bot/CI satisfaction is tied to the current PR head. The GitHub snapshot helper
-pages reviews, comments, threads and thread comments before checking the verdict.
-Every changed head invalidates its CI and bot evidence, including restacked PRs.
+CI and the final configured reviewer are tied to the current PR head. Earlier
+reviewers are ordered completion milestones: a later reviewer's current-head
+pass covers fixes made after those earlier phases. The GitHub snapshot helper
+pages reviews, comments, threads and thread comments before checking the
+verdict. Restacks and out-of-band head changes invalidate all review phases.
 Media manifests record `sourceHead`; capture once per verified head, refresh
 stale manifests after current-head GOAL MET, then update the same PR body and
 QA handoff. Scratch cleanup deletes only paths recorded before creation.

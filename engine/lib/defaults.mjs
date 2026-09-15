@@ -43,7 +43,7 @@ export const REPO_CONFIG_DEFAULTS = {
   // PR review bots, driven by babysit-stack in order: botReviewer (requested
   // via the reviewers API, e.g. Copilot) runs rounds until it is satisfied,
   // then commentReviewer (triggered by a PR comment, e.g. CodeRabbit's
-  // `@coderabbitai review`) does the same. '' → that phase is skipped. Bot
+  // `@coderabbitai review`) is the terminal reviewer. '' → that phase is skipped. Bot
   // reviews happen on GitHub only — there is no review-CLI lane in the loop.
   pr: {
     titleRule: '',

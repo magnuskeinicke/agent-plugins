@@ -42,13 +42,17 @@ export async function reviewSnapshot({ owner, repo, pr }, request) {
     reviews, comments, threads, unresolved: threads.filter((thread) => !thread.isResolved), complete: true };
 }
 
-export function currentReviewVerdict(snapshot, state, botLogins) {
+export function currentReviewVerdict(snapshot, state, orderedBotLogins) {
   const reasons = [];
+  const requiredBots = orderedBotLogins.filter(Boolean);
+  const finalReviewer = requiredBots.at(-1);
   if (!snapshot.complete) reasons.push('review snapshot is incomplete');
   if (snapshot.state !== 'open') reasons.push('PR is not open');
   if (!snapshot.head || state.ciHead !== snapshot.head) reasons.push('CI evidence does not match the current head');
-  for (const login of botLogins.filter(Boolean)) {
-    if (state.bots?.[login]?.satisfiedHead !== snapshot.head) reasons.push(`${login} has not reviewed the current head`);
+  for (const login of requiredBots) {
+    const satisfiedHead = state.bots?.[login]?.satisfiedHead;
+    if (!satisfiedHead) reasons.push(`${login} has not completed its review phase`);
+    else if (login === finalReviewer && satisfiedHead !== snapshot.head) reasons.push(`${login} has not reviewed the current head`);
   }
   if (snapshot.unresolved.length) reasons.push(`${snapshot.unresolved.length} unresolved threads`);
   return { verdict: reasons.length ? 'NOT MET' : 'GOAL MET', head: snapshot.head, reasons };

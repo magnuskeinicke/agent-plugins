@@ -27,13 +27,31 @@ test('snapshots include later review pages, thread pages and comment pages', asy
   assert.equal(seen.filter((args) => args.includes('--paginate') && args.includes('--slurp')).length, 2);
 });
 
-test('later bot fixes invalidate earlier bot approval and stale reviews cannot deliver a new round', () => {
+test('the final reviewer covers fixes from later review phases', () => {
   const snapshot = { complete: true, state: 'open', head: 'B', unresolved: [], reviews: [
     { user: { login: 'copilot' }, commit_id: 'A', submitted_at: '2026-09-07T12:01:00Z' },
   ] };
   const state = { ciHead: 'B', bots: { copilot: { satisfiedHead: 'A' }, rabbit: { satisfiedHead: 'B' } } };
-  assert.equal(currentReviewVerdict(snapshot, state, ['copilot', 'rabbit']).verdict, 'NOT MET');
-  assert.deepEqual(deliveredReviews(snapshot, 'copilot', { head: 'B', at: '2026-09-07T12:00:00Z' }), []);
-  state.bots.copilot.satisfiedHead = 'B';
   assert.equal(currentReviewVerdict(snapshot, state, ['copilot', 'rabbit']).verdict, 'GOAL MET');
+  assert.deepEqual(deliveredReviews(snapshot, 'copilot', { head: 'B', at: '2026-09-07T12:00:00Z' }), []);
+});
+
+test('the final configured reviewer must cover the current head', () => {
+  const snapshot = { complete: true, state: 'open', head: 'B', unresolved: [], reviews: [] };
+  const state = { ciHead: 'B', bots: { copilot: { satisfiedHead: 'A' }, rabbit: { satisfiedHead: 'A' } } };
+  const twoBots = currentReviewVerdict(snapshot, state, ['copilot', 'rabbit']);
+  assert.equal(twoBots.verdict, 'NOT MET');
+  assert.deepEqual(twoBots.reasons, ['rabbit has not reviewed the current head']);
+
+  const oneBot = currentReviewVerdict(snapshot, state, ['copilot']);
+  assert.equal(oneBot.verdict, 'NOT MET');
+  assert.deepEqual(oneBot.reasons, ['copilot has not reviewed the current head']);
+});
+
+test('every earlier reviewer must complete before the final reviewer can satisfy the verdict', () => {
+  const snapshot = { complete: true, state: 'open', head: 'B', unresolved: [], reviews: [] };
+  const state = { ciHead: 'B', bots: { rabbit: { satisfiedHead: 'B' } } };
+  const result = currentReviewVerdict(snapshot, state, ['copilot', 'rabbit']);
+  assert.equal(result.verdict, 'NOT MET');
+  assert.deepEqual(result.reasons, ['copilot has not completed its review phase']);
 });
