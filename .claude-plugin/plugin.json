@@ -1,6 +1,6 @@
 {
   "name": "magnus",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "description": "Magnus's feature-development flow suite: PRD → issues → slice loop → review → stack babysitting, plus ticket triage and autonomous ticket solving.",
   "author": {
     "name": "Magnus Keinicke",

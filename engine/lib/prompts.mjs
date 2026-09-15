@@ -89,6 +89,17 @@ Reuse audit scope — every function/component/hook/util/type ADDED by the diff,
   }`;
 }
 
+export function copyReviewRubricExtra(rubric) {
+  return `Copy-review integration contract:
+- Apply the rubric below for scope, categories, exclusions, confidence, and severity.
+- Translate Critical and Important findings into blockingFindings using the task's JSON schema.
+- Translate Suggestion findings into notes; they are advisory, not blocking.
+- Put category, confidence, and user impact in detail; put the recommendation in suggestedFix.
+- Use a stable rootCause slug for every blocking finding.
+
+${rubric}`;
+}
+
 // Gut-check pre-pass — rubric-free first read, round 1 only, BEFORE the
 // roster lanes; a `block` observation stops the run before any reviewer spend.
 export function gutCheckPrompt(contractText, inspect, outputFile) {

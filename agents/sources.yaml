@@ -19,3 +19,15 @@ sources:
     vendored_version: "0.77.0"
     license: MIT
     last_reviewed_at: 2026-08-28
+  - id: kramme-copy-review-rubric
+    url: https://github.com/Abildtoft/kramme-cc-workflow/blob/56c49f34ce70a8a9be10f08bd91ea6d4e732a384/kramme-cc-workflow/skills/kramme%3Acode%3Acopy-review/references/copy-review-rubric.md
+    title: "kramme-cc-workflow — copy review rubric"
+    rationale: >
+      Vendored verbatim into agents/references/copy-review-rubric.md and
+      injected into every copy-reviewer task. The engine adds only the JSON
+      schema mapping needed by this plugin's findings loop.
+    usage: vendored
+    vendored_ref: 56c49f34ce70a8a9be10f08bd91ea6d4e732a384
+    vendored_version: "0.77.0"
+    license: MIT
+    last_reviewed_at: 2026-09-15

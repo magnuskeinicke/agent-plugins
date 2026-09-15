@@ -43,6 +43,14 @@ test('full loop: findings → fix → clean re-review → converged', () => {
   assert.ok(existsSync(cr.promptFile));
   assert.match(readFileSync(cr.promptFile, 'utf8'), /widget renders/, 'contract embedded in prompt');
   assert.match(readFileSync(cr.promptFile, 'utf8'), /READ-ONLY/);
+  const copy = plan.reviewers.find((r) => r.id === 'copy-reviewer');
+  assert.ok(copy, 'user-facing frontend changes trigger copy review');
+  const copyPrompt = readFileSync(copy.promptFile, 'utf8');
+  assert.match(copyPrompt, /# Copy Review Rubric/);
+  assert.match(copyPrompt, /## Redundancy Categories/);
+  assert.match(copyPrompt, /confidence 75 or higher/);
+  assert.match(copyPrompt, /Critical and Important findings into blockingFindings/);
+  assert.match(copyPrompt, /Suggestion findings into notes/);
 
   for (const task of plan.reviewers)
     writeFileSync(task.outputFile, findingsFile({ reviewer: task.id, blockingFindings: [], notes: [] }));
