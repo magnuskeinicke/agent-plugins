@@ -40,6 +40,7 @@ import { taskModels, resolveModel, SKILL_ROLES } from './lib/models.mjs';
 import { runTask } from './lib/runner.mjs';
 
 const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const COPY_REVIEW_RUBRIC_PATH = join(PLUGIN_ROOT, 'agents', 'references', 'copy-review-rubric.md');
 
 // Gate findings — injected instead of a reviewer round when a gate is red.
 const TESTS_GATE_FINDING = {
@@ -85,6 +86,13 @@ const bool = (v) => v === true || v === 'true';
 function die(msg) {
   process.stderr.write(`error: ${msg}\n`);
   process.exit(1);
+}
+
+function requiredText(path, label) {
+  if (!existsSync(path)) die(`${label} is missing: ${path}`);
+  const value = readFileSync(path, 'utf8');
+  if (!value.trim()) die(`${label} is empty: ${path}`);
+  return value;
 }
 
 function out(obj) {
@@ -345,6 +353,9 @@ function cmdPlan(args) {
   const overlays = focusOverlay(cfg, areas);
   const inspect = inspectCmds(state);
   const hh = state.headHistory;
+  const copyReviewRubric = selected.some((r) => r.id === 'copy-reviewer')
+    ? requiredText(COPY_REVIEW_RUBRIC_PATH, 'copy-reviewer rubric')
+    : '';
   const fixRange =
     args['fix-range'] ||
     (state.round > 1 && hh.length >= 2 ? `${hh[hh.length - 2]}..${hh[hh.length - 1]}` : '');
@@ -354,7 +365,9 @@ function cmdPlan(args) {
     const extra =
       r.id === 'codebase-pattern-reviewer'
         ? prompts.reuseAuditExtra(cfg, buildLibMap(cfg), buildGoldenPaths(cfg), provenance)
-        : '';
+        : r.id === 'copy-reviewer'
+          ? prompts.copyReviewRubricExtra(copyReviewRubric)
+          : '';
     const text = prompts.reviewerPrompt({
       reviewerId: r.id,
       mode: r.mode,
