@@ -26,6 +26,7 @@ test('every role has explicit Claude and Codex profiles and preserves Claude rev
     assert.ok(profiles.claude.model && profiles.claude.effort);
     assert.ok(profiles.codex.model.startsWith('gpt-') && profiles.codex.effort);
   }
+  assert.equal(taskModels(cfg, 'reviewer').claude.model, 'opus');
   assert.equal(resolveModel(cfg, { role: 'reviewer', runtime: 'claude', modelAlias: 'sonnet' }).model, 'sonnet');
   assert.equal(resolveModel(cfg, { role: 'reviewer', runtime: 'codex', modelAlias: 'sonnet' }).model, 'gpt-5.6-terra');
   assert.throws(() => resolveModel(cfg, { role: 'reviewer', runtime: 'codex', modelAlias: 'unknown' }), /Unmapped/);
@@ -34,7 +35,7 @@ test('every role has explicit Claude and Codex profiles and preserves Claude rev
 test('legacy aliases and role overrides remain effective for both runtimes', () => {
   const cfg = resolveRepoConfig({ routing: { codexModelAliases: { sonnet: 'gpt-5.5' },
     models: { fixer: { claude: { model: 'opus', effort: 'high' }, codex: { model: 'gpt-6-astra', effort: 'high' } } } } });
-  assert.equal(taskModels(cfg, 'reviewer').codex.model, 'gpt-5.5');
+  assert.equal(taskModels(cfg, 'explorer').codex.model, 'gpt-5.5');
   assert.equal(taskModels(cfg, 'fixer').codex.model, 'gpt-6-astra');
   assert.equal(taskModels(cfg, 'fixer').claude.effort, 'high');
   assert.equal(resolveModel(cfg, { role: 'fixer', runtime: 'claude', cloud: true }).model, 'opus-5-5-1m');

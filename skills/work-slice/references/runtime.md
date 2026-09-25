@@ -50,7 +50,7 @@ inherit the caller's resolved role.
 | Roles | Claude | Codex | Effort |
 | --- | --- | --- | --- |
 | planner, implementer, fixer, adjudicator | opus | gpt-6-sol | xhigh |
-| reviewer, verifier | sonnet | gpt-5.6-terra | high |
+| reviewer, verifier | opus | gpt-6-sol | high |
 | explorer, triage | sonnet | gpt-5.6-terra | medium |
 | babysitter | sonnet | gpt-6-sol | Claude medium; Codex xhigh |
 | dispatcher | sonnet | gpt-6-luna | medium |
