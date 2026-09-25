@@ -1,7 +1,7 @@
 ---
 name: product-reviewer
 description: "Use this agent to review PRs, specs, or live-product flows from a product perspective. It checks discoverability, flow completeness, edge cases, information architecture, copy, target user clarity, problem-solution fit, prioritization, trust and safety, and post-action experience, and makes autonomous product calls when context is incomplete."
-model: sonnet
+model: opus
 effort: high
 color: magenta
 ---

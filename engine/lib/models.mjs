@@ -8,8 +8,8 @@ export const ROLE_MODELS = {
   implementer: profile('opus', 'gpt-6-sol', 'xhigh', 'workspace-write'),
   fixer: profile('opus', 'gpt-6-sol', 'xhigh', 'workspace-write'),
   adjudicator: profile('opus', 'gpt-6-sol', 'xhigh', 'read-only'),
-  reviewer: profile('sonnet', 'gpt-5.6-terra', 'high', 'read-only'),
-  verifier: profile('sonnet', 'gpt-5.6-terra', 'high', 'read-only'),
+  reviewer: profile('opus', 'gpt-6-sol', 'high', 'read-only'),
+  verifier: profile('opus', 'gpt-6-sol', 'high', 'read-only'),
   explorer: profile('sonnet', 'gpt-5.6-terra', 'medium', 'read-only'),
   triage: profile('sonnet', 'gpt-5.6-terra', 'medium', 'read-only'),
   babysitter: {

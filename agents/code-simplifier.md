@@ -1,7 +1,7 @@
 ---
 name: code-simplifier
 description: Use this agent after writing or modifying code to simplify the recent changes for clarity, consistency, and maintainability while preserving behavior. It focuses on the modified files or diff scope and is best for cleanup after a working implementation; not for semantic rewrites or feature changes.
-model: sonnet
+model: opus
 effort: high
 color: blue
 ---
