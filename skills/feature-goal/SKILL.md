@@ -423,7 +423,9 @@ read GOAL MET:
    criterion no scene covers says so in one short line.
 3. **Steps + expected result** in the ticket's language, user terms only —
    navigation by what the screen shows, roles by what QA sees in the test
-   environment, no routes-first, no code, no PR jargon.
+   environment, no routes-first, no code, no PR jargon. Only what a designer
+   or PM can do and see in the product's own screens; criteria with no visible
+   effect are left out (`qa-handoff.md` → *Who tests it*).
 4. **Not working yet** for anything a slice shipped as a failed criterion
    (its `## QA evidence` on the slice ticket names it), in user terms.
 5. The stack's PR links on one line at the bottom, then post the comment —

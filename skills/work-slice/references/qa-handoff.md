@@ -83,7 +83,7 @@ PASS/FAIL columns, no method notes, no counts.
 Test on <the team's test environment, in plain words — never localhost or a port>, signed in as <a role, in plain words: "a clinic admin">.
 
 ### 1–2. <Acceptance criteria in user terms, grouped when one walk-through covers them>
-**Steps:** 1. Open Administration → Forms. 2. On the "Mouth-first triage" row, choose Upload JSON and pick a template file. 3. Confirm. 4. Upload again.
+**Steps:** 1. Open Administration → Forms. 2. On the "Mouth-first triage" row, click "Upload JSON" and pick a template file. 3. Confirm. 4. Upload again.
 **Expected:** the row shows the new version and today's date and a "Published" message appears (1); the second upload asks before overwriting (2).
 
 ![Uploading a template and the overwrite confirmation](https://uploads.linear.app/…)
@@ -99,29 +99,73 @@ Test on <the team's test environment, in plain words — never localhost or a po
 <PR link>
 ```
 
+### Who tests it — a non-developer
+
+The reader is a designer, PM or QA tester: someone who knows the product well
+but has never seen the code and has no developer tools. Every step must be
+something they can do in the product's own screens, and every expected result
+something they can see there.
+
+- **Only ask for what that person can do.** Click, type, upload, switch user or
+  role, resize the window, open the app on a phone, wait, reload. Never ask them
+  to open developer tools, the console or network tab, read logs, query a
+  database, call an API, run a command, change a feature flag or setting they
+  cannot reach in the product, edit a URL by hand, or fake a slow network or a
+  server error.
+- **Only ask them to judge what they can see.** Text, layout, what appears or
+  disappears, what is saved after a reload, who can and cannot see something.
+  Never status codes, response times, request payloads, stored values, emitted
+  events, or "no errors in the console".
+- **Leave out what they cannot test.** A criterion with no visible effect
+  (performance, a migration, logging, analytics, a race condition, an internal
+  refactor, error handling that needs a broken server) is not a QA step. It was
+  verified by the developers and lives in the PR's `## Verification`; the
+  handoff drops it without comment. If nothing in the change is testable this
+  way, the handoff is one short paragraph saying there is nothing for QA to
+  test and why, in plain words.
+- **Hard-to-reach states.** A state they can reach through the product ("a form
+  with no versions yet": create a new form) gets those steps. A state they
+  cannot reach (an expired payment card, a failed upload) is only a QA step
+  when the test environment already contains it: name the seeded user or record
+  that shows it. Otherwise leave it out.
+
 ### Acceptance criteria — whose, and in what words
 
 1. The ticket's own `- [ ]` criteria, **verbatim**, when they are user-facing.
 2. A criterion written in technical terms (schema, endpoint, component) is
    **rewritten** as what the user experiences; the original wording is not shown.
+   If there is nothing the user experiences, it is left out (see above).
 3. No criteria on the ticket → **write user-facing ones** from the description
    (or, for a feature ticket, from the PRD ticket's User Stories — one criterion
    per story the stack delivered). They live **inside** the handoff; never post a
    separate `## Acceptance criteria` comment.
-4. Cover every criterion, including ones that failed — a failed one gets a line
-   under **Not working yet**, in user terms. Silence is a false claim.
+4. Cover every user-testable criterion, including ones that failed. A failed one
+   gets a line under **Not working yet**, in user terms. Omitting a failure is a
+   false claim. A failed criterion that users cannot see belongs in the PR
+   body's `## Notes`, not the handoff.
 
 ### Language rules
+
+Write the way a PM writes a ticket, not the way a developer writes a commit.
 
 - No file paths, commands, component names, branch or PR jargon, model or
   reviewer names, `CR-NNN` ids, PASS/FAIL columns, test counts, sha's, or
   "captured against…" method paragraphs.
+- No developer vocabulary: not "endpoint", "API", "payload", "request", "cache",
+  "state", "render", "mount", "hydrate", "null", "undefined", "flag", "env",
+  "migration", "schema", "query", "props". Use the words someone sees on
+  screen: "message", "list", "button", "page", "saved".
+- Buttons, menus and fields are named exactly as the screen labels them, in
+  quotes ("Upload JSON"). When the label is technical, that is still its name.
 - Navigation by what the screen shows ("Administration → Forms"), not by route;
   a route may follow in parentheses if the app exposes it.
 - Roles and data by what QA sees in the test environment ("the seeded clinic
   admin"), never credentials.
 - Expected results as observable outcomes ("a Published message appears"), not
   implementation ("the cache is invalidated").
+- **Read it back as the tester before posting.** Would a designer who has never
+  opened the codebase understand every word and be able to do every step
+  without asking a developer? If not, rewrite or remove that step.
 
 ### Evidence — inline, visual, as few artifacts as prove it
 
