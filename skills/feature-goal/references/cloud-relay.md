@@ -102,7 +102,7 @@ Persist `.context/<ISSUE>/supervisor.json` in the caller's workspace as the
 
 ```json
 {"state":"watching","workspaceId":"<id>","sessionId":"<id>",
- "runtime":"codex","model":"gpt-5.6-sol","effort":"xhigh",
+ "runtime":"codex","model":"gpt-6-sol","effort":"xhigh",
  "messageFile":"<absolute local file containing the resume command>",
  "restarts":0,"maxSessionMs":21600000}
 ```
@@ -160,7 +160,7 @@ Conductor. A handoff is emitted only after the successor was created and its
 identity recorded in the pipeline checkpoint:
 
 ```text
-<!-- magnus:relay {"sessionId":"<current>","state":"handoff","nextSessionId":"<next>","runtime":"claude","model":"opus-5-1m","effort":"xhigh"} -->
+<!-- magnus:relay {"sessionId":"<current>","state":"handoff","nextSessionId":"<next>","runtime":"claude","model":"opus-5-5-1m","effort":"xhigh"} -->
 <!-- magnus:relay {"sessionId":"<current>","state":"complete"} -->
 <!-- magnus:relay {"sessionId":"<current>","state":"blocked","reason":"<concrete blocker>"} -->
 <!-- magnus:relay {"sessionId":"<current>","state":"tracker-pending","reason":"QA handoff awaits caller publication"} -->

@@ -37,7 +37,7 @@ test('legacy aliases and role overrides remain effective for both runtimes', () 
   assert.equal(taskModels(cfg, 'reviewer').codex.model, 'gpt-5.5');
   assert.equal(taskModels(cfg, 'fixer').codex.model, 'gpt-6-astra');
   assert.equal(taskModels(cfg, 'fixer').claude.effort, 'high');
-  assert.equal(resolveModel(cfg, { role: 'fixer', runtime: 'claude', cloud: true }).model, 'opus-5-1m');
+  assert.equal(resolveModel(cfg, { role: 'fixer', runtime: 'claude', cloud: true }).model, 'opus-5-5-1m');
 });
 
 test('babysitting selects Sol independently of lightweight dispatch and legacy aliases', () => {
@@ -45,10 +45,10 @@ test('babysitting selects Sol independently of lightweight dispatch and legacy a
   const role = SKILL_ROLES['babysit-stack'];
   for (const cloud of [false, true]) {
     const babysitter = resolveModel(cfg, { role, runtime: 'codex', cloud });
-    assert.equal(babysitter.model, 'gpt-5.6-sol');
+    assert.equal(babysitter.model, 'gpt-6-sol');
     assert.equal(babysitter.effort, 'xhigh');
     assert.equal(babysitter.access, 'workspace-write');
-    assert.equal(resolveModel(cfg, { role: SKILL_ROLES['solve-ready-tickets'], runtime: 'codex', cloud }).model, 'gpt-5.6-luna');
+    assert.equal(resolveModel(cfg, { role: SKILL_ROLES['solve-ready-tickets'], runtime: 'codex', cloud }).model, 'gpt-6-luna');
     const claude = resolveModel(cfg, { role, runtime: 'claude', cloud });
     assert.equal(claude.model, cloud ? 'sonnet-5-1m' : 'sonnet');
     assert.equal(claude.effort, 'medium');
@@ -57,11 +57,11 @@ test('babysitting selects Sol independently of lightweight dispatch and legacy a
 
 test('babysitter role overrides control local and cloud profiles', () => {
   const cfg = resolveRepoConfig({ routing: { models: { babysitter: {
-    codex: { model: 'gpt-6-astra', cloudModel: 'gpt-5.6-sol', effort: 'high' },
+    codex: { model: 'gpt-6-astra', cloudModel: 'gpt-6-sol', effort: 'high' },
   } } } });
   assert.equal(resolveModel(cfg, { role: 'babysitter', runtime: 'codex' }).model, 'gpt-6-astra');
   const cloud = resolveModel(cfg, { role: 'babysitter', runtime: 'codex', cloud: true });
-  assert.equal(cloud.model, 'gpt-5.6-sol');
+  assert.equal(cloud.model, 'gpt-6-sol');
   assert.equal(cloud.effort, 'high');
 });
 

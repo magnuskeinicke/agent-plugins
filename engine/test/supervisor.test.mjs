@@ -7,7 +7,7 @@ test('supervisor follows a baton, restarts one crashed session, and stops on a s
   const saves = [];
   let restartCount = 0;
   const transport = { status: async () => 'idle', messages: async () => [
-    { content: '<!-- magnus:relay {"sessionId":"one","state":"handoff","nextSessionId":"two","runtime":"codex","model":"gpt-5.6-sol","effort":"xhigh"} -->' },
+    { content: '<!-- magnus:relay {"sessionId":"one","state":"handoff","nextSessionId":"two","runtime":"codex","model":"gpt-6-sol","effort":"xhigh"} -->' },
   ], restart: async (value, pending) => {
     assert.equal(saves.at(-1).pendingRestart.sessionId, pending.sessionId);
     restartCount++;
@@ -16,7 +16,7 @@ test('supervisor follows a baton, restarts one crashed session, and stops on a s
   await superviseStep(state, transport, save);
   assert.equal(state.sessionId, 'two');
   assert.equal(state.runtime, 'codex');
-  assert.equal(state.model, 'gpt-5.6-sol');
+  assert.equal(state.model, 'gpt-6-sol');
   transport.messages = async () => [];
   await superviseStep(state, transport, save);
   assert.equal(restartCount, 1);
