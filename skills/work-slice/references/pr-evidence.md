@@ -176,10 +176,12 @@ captures anything, and it runs once per verified PR head:
 
 1. Compare the media manifest's `sourceHead` with the live PR head. Reuse matching media only when every file is also `1920 × 1080`; otherwise check out the PR's branch, up to date with what CI went green on
    (`git status --porcelain` clean, head = the pushed head).
-2. Start the dev server (`devServerCommand`) if one is not already serving —
-   one instance, never a second.
-3. Record the unused temporary spec path in `scratch-files.json` before creating it; author (or restore an already owned) throwaway Playwright spec on the `e2eDir` config, dev-login
-   as the seeded user the ticket's story needs, drive the acceptance-criterion
+2. Start the app with the command [run-app.md](run-app.md) resolves (the
+   Conductor run script for this environment, else `devServerCommand`) if it is
+   not already serving — one instance, never a second, never through the e2e
+   harness.
+3. Record the unused temporary spec path and its minimal Playwright config in `scratch-files.json` before creating them; author (or restore an already owned) throwaway spec under that config (no `webServer`, no e2e env files, `baseURL` = the running app; copy only the `e2eDir` dev-login pattern), dev-login
+   as the seeded user the ticket's story needs, pass the real-copy check (`run-app.md` §4), drive the acceptance-criterion
    stories once more and capture the scenes below into
    `.context/<run-id>/evidence/media/`, plus `media.json`. Each manifest entry records `sourceHead` (the full verified PR OID). Verify the head is unchanged before publication; a changed head requires a fresh verdict and capture.
 4. Publish to `<MEDIA-BRANCH>` (below), insert `## Visual verification` into the
@@ -238,7 +240,13 @@ Rules for what it captures:
   never quietly substitute.
 - **Themes.** Both light and dark only when the diff touches theme-dependent
   styling; otherwise the app's default theme, named once in the capture sentence.
-- **Nothing capturable** (no dev stack, no credentials, internal-only change)
+- **Real copy only.** Every frame shows the product as users see it: translated
+  text, not translation keys (`settings.profile.title`), literal `{placeholders}`
+  or test-mode banners. Such a frame is discarded, the run fixed per
+  `run-app.md` §4, and the scene recaptured. Never publish it with a caption
+  explaining it away.
+- **Nothing capturable** (no dev stack, no credentials, internal-only change,
+  or the app cannot render real copy in this workspace)
   → the one-line form of the section (below). Never a Storybook or design image
   standing in for the real surface.
 

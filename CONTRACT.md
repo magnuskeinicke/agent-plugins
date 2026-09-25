@@ -143,9 +143,15 @@ inline". The plugin never assumes a repo skill exists.
 
 ### Browser verification
 
-`devServerCommand`, `e2eDir`, `browserGuidePath` — all `''` by default. With
-`devServerCommand` empty the Playwright user-story reviewer is **skipped** and
-the run says so rather than inventing a start command.
+`devServerCommand`, `e2eDir`, `browserGuidePath` — all `''` by default. Inside
+Conductor, the repo's `.conductor/settings.toml` run script for the current
+environment (`available_in` matching `CONDUCTOR_IS_LOCAL`) starts the app and
+wins over `devServerCommand`, which is the fallback outside Conductor
+([run-app.md](skills/work-slice/references/run-app.md)). With neither, the
+Playwright user-story reviewer is **skipped** and the run says so rather than
+inventing a start command. `e2eDir` supplies the dev-login pattern only: the
+suite never lets the e2e Playwright config (its `webServer`, e2e build or env
+files) start or configure the app it verifies or captures.
 
 ### `design` — fidelity extension point
 
