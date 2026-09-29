@@ -8,8 +8,8 @@ export const ROLE_MODELS = {
   implementer: profile('opus', 'gpt-6-sol', 'xhigh', 'workspace-write'),
   fixer: profile('opus', 'gpt-6-sol', 'xhigh', 'workspace-write'),
   adjudicator: profile('opus', 'gpt-6-sol', 'xhigh', 'read-only'),
-  reviewer: profile('opus', 'gpt-6-sol', 'high', 'read-only'),
-  verifier: profile('opus', 'gpt-6-sol', 'high', 'read-only'),
+  reviewer: profile('sonnet', 'gpt-6-sol', 'high', 'read-only'),
+  verifier: profile('sonnet', 'gpt-6-sol', 'high', 'read-only'),
   explorer: profile('sonnet', 'gpt-5.6-terra', 'medium', 'read-only'),
   triage: profile('sonnet', 'gpt-5.6-terra', 'medium', 'read-only'),
   babysitter: {
@@ -29,6 +29,8 @@ export const SKILL_ROLES = {
   'write-comments': 'inherit',
 };
 
+const CODEX_OWNED_ROLES = ['reviewer', 'verifier', 'babysitter', 'dispatcher'];
+
 const EFFORTS = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
@@ -39,10 +41,15 @@ export function resolveModel(cfg, { role, runtime, modelAlias, effort, cloud = f
   if (!EFFORTS[runtime]) throw new Error(`Unsupported runtime: ${runtime}`);
   const base = ROLE_MODELS[role][runtime];
   const result = { ...base, timeoutMs: 1_800_000 };
-  if (modelAlias && modelAlias !== 'inherit') {
+  const pinned = modelAlias && modelAlias !== 'inherit';
+  // These roles pick their Codex model independently of the Claude alias; a pin
+  // equal to the role's own Claude model keeps the role's Codex model.
+  const codexOwned = runtime === 'codex' && CODEX_OWNED_ROLES.includes(role)
+    && (!pinned || modelAlias === ROLE_MODELS[role].claude.model);
+  if (pinned && !codexOwned) {
     result.model = runtime === 'claude' ? modelAlias : cfg.routing?.codexModelAliases?.[modelAlias];
     if (!result.model) throw new Error(`Unmapped ${runtime} model alias: ${modelAlias}`);
-  } else if (runtime === 'codex' && !['dispatcher', 'babysitter'].includes(role)) {
+  } else if (runtime === 'codex' && !codexOwned) {
     const alias = ROLE_MODELS[role].claude.model;
     result.model = cfg.routing?.codexModelAliases?.[alias] || base.model;
   }
@@ -51,7 +58,7 @@ export function resolveModel(cfg, { role, runtime, modelAlias, effort, cloud = f
   Object.assign(result, override);
   if (cloud) {
     result.model = override.cloudModel || (runtime === 'claude'
-      ? ({ opus: 'opus-5-5-1m', sonnet: 'sonnet-5-1m' }[result.model] || result.model)
+      ? ({ opus: 'opus-5-5-1m', sonnet: 'sonnet-5-5-1m' }[result.model] || result.model)
       : result.model);
     if (['planner', 'implementer', 'fixer'].includes(role) && !Object.keys(override).length) {
       Object.assign(result, cfg.routing?.cloudModels?.[runtime] || {});

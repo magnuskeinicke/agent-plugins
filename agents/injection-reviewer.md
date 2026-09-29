@@ -1,7 +1,7 @@
 ---
 name: injection-reviewer
 description: Use this agent to review code for injection vulnerabilities (SQL, command, template, header injection) and cross-site scripting (XSS). Checks that all user inputs are properly sanitized and all outputs are correctly escaped.
-model: opus
+model: sonnet
 effort: high
 color: red
 ---

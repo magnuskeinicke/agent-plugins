@@ -1,7 +1,7 @@
 ---
 name: comment-analyzer
 description: Use this agent to review code comments for accuracy, necessity, completeness, and long-term maintainability. Use it after adding or editing docstrings, inline comments, or PR documentation changes; not for reviewing code behavior unrelated to comments.
-model: opus
+model: sonnet
 effort: high
 color: green
 ---
