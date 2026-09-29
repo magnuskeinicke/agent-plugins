@@ -12,7 +12,8 @@ model and effort. No inline persona fallback. The worker needs the tracker,
 GitHub and browser tools for the full slice; verify those capabilities first.
 You own the tracker/git choreography around it and never implement the slice
 yourself. Pin the planning config with `engine snapshot` before cutting branches
-and pass its path and docs commit OID in every slice brief.
+and pass its path and docs commit OID in every slice brief — the snapshot's
+`commit` key is the commit-subject rule every worker and babysit fix follows.
 
 The mode choice never forks work: a slice already claimed by a cloud relay
 session (its `## Cloud dispatch` ticket comment exists) stays cloud-owned even

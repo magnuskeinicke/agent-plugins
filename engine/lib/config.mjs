@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { REPO_CONFIG_DEFAULTS } from './defaults.mjs';
 import { ROLE_MODELS, resolveModel } from './models.mjs';
+import { compilePattern } from './commit.mjs';
 
 // Merge the host's repoConfig over the generic defaults, two levels deep so a
 // host that sets only `reviewers.database` keeps the generic lens for the rest.
@@ -74,6 +75,7 @@ export function validateRepoConfig(config) {
     }
   }
   check(config, REPO_CONFIG_DEFAULTS, 'config');
+  if (config.commit?.pattern) compilePattern(config.commit.pattern);
   if (config.routing?.dispatch && !['cloud', 'local'].includes(config.routing.dispatch)) {
     throw new Error('routing.dispatch must be cloud or local');
   }

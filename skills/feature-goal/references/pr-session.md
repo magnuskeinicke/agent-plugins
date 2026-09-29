@@ -24,7 +24,7 @@ human).
   rather than on the tickets. Then the PRD ticket's
   description (`<PRD-ISSUE>`, the `PRD:` sub-issue of the feature ticket —
   its `## Implementation deltas` comments amend it). Parent/PRD claim fields follow [the shared issue lifecycle](../../work-slice/references/issue-lifecycle.md);
-  never post progress comments on the feature ticket. Use the pinned `.context/<ISSUE>/planning/repo-config.md` for every engine init and model resolution. Planning docs are at the full docs OID in that checkpoint; read them with `git show <docs-oid>:CONTEXT.md`, never
+  never post progress comments on the feature ticket. Use the pinned `.context/<ISSUE>/planning/repo-config.md` for every engine init, model resolution, `commit-rule` and `commit-check` — its `commit` key is the commit-subject rule for every commit this session makes. Planning docs are at the full docs OID in that checkpoint; read them with `git show <docs-oid>:CONTEXT.md`, never
   merge that branch into a stack branch.
 
 ## 1. Claim exactly one slice
@@ -128,8 +128,10 @@ terminal verdict — exactly work-slice Step 7. It gets CI green, requests
 satisfied, resolves every thread, and waits for each bot round itself with
 bounded polls; every fix is a fresh agent per its own rules. `<BOT>` /
 `<COMMENT-BOT>` unconfigured → it records `n/a` for that phase and the rest
-still applies. Its state file (`.context/babysit-<ISSUE>.json`) lives in
-this workspace, so a re-run resumes rather than restarts.
+still applies. Pass it the pinned config path: its fix commits follow the
+snapshot's `commit` rule and pass `commit-check` before each push. Its state
+file (`.context/babysit-<ISSUE>.json`) lives in this workspace, so a re-run
+resumes rather than restarts.
 
 Record the verdict in **two** places: the slice checkpoint (`BABYSAT` on GOAL
 MET, `COMPLETE` once Step 8 has published, else `HANDED_OFF` + the verdict line) and a `babysit: GOAL MET` /

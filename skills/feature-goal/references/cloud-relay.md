@@ -35,6 +35,13 @@ node "$engine" snapshot --ref <docs-commit-oid> \
   --output .context/<ISSUE>/planning/repo-config.md
 ```
 
+The snapshot pins the **resolved commit rule** as its `commit` key
+(`commit.format` / `commit.pattern` — derived from `pr.titleRule` / `pr.scopes`
+when the host sets neither). Every relay session and the final babysit session
+read commit subjects from it (`commit-rule` / `commit-check --config <snapshot>`),
+never from a moving branch; the bootstrap checklist below verifies the written
+snapshot still carries that key.
+
 For standalone ticket dispatch, snapshot the caller's resolved config without
 `--ref`. An explicit ref or config that cannot be read is a blocker, never a
 reason to use defaults. Planning documents are read at that OID, not at a moving
@@ -51,7 +58,8 @@ argument) to transfer it; local `.context/` does not travel to a cloud workspace
 
 1. Write the supplied snapshot and `.context/<ISSUE>/pipeline-state.md` in the
    destination workspace, including workspace ID, docs OID, tracker mode and
-   the config path. Verify the fetched docs commit matches the supplied OID.
+   the config path. The written snapshot must contain a `commit` key; one
+   without it is stale (pre-0.12) — re-snapshot before any work. Verify the fetched docs commit matches the supplied OID.
 2. Install the plugin for **each runtime used by the selected work**, even if
    bootstrap itself runs in only one runtime. Claude: `claude plugin marketplace
    add magnuskeinicke/agent-plugins`, then `claude plugin install

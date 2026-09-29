@@ -92,6 +92,28 @@ Bot reviews happen **on GitHub only**. There is no review-CLI lane in the review
 loop; a bot's findings reach the suite as PR review threads, which
 `magnus:babysit-stack` addresses with fresh fix agents.
 
+### `commit`
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `commit.format` | string | `''` → derived | human template every suite commit subject follows, e.g. `<type>[(<scope>)]: SER-XX <subject>`; `[…]` is optional, `SER-XX` stands for the issue id |
+| `commit.pattern` | string (regex) | `''` → derived | anchored regex every subject must match — typically the branch ruleset's `commit_message_pattern`; an invalid regex fails config loading |
+
+Resolution (`engine/lib/commit.mjs`): an explicit `commit.*` wins; with both
+empty, commit subjects take the PR-title shape — `pr.titleRule` (or
+`<type>[(<scope>)]: <subject>` when only `pr.scopes` is set), its pattern
+compiled from the template; with those empty too, a plain `<type>: <subject>`.
+A prose `titleRule` (no `<subject>` slot) derives no pattern, so nothing is
+enforced until the host sets `commit.pattern`. The suite **never** defaults to
+"start with the issue id". The push ban ("never `git push`" for workers) is a
+separate instruction, not part of the format.
+
+This matters most where the host squash-merges with `COMMIT_OR_PR_TITLE`: a
+single-commit PR lands under its **commit subject**, so a ruleset-rejected
+subject blocks the merge even though the PR title passed its check — and
+rewording after review can dismiss approvals. The engine therefore renders the
+rule into every writer prompt and enforces it in code (see *The engine CLI*).
+
 ### PR evidence
 
 The PR **body** is the suite's only voice on a PR — it posts **no comments** on
@@ -343,8 +365,30 @@ finding(s)` verdict; magnus:review-code), `--max-rounds <1..5>` (a
 user-supplied cap under the hard cap; magnus:iterate-pr), and
 `--inspect '<cmd>'` (the diff command every prompt cites when the target is
 not a committed branch diff — `git diff HEAD` for uncommitted work,
-`gh pr diff <n>` for a PR reviewed without a checkout). `collect` lists
+`gh pr diff <n>` for a PR reviewed without a checkout). `--commit-type`,
+`--commit-scope` and `--issue` (default: the slice id when it is an issue id)
+feed the example commit subject; `--commits-since <ref>` (default `--base`)
+limits commit checks to the run's own commits — `magnus:iterate-pr` passes the
+PR's starting head. `collect` lists
 reviewers whose output is missing/invalid. Retry once; still incomplete prevents a clean/converged verdict and preserves the pending round for resume.
+
+**Commit subjects are enforced, not requested.** The resolved `commit` rule
+(from the ledger's pinned config) is rendered — format, a concrete example,
+the checked range — into every fix and gate-fix prompt. `init` checks every
+subject in `<commits-since>..HEAD` (skipped for `--review-only` / `--inspect`
+runs): a mismatch sets a commit-subject gate, so round 1 is a gate-fix that
+rewrites the messages. `apply-fix` refuses (non-zero exit, state unchanged) a
+fix range carrying a non-matching subject and names each offending sha and
+subject; the fix pass is re-run, or the parent rewords its own commit.
+Skills write two prompts themselves and use two helper commands:
+`commit-rule [--issue --type --scope --subject] [--slice | --config]` prints
+`{format, pattern, source, example, subject?, text}` (`text` goes verbatim into
+the implement brief; `subject` is a finished subject for parent-owned and
+babysit commits); `commit-check --base <ref> | --range <a>..<b>` prints the
+offenders and exits 1 on any — the pre-push gate in work-slice Step 5,
+work-issue, iterate-pr, split-pr and babysit-stack. `snapshot` writes the
+resolved `commit` key into the pinned config, so relay and babysit sessions
+read the same rule.
 
 Run state lives in the host repo's gitignored `.context/<slice-id>/`:
 `ledger.json` (the ledger + loop state), `contract.md` (the run contract),

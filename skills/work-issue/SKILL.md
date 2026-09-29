@@ -43,6 +43,7 @@ missing file or empty key → use the fallback and say so once.
 | `<BOT>` | `pr.botReviewer` | babysit skips the review-request bot phase |
 | `<COMMENT-BOT>` | `pr.commentReviewer` | babysit skips the comment-summoned bot phase |
 | `<MEDIA-BRANCH>` | `pr.mediaBranch` | `pr-media` — created as an orphan branch on first publish |
+| `<COMMIT-RULE>` | `commit.format` / `commit.pattern` — resolved by the engine (`node "$engine" commit-rule`) | the `pr.titleRule` / `pr.scopes` shape, else `<type>: <subject>` |
 
 Also read `tracker.docPath` and `labels.docPath` when they exist.
 Read [the shared issue lifecycle](../work-slice/references/issue-lifecycle.md)
@@ -98,6 +99,7 @@ Work-slice Step 3 applies verbatim — implement pass, then the engine-CLI revie
 - acceptance criteria = Step 2's, verbatim; where-to-look = the ticket's pointers, or omit to let the implementer discover.
 - convention contract = empty (no PRD contract — `repoConfig.goldenPaths` still guides); Figma = the ticket's links, if any.
 - the wider contract = the ticket DESCRIPTION verbatim; `--base` = `<BASE>`.
+- commits follow `<COMMIT-RULE>`: the implementer's brief carries `commit-rule --issue <issue-id> --type <type> --scope <scope>`'s `text`, and `init` gets the same `--commit-type` / `--commit-scope` — the PR's type/scope. Most lean tickets ship as a single commit, and a host that squash-merges it under its commit subject rejects a wrong one only at merge time.
 
 ## Step 4 — Present + follow-ups
 
@@ -110,7 +112,7 @@ Work-slice Step 4 applies verbatim, minus stack talk and **minus every tracker w
 No stack, so this is the short form of work-slice Step 5:
 
 1. **Remove only owned scratch files** recorded before creation in `scratch-files.json`. Preserve all other untracked files; status alone does not prove they are scaffolding.
-2. `git push -u origin "$(git rev-parse --abbrev-ref HEAD)"`.
+2. **Commit-subject gate, then push.** `node "$engine" commit-check --slice <issue-id> --base <BASE>` must print `ok: true` — every `git log <BASE>..HEAD --format=%s` subject matches `<COMMIT-RULE>` — before anything is pushed or a reviewer sees the PR. On `ok: false`, reword the listed commits (`git commit --amend -m` for HEAD, else `git reset --soft <BASE>` and one conforming commit) and re-check. Then `git push -u origin "$(git rev-parse --abbrev-ref HEAD)"`.
 3. **`<PR-SKILL>`** for the title regex, conflict check and Summary; pass the parent ID/URL and the shared lifecycle's `## Issues` section. Keep test plans in the PR body to preserve the human ticket's one-comment rule. Then draft it: `pr=$(gh pr view --json number --jq .number); gh pr ready "$pr" --undo`.
 4. **Write `## Verification`** per `../work-slice/references/pr-evidence.md`, rendered from `evidence/verification.jsonl` — handed to `<PR-SKILL>` where it has a slot, else one `gh pr edit --body-file` insert, before any bot is requested. Include/repair `## Issues` in that write and read it back: the parent URL must appear without an auto-closing keyword. Rows from this run only. **No `## Visual verification` and no media publish here** — that is Step 7's, after GOAL MET.
 5. No stack commands — the PR stays based on `<BASE>`.

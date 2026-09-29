@@ -28,6 +28,7 @@ so once.
 | `<PR-SKILL>` | `skills.createPr` | write the PR title/body inline, following `pr.titleRule` |
 | `<MEDIA-BRANCH>` | `pr.mediaBranch` | `pr-media` — only used when the top layer inherits an existing PR's visual section |
 | `<TITLE-RULE>` | `pr.titleRule` | `<type>: <subject>` |
+| `<COMMIT-RULE>` | `commit.format` / `commit.pattern` — resolved by the engine (`node "$engine" commit-rule`, `engine` per `../work-slice/references/runtime.md`) | the `pr.titleRule` / `pr.scopes` shape, else `<type>: <subject>` |
 | `<BOT>` | `pr.botReviewer` | babysit skips the review-request bot phase |
 | `<STACK>` | `pr.stackTool` | **stop** — splitting into a stack needs a stack tool; say so |
 | `<GATE>` | `gates.all` | discover the repo's build/lint commands and name which you used |
@@ -61,14 +62,16 @@ Preflight: clean worktree, branch pushed nowhere it shouldn't be, `git fetch ori
 git checkout -b <issue-slug>/01-<layer> origin/<BASE>
 git checkout <original-branch> -- <layer-1 paths>     # file states, not patches
 # files the original DELETED that belong to this layer: git rm <path>
-git add -A && git commit -m "<ISSUE> <layer 1 subject>"
+git add -A && git commit -m "<layer 1 subject per <COMMIT-RULE>>"
 
 git checkout -b <issue-slug>/02-<layer>                # off layer 01
 git checkout <original-branch> -- <layer-2 paths>
 ...
 ```
 
-The **top layer** takes every remaining path. Safety net (mandatory): `git diff <original-branch> <top-layer> --stat` must be **empty** — the stack reproduces the original tree exactly. Not empty → a path was missed; fix before validating.
+Each layer is one commit, so a host that squash-merges a single-commit PR under its commit subject lands exactly that subject. Render it with `node "$engine" commit-rule --issue <ISSUE> --type <type> --scope <scope> --subject "<layer subject>"` (its `subject` field; with a prose-only format, write it by hand from `format`) — never "issue id first" unless the rule says so.
+
+The **top layer** takes every remaining path. Safety net (mandatory): `git diff <original-branch> <top-layer> --stat` must be **empty** — the stack reproduces the original tree exactly. Not empty → a path was missed; fix before validating. Then, before anything is pushed, `node "$engine" commit-check --range origin/<BASE>..<top-layer>` must print `ok: true` — it covers every layer's commit at once. A listed subject → reword that layer's commit (`git commit --amend -m`) and rebase the layers above it, then re-check.
 
 **Validate every layer, bottom → top** (checked out per layer):
 

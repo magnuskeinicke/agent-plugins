@@ -36,6 +36,7 @@ defaults apply and you say so once.
 | `<COMMENT-BOT>` | `pr.commentReviewer` | babysit skips the comment-summoned bot phase |
 | `<STACK>` | `pr.stackTool` | plain branches; nothing to restack |
 | `<MEDIA-BRANCH>` | `pr.mediaBranch` | `pr-media` — only used when a stale scene must be re-rendered |
+| `<COMMIT-RULE>` | `commit.format` / `commit.pattern` — resolved by the engine (`node "$engine" commit-rule`) | the `pr.titleRule` / `pr.scopes` shape, else `<type>: <subject>` |
 
 Which reviewers exist and when they trigger: `../work-slice/references/reviewer-roster.md`
 (documentation; `engine/lib/roster.mjs` is the source of truth).
@@ -75,7 +76,7 @@ Also capture:
 
 - PR title + body (trim the stack tool's navigation section, if any).
 - If the title carries an `<ISSUE>` id → fetch that issue from `<TRACKER>` and include its **acceptance criteria** (and `## Test plan` if present) — that's what reviewers judge "missed AC" against.
-- `commitPrefix` = the issue id when present, else `PR-<n>`.
+- The PR title's **type** and **scope** (e.g. `feat`, `web`) and its `<ISSUE>` id when present — the engine builds its example commit subjects from them under `<COMMIT-RULE>`.
 - Optionally note `declaredAreas` (from `frontend|backend|database|i18n|security|performance`) when the change touches an area its paths don't reveal.
 - `userFacing` — biases **true**; false only for clearly internal-only changes.
 - Optionally take a round cap from the user ("one round", "up to 5 rounds") → `--max-rounds` (1–5; omitted = the engine's own stop conditions govern, hard cap 5).
@@ -94,14 +95,17 @@ Resolve `<ENGINE>` once — it lives in the **plugin install root**, not the hos
 
 Resolve `engine` from the loaded skill’s real path using the shared runtime contract. Do not search another runtime’s cache or pick a version by sorting paths.
 
-**Write the run contract.** `mkdir -p .context/pr-<n>` and write `.context/pr-<n>/contract.md` — the text every prompt in the loop (reviewers, validator, fixer, adjudicator) receives: the PR number + title + body (trimmed), the linked ticket's acceptance criteria / test plan verbatim when Step 2 found them (say so when it didn't — reviewers then judge against the diff and conventions alone), and the commit rule: message starts with `<commitPrefix>`; **never `git push`** (the skill pushes once, in Step 4).
+**Write the run contract.** `mkdir -p .context/pr-<n>` and write `.context/pr-<n>/contract.md` — the text every prompt in the loop (reviewers, validator, fixer, adjudicator) receives: the PR number + title + body (trimmed), the linked ticket's acceptance criteria / test plan verbatim when Step 2 found them (say so when it didn't — reviewers then judge against the diff and conventions alone), and the push ban: **never `git push`** (the skill pushes once, in Step 4). The commit-subject rule is not written here: the engine renders `<COMMIT-RULE>` into every fix and gate-fix prompt.
 
 **Start the loop:**
 
 ```bash
 node "$engine" init --slice pr-<n> --base origin/<baseRefName> \
-  --tests-green <bool> --committed true [--max-rounds <n>]
+  --tests-green <bool> --committed true [--max-rounds <n>] \
+  --commits-since <head> [--issue <ISSUE>] --commit-type <type> [--commit-scope <scope>]
 ```
+
+`--commits-since <head>` scopes the engine's commit-subject checks to the commits this run adds — the PR's existing commits are not rewritten (this skill never force-pushes).
 
 `resumed: true` means a prior run's state exists — run `status` and continue at the phase it names instead of restarting.
 
@@ -109,14 +113,15 @@ node "$engine" init --slice pr-<n> --base origin/<baseRefName> \
 
 ```bash
 node "$engine" plan --slice pr-<n> --changed-files <csv> --added-files <csv> --deleted-files <csv> \
-  --insertions <n> --user-facing <bool> [--declared-areas <csv>] --head <head> \
-  --commit-rule '<commitPrefix> …; never push'
+  --insertions <n> --user-facing <bool> [--declared-areas <csv>] --head <head>
 # → gate-fix (red CI: run ONE fix implementer with the emitted prompt, then apply-fix), or
 # → the round's task manifest: prePass (round 1), reviewers[]
 node "$engine" collect --slice pr-<n>
 # → validator task when findings survived suppression; run it, then
-node "$engine" decide --slice pr-<n> --verdicts <verdicts.json> --commit-rule '<commitPrefix> …; never push'
+node "$engine" decide --slice pr-<n> --verdicts <verdicts.json>
 # action=fix        → run ONE fresh fix implementer with fix.promptFile → apply-fix --result <fix-result.json>
+#                     (apply-fix refuses a fix range whose subjects break <COMMIT-RULE>: run the fix pass
+#                      again with a fresh fixer — or reword a parent-owned commit — then re-run apply-fix)
 #                     → plan again with the fix range's files (git diff --name-only <prevHead>..<newHead>, etc.)
 # action=adjudicate → adjudicate → run ONE fresh agent with the emitted prompt (never the fix implementer)
 #                     → apply-adjudication --rulings <rulings.json>
@@ -143,7 +148,7 @@ Ground rules, regardless of mechanism:
 - **Reviewers are read-only** — only fix agents edit code. Every writer pass is a **freshly spawned agent**: each gate-fix, each round's fix, and the adjudicator (never the fix implementer's context).
 - Use the shared model registry: implementer/fixer/adjudicator roles for those passes, reviewer/verifier roles for reports. Apply the resolved model and effort explicitly.
 - `--head` on the **first** `plan` only; `apply-fix` records each fix head itself. After each `apply-fix`, recompute the next `plan`'s file flags from the **fix range** (`<prevHead>..<newHead>`).
-- Fix commits stay local — the commit rule forbids pushing; Step 4 pushes once.
+- Fix commits stay local — every fix prompt carries the push ban; Step 4 pushes once.
 - Never hand-edit `.context/pr-<n>/ledger.json` or a findings file — findings enter through reviewer output files, decisions exit through the CLI.
 
 The stop conditions live in the CLI (convergence, two-round stall, per-fingerprint deferral, the round cap — a safety boundary, not a target). A non-converged stop reports `stalled — shipped with N open findings (CR-…)`, never a silently exhausted cap. A `hard-stop` (gut-check block) goes straight to the user — no push.
@@ -152,7 +157,7 @@ The stop conditions live in the CLI (convergence, two-round stall, per-fingerpri
 
 If the loop landed fix commits (`git rev-list --count origin/<headRefName>..HEAD` > 0):
 
-1. `git push` the branch (plain push — commits were appended, no history rewrite) and, in the same moment, refresh the body's `## Verification` block for the new head from the gate runs the fix passes reported (`testEvidence` → rows in `.context/pr-<n>/evidence/verification.jsonl`; mechanics in `../work-slice/references/pr-evidence.md`): replace the text between the `magnus:verification` markers, add the block once if the PR predates it, never a second copy, never a row for a command not run. Leave `## Visual verification` alone: it exists only on a PR already driven to GOAL MET once (captured then, per `../work-slice/references/pr-evidence.md`). If a fix here changed a captured surface, mark those scenes stale — the capture stage after this run's babysit re-renders them; never present an old image as current and never capture mid-loop.
+1. `node "$engine" commit-check --slice pr-<n> --range <head>..HEAD` (`<head>` = the Step 1 head) must print `ok: true` before the push — every subject this run added matches `<COMMIT-RULE>`. On `ok: false`, reword the listed local commits (`git commit --amend -m` for HEAD, else `git reset --soft <head>` and one conforming commit) and re-check. Then `git push` the branch (plain push — commits were appended, no history rewrite) and, in the same moment, refresh the body's `## Verification` block for the new head from the gate runs the fix passes reported (`testEvidence` → rows in `.context/pr-<n>/evidence/verification.jsonl`; mechanics in `../work-slice/references/pr-evidence.md`): replace the text between the `magnus:verification` markers, add the block once if the PR predates it, never a second copy, never a row for a command not run. Leave `## Visual verification` alone: it exists only on a PR already driven to GOAL MET once (captured then, per `../work-slice/references/pr-evidence.md`). If a fix here changed a captured surface, mark those scenes stale — the capture stage after this run's babysit re-renders them; never present an old image as current and never capture mid-loop.
 2. **Stack awareness:** if other open PRs base on this branch (`gh pr list --state open --json number,baseRefName` filtered on `headRefName`), tell the user the upstack branches need restacking — the mechanics live in `babysit-stack` ("Branch switching & restacking"); don't restack other worktrees' branches unasked.
 3. If the loop **stalled** (or dead reviewers blocked convergence), surface the leftovers in the PR **body**, never as a comment (`../work-slice/references/pr-evidence.md`): fold a `## Notes` block into the same body write that refreshes `## Verification` at push time — at most five one-line bullets naming the findings that shipped unfixed. The full ledger (`CR-NNN` entries, dispute evidence, adjudication rulings) stays in `.context/` and the terminal report; a human who wants it asks.
 
@@ -210,7 +215,7 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 - About to review or fix in the main session — stop: emitted tasks own that; you only run the CLI and the tasks it names.
 - About to re-`init` a run whose `status` phase is `done` — stop: one engine run per PR, ever; everything after is babysit.
 - About to reply to or resolve a review thread from this loop, or run a review CLI — stop: thread and bot work happens only inside Step 5's `/babysit-stack`, on GitHub.
-- About to push mid-loop — stop: the commit rule forbids it; fix commits stay local and Step 4 pushes once, plain (never force).
+- About to push mid-loop — stop: every fix prompt carries the push ban; fix commits stay local and Step 4 pushes once, plain (never force).
 - About to check out a branch held by another worktree — stop and name the worktree.
 - About to hand-edit `.context/pr-<n>/ledger.json` / a findings file, or skip a CLI command you "know" the output of — stop: the CLI owns the loop.
 - About to push to a fork you lack rights on — stop and tell the user.
