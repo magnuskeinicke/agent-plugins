@@ -53,6 +53,8 @@ generic default, which is always better than a wrong guess.
 | `tracker.statuses.*` | discover the team's/project's actual names: `inProgress` means Dev in progress, `inReview` means Dev technical review for the human parent, `done` means Done for AI-generated internal tickets. For GitHub document the Projects status field or existing label workflow in `tracker.docPath`; open/closed alone cannot express technical review. Do not create states or silently substitute a generic active state for review |
 | `labels.*` | list the tracker's labels and match them to the roles in `CONTRACT.md` (agent-ready, needs-human, slice pointer, triage opt-out, type/risk prefixes). **Do not create labels here** — record only what exists; the owning skill creates what it needs |
 | `pr.titleRule` / `pr.scopes` | the CI title-check regex, or the shape of the last ~20 merged PR titles |
+| `commit.pattern` / `commit.format` | in order, first hit wins: (1) the branch rulesets' `commit_message_pattern` — `gh api repos/{owner}/{repo}/rulesets` → for each id `gh api repos/{owner}/{repo}/rulesets/<id>` → `rules[] \| select(.type == "commit_message_pattern").parameters` (`operator` `starts_with` → `^<escaped pattern>`, `regex` → the pattern verbatim; `negate: true` cannot be expressed — report it instead); (2) a commitlint config (`commitlint.config.*`, `.commitlintrc*`, `commitlint` in the package manifest) or a lefthook / husky `commit-msg` hook — read the rule it enforces; (3) the shape of the last ~20 subjects on `integrationBranch` (`git log origin/<integrationBranch> -20 --no-merges --format=%s`). `commit.format` is the human template of that shape (e.g. `<type>[(<scope>)]: SER-XX <subject>` — the `pr.titleRule` shape when they agree); `commit.pattern` is set only from (1) or (2), never guessed from history. Nothing found → leave both empty (the engine derives them from `pr.titleRule` / `pr.scopes`) |
+| `commit` — why it matters | read `squash_merge_commit_title` (`gh api repos/{owner}/{repo} --jq .squash_merge_commit_title`). When it is `COMMIT_OR_PR_TITLE` and a commit pattern exists, a single-commit PR squash-merges under its **commit subject**, not its title — add one `## Keys` line saying so, so nobody "simplifies" the commit key away |
 | `pr.stackTool` | `gh extension list`; a `.git/av` or similar tool dir; else empty |
 | `pr.botReviewer` / `pr.commentReviewer` | which review-request bot (e.g. Copilot) has reviewed recent PRs; which comment-summoned bot (e.g. CodeRabbit — `login` `coderabbitai[bot]`, `command` `@coderabbitai review`) has posted reviews. Bots run on GitHub only; no review CLI is configured |
 | `pr.mediaBranch` | an existing orphan branch holding `pr/<n>/` media (`git ls-remote --heads origin \| grep -i media`); none → keep the default `pr-media` — the suite creates it on first publish |
@@ -76,6 +78,7 @@ confirmation:
 - `gates.all` — the definition of done every implementer must satisfy.
 - `tracker.kind` + `tracker.issuePrefix` — decides which tool the suite talks to.
 - `labels.agentReady` — if this is wrong, an autonomous loop drains the wrong queue.
+- `commit.pattern` — if it is wrong, every suite commit is rejected at merge (or checked against the wrong rule); show its source (ruleset id, hook file, or "derived from `pr.titleRule`").
 
 Everything else is written as discovered and is trivially editable afterwards.
 
@@ -118,6 +121,12 @@ Prove the file works before claiming it does:
    at runtime, which is the worst failure mode here.
 3. Confirm each referenced path exists (`conventionsFile`, `e2eDir`,
    `browserGuidePath`, every `goldenPaths` entry, every `libMap` key).
+4. Run `node "<plugin-root>/engine/cli.mjs" commit-rule` in the repo root: it must
+   print the intended `format` / `pattern` (and an invalid `commit.pattern` fails
+   here, not mid-pipeline). Then `commit-check --range <a recent integration-branch
+   commit>~5..<that commit>` shows whether the rule matches real history — a
+   mismatch on history means the pattern or format is wrong, or the repo only
+   recently adopted it; say which.
 
 Report: the file written, a table of key → value → evidence, the keys left empty
 and why, and what to do next (`/magnus:grill-with-docs` for `CONTEXT.md`,

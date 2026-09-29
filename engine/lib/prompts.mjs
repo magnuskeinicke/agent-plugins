@@ -148,7 +148,8 @@ diffCaused: introduced by this diff vs pre-existing/out-of-scope — a real prob
 }
 
 // Fix pass: one fresh implementer resolves the open blocking findings
-// test-first, or disputes with concrete evidence.
+// test-first, or disputes with concrete evidence. `commitRule` is the rendered
+// commit-subject instruction (commit.mjs commitRuleText).
 export function fixPrompt(contractText, targets, diffCmd, commitRule, outputFile) {
   return `You are the fix implementer for one review round. Resolve EVERY finding below, test-first (RED→GREEN where behaviour changes), then commit.
 
@@ -162,7 +163,9 @@ ${fmtFeedback(targets)}
 Rules:
 - You may DISPUTE a finding instead of fixing it — only with concrete evidence (file:line, test output, spec text). Everything else must be fixed. When torn, fix.
 - Run the repo's tests + lint/typecheck and see them pass IN THIS SESSION before reporting testsGreen=true — never assume.
-- Commit only your edited files${commitRule ? ` (${commitRule})` : ''} and record the new HEAD. If runtime permissions prevent git writes, return committed=false and the exact editedFiles; the orchestrator verifies and commits those files before apply-fix. Never bypass permissions.
+- Commit only your edited files and record the new HEAD. If runtime permissions prevent git writes, return committed=false and the exact editedFiles; the orchestrator verifies and commits those files before apply-fix. Never bypass permissions.
+- ${commitRule}
+- Never \`git push\` — the orchestrator pushes.
 
 Return your result as JSON for the orchestrator to save at \`${outputFile}\`:
 {"summary", "committed": true|false, "head": "<git rev-parse HEAD>", "testsGreen": true|false, "testEvidence": "<commands + final summary lines>", "editedFiles": [...], "addedFiles": [...], "provenance": [{"file", "mirroredFrom"|"deviation"}], "disputed": [{"id", "title", "evidence"}]}`;

@@ -76,9 +76,9 @@ Two phases: a one-time setup, then the daily pipeline.
    restart the session.
 2. **Run `/magnus:init-repo`** in the new repo. It scaffolds the one required host file,
    `docs/agents/repo-config.md`, discovering the repo's real values itself (integration branch, gate
-   commands, tracker + issue prefix, labels, PR title rule, area paths, lib map) and asking for a
-   single confirmation on the four load-bearing keys: `integrationBranch`, `gates.all`,
-   `tracker.kind` + `tracker.issuePrefix`, and `labels.agentReady`. Every key is optional — an empty
+   commands, tracker + issue prefix, labels, PR title rule, commit rule, area paths, lib map) and
+   asking for a single confirmation on the load-bearing keys: `integrationBranch`, `gates.all`,
+   `tracker.kind` + `tracker.issuePrefix`, `labels.agentReady`, and `commit.pattern`. Every key is optional — an empty
    key falls back to the generic default in `engine/lib/defaults.mjs`, so the suite works with zero
    config, just blunter.
 3. **Sharpen later, optionally:** `/magnus:grill-with-docs` builds `CONTEXT.md` and `docs/adr/`
@@ -168,6 +168,11 @@ obey its JSON output; run state lands in the host's gitignored
 node engine/cli.mjs status --slice PROJ-1234   # example invocation
 node --test 'engine/test/*.test.mjs'           # the loop's test suite
 ```
+
+Commit subjects follow one configured rule — `commit.format` / `commit.pattern`, else the
+`pr.titleRule` shape, else `<type>: <subject>` — never "issue id first". The engine renders it into
+every writer prompt and enforces it: `init` and `apply-fix` reject non-matching subjects, and
+`commit-check` gates every push (see [`CONTRACT.md`](./CONTRACT.md#commit)).
 
 No `*.workflow.js` scripts remain — every loop-running skill drives the engine
 CLI, and persistence is re-invocation from durable state markers (`## Workflow

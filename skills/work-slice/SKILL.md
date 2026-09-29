@@ -35,6 +35,7 @@ say so once.
 | `<SKIP>` | `labels.managerSkip` | skip the triage opt-out stamp |
 | `<PR-SKILL>` | `skills.createPr` | write the PR title/body inline, following `pr.titleRule` |
 | `<TITLE-RULE>` | `pr.titleRule` | `<type>: <subject>` |
+| `<COMMIT-RULE>` | `commit.format` / `commit.pattern` — resolved by the engine (`node "$engine" commit-rule`) | the `pr.titleRule` / `pr.scopes` shape, else `<type>: <subject>` |
 | `<STACK>` | `pr.stackTool` | plain branches; every PR targets `<BASE>` and nothing is linked |
 | `<SRC>` | `sourceDirs` | the whole source tree |
 | `<GATE>` | `gates.all` | discover the repo's lint/test/build commands and name which you used |
@@ -165,7 +166,7 @@ Resolve `engine` from the loaded skill’s real path using the shared runtime co
 
 ### 3.0 Write the run contract
 
-`mkdir -p .context/<slice-id>` and write `.context/<slice-id>/contract.md` — the contract text every prompt in the loop (reviewers, validator, fixer, adjudicator) receives. Include, verbatim where the ticket has it: the slice id + title, its **Kind** with the matching guidance below, the acceptance criteria, the one **novel decision**, "Where to look" (for a delta, prepend the Skeleton map comment's file list — the primary mirror), the **Convention contract** (binding exemplars + must-use libs), the Figma node deep-links, the PRD's wider contract, and the commit rule (message starts with the slice id; never `git push`).
+`mkdir -p .context/<slice-id>` and write `.context/<slice-id>/contract.md` — the contract text every prompt in the loop (reviewers, validator, fixer, adjudicator) receives. Include, verbatim where the ticket has it: the slice id + title, its **Kind** with the matching guidance below, the acceptance criteria, the one **novel decision**, "Where to look" (for a delta, prepend the Skeleton map comment's file list — the primary mirror), the **Convention contract** (binding exemplars + must-use libs), the Figma node deep-links, the PRD's wider contract, and the push ban (never `git push` — this skill pushes once, in Step 5). The commit-subject rule is not hand-written here: the engine renders `<COMMIT-RULE>` into every fix and gate-fix prompt itself.
 
 - **Skeleton:** this is the stack's WALKING SKELETON — the full end-to-end path with the REAL contract (schema, types, API shape, UI shell, one happy-path behaviour, tests wired) and stubbed/minimal behaviour elsewhere. Every cross-layer decision lands here; downstream deltas mirror this code, so its shape IS the feature's convention. Clone the exemplar's shape; don't invent structure an exemplar settles.
 - **Delta:** a BEHAVIOUR DELTA on the walking skeleton — the skeleton (this feature's earlier slices, already on the base branch) is the primary pattern to mirror; sibling features are the fallback. Prefer APPENDING over modifying, introduce at most the ticket's one named novel decision, and **never alter the skeleton's published contract** (contract freeze — a needed contract change stops the slice and escalates).
@@ -174,7 +175,7 @@ Resolve `engine` from the loaded skill’s real path using the shared runtime co
 
 **Capture nothing here.** Visual evidence is produced once, by Step 8, after babysit reports GOAL MET (`references/pr-evidence.md`) — no before shots, no pre-capture, no media of any kind before the PR is done.
 
-One implementer, the **configured implementer model**, obtained through the writer-spawn ladder in 3.3 — a freshly spawned agent whenever the runtime has any spawn mechanism, the shared CLI adapter when native workers are unavailable. TDD discipline: one tracer-bullet test → impl per acceptance criterion (vertical slice — never all-tests-then-all-impl), using "Where to look" as the starting map. Binding rules: mirror the convention contract's exemplars (a deviation is allowed only when declared in the provenance table with a concrete reason — silent deviation is a review-blocking offence); no new helper/util/hook/component without first searching `<SRC>` (and the design system, and `repoConfig.libMap`) for an existing equivalent; consolidation is in-scope only within this slice's own new code plus at most ONE existing call site — anything wider is a noted candidate, not a refactor; stay strictly inside this slice's scope and note anything a later slice owns instead of pulling it forward. For UI: fetch the Figma screenshot fresh via the Figma MCP from the slice's node deep-link and reuse design-system tokens/components, not magic numbers. Run tests + lint/typecheck with `<GATE>` and see them pass **in-session** before claiming green. Commit (message starts with the slice id; never push).
+One implementer, the **configured implementer model**, obtained through the writer-spawn ladder in 3.3 — a freshly spawned agent whenever the runtime has any spawn mechanism, the shared CLI adapter when native workers are unavailable. TDD discipline: one tracer-bullet test → impl per acceptance criterion (vertical slice — never all-tests-then-all-impl), using "Where to look" as the starting map. Binding rules: mirror the convention contract's exemplars (a deviation is allowed only when declared in the provenance table with a concrete reason — silent deviation is a review-blocking offence); no new helper/util/hook/component without first searching `<SRC>` (and the design system, and `repoConfig.libMap`) for an existing equivalent; consolidation is in-scope only within this slice's own new code plus at most ONE existing call site — anything wider is a noted candidate, not a refactor; stay strictly inside this slice's scope and note anything a later slice owns instead of pulling it forward. For UI: fetch the Figma screenshot fresh via the Figma MCP from the slice's node deep-link and reuse design-system tokens/components, not magic numbers. Run tests + lint/typecheck with `<GATE>` and see them pass **in-session** before claiming green. Commit following `<COMMIT-RULE>` — paste the `text` of `node "$engine" commit-rule --issue <slice-id> --type <type> --scope <scope>` (the PR's type/scope) into the implementer's brief verbatim, example included; separately: never push.
 
 Record the result as JSON at `.context/<slice-id>/implement-result.json`:
 
@@ -186,7 +187,7 @@ Record the result as JSON at `.context/<slice-id>/implement-result.json`:
  "touchedAreas": [], "userFacingImpact": true, "diffStat": "", "notes": []}
 ```
 
-If sandbox git writes were denied, first follow the shared runtime contract's parent-owned commit procedure using the returned `editedFiles`; recompute `head` and gate evidence before checking for a committed diff.
+If sandbox git writes were denied, first follow the shared runtime contract's parent-owned commit procedure using the returned `editedFiles` (subject from `commit-rule --subject`, checked with `commit-check`); recompute `head` and gate evidence before checking for a committed diff.
 
 `changedFiles`/`addedFiles`/`deletedFiles` from `git diff --name-only [--diff-filter=A|D] <base>...HEAD`; one provenance row per added file (`mirroredFrom` = the exemplar actually followed, or `deviation` = why none fits — never both blank); `userFacingImpact` biases **true**; `testsGreen=true` only after running the gates in-session — and every gate command run lands as a row in `.context/<slice-id>/evidence/verification.jsonl` (`references/pr-evidence.md`), the implementer's `testEvidence` included; gate-fix and fix passes append their runs the same way. No committed diff → stop and tell the user (nothing to review or PR). Checkpoint: `IMPLEMENTED`.
 
@@ -195,11 +196,14 @@ If sandbox git writes were denied, first follow the shared runtime contract's pa
 Extract the provenance array to `.context/<slice-id>/provenance.json`, then:
 
 ```bash
+# gate values from implement-result.json; --commit-type/--commit-scope = the PR's type/scope
 node "$engine" init --slice <slice-id> --base <base> \
-  --tests-green <bool> --committed <bool>          # gate values from implement-result.json
+  --tests-green <bool> --committed <bool> --commit-type <type> --commit-scope <scope>
 ```
 
 `resumed: true` means a prior run's state exists — run `status` and continue at the phase it names instead of restarting.
+
+`init` checks every commit subject in `<base>..HEAD` against `<COMMIT-RULE>` (`commitCheck` in its output). `rejected` turns round 1 into a gate-fix that rewrites the implement pass's commit messages — obey it like any other gate-fix. A parent-owned commit (sandbox-denied writer) is yours to reword before `init`.
 
 ### 3.3 Obey the CLI
 
@@ -208,13 +212,15 @@ The cycle (`status` re-prints the pending step any time):
 ```bash
 node "$engine" plan --slice <id> --changed-files <csv> --added-files <csv> --deleted-files <csv> \
   --insertions <n> --user-facing <bool> --declared-areas <csv> \
-  --provenance-file .context/<id>/provenance.json --head <head> --commit-rule '<slice-id> …'
+  --provenance-file .context/<id>/provenance.json --head <head>
 # → gate-fix (red gate: run ONE fix implementer with the emitted prompt, then apply-fix), or
 # → the round's task manifest: prePass (round 1), reviewers[]
 node "$engine" collect --slice <id>
 # → validator task when findings survived suppression; run it, then
-node "$engine" decide --slice <id> --verdicts <verdicts.json> --commit-rule '<slice-id> …'
+node "$engine" decide --slice <id> --verdicts <verdicts.json>
 # action=fix        → run ONE fresh fix implementer with fix.promptFile → apply-fix --result <fix-result.json>
+#                     (apply-fix refuses a fix range whose subjects break <COMMIT-RULE>: run the fix pass
+#                      again with a fresh fixer — or reword a parent-owned commit — then re-run apply-fix)
 #                     → plan again with the fix range's files (git diff --name-only <prevHead>..<newHead>, etc.)
 # action=adjudicate → adjudicate → run ONE fresh agent with the emitted prompt (never the fix implementer)
 #                     → apply-adjudication --rulings <rulings.json>
@@ -301,7 +307,7 @@ The mechanism that makes this work: `gh stack link` **only creates a PR for a br
 
 **1. Preserve remote branches.** There is no stale renamed Conductor branch to remove. Do not delete remote branches or close PRs as automatic cleanup; existing PR identity comes from the current branch and recorded PR number.
 
-**2. Push the branch, run `<PR-SKILL>` with the issue mapping, then make it a draft.** Push first so it has a remote head: `git push -u origin "$(git rev-parse --abbrev-ref HEAD)"`. Then `<PR-SKILL>` runs the conflict check, enforces the title, writes the test plan onto the internal slice ticket, and opens the PR against `<BASE>`. Let it do all of that — for a downstream slice the base (`<BASE>`) and the whole-stack Summary it computes are both "wrong" right now; step 3 fixes the base. (The Summary bullets stay `<PR-SKILL>`'s. The base retarget makes GitHub show the correct per-slice diff regardless — a downstream body that still reads whole-stack is a known cosmetic, not a correctness, issue.)
+**2. Check the commit subjects, push the branch, run `<PR-SKILL>` with the issue mapping, then make it a draft.** Before anything is pushed, `node "$engine" commit-check --slice <slice-id> --base <base>` must print `ok: true` — every `git log <base>..HEAD --format=%s` subject matches `<COMMIT-RULE>`. A host that squash-merges a single-commit PR under its commit subject rejects a wrong one at merge time, and rewording after review can dismiss approvals. On `ok: false`, reword the listed commits (`git commit --amend -m` for HEAD, else `git reset --soft <base>` and one conforming commit) and re-run the check; never push past it. Then push so the branch has a remote head: `git push -u origin "$(git rev-parse --abbrev-ref HEAD)"`. Then `<PR-SKILL>` runs the conflict check, enforces the title, writes the test plan onto the internal slice ticket, and opens the PR against `<BASE>`. Let it do all of that — for a downstream slice the base (`<BASE>`) and the whole-stack Summary it computes are both "wrong" right now; step 3 fixes the base. (The Summary bullets stay `<PR-SKILL>`'s. The base retarget makes GitHub show the correct per-slice diff regardless — a downstream body that still reads whole-stack is a known cosmetic, not a correctness, issue.)
 
 `<PR-SKILL>` opens a **ready** PR; this skill ships **drafts** (review happens on the draft PR, not before it). It can't be opened as a draft without editing that skill, so convert it immediately after — capture the number and undo-ready:
 
@@ -390,6 +396,7 @@ The captured files stay in `.context/<slice-id>/evidence/media/` and on `<MEDIA-
 - **Every emitted task must complete with its resolved model and valid JSON.** Native workers and the shared CLI adapter use the same contract; incomplete coverage blocks advancement.
 - Use the shared model registry: implementer/fixer/adjudicator roles for those passes, reviewer/verifier roles for reports. Apply the resolved model and effort explicitly.
 - Reviewers are **read-only** — only the implement/fix agents edit code; **every writer pass is a freshly spawned agent** (implement, gate-fix, each round's fix, adjudicator, Playwright fixes), never a previous pass's agent continued. Handoff is files only.
+- **Commit subjects follow `<COMMIT-RULE>`** — resolved by the engine from the (pinned) config, never hand-rolled and never "issue id first" unless the rule says so. The engine rejects a mismatch at `init` and `apply-fix`, and `commit-check` gates the Step 5 push.
 - **Tests + commit gate:** reviewers never see red or uncommitted code — the CLI turns a red gate into a gate-fix pass mechanically, and implementers must prove green with `testEvidence` (commands + summary lines run in-session), never assert it.
 - Playwright runs as a **skill-owned loop, only after the CLI's loop converges**, and only on user-facing slices (max 3 rounds), **verification only — no artifacts kept**. A broken user story is a **blocking** finding (failed AC), not advisory.
 - **One dev server per slice run**, started with the Conductor run script for this environment (`references/run-app.md`). Reuse it when it already serves; never start a second instance. Never capture a screen showing translation keys or test-mode copy. All evidence capture passes the secret preflight; a secret in a capture means discard + recapture, never blur/crop/edit.

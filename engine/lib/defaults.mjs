@@ -55,6 +55,15 @@ export const REPO_CONFIG_DEFAULTS = {
     // from PR bodies by commit sha. Created on first publish; never merged.
     mediaBranch: 'pr-media',
   },
+  // Commit-subject rule every suite commit must satisfy (engine/lib/commit.mjs).
+  // format: human template, e.g. `<type>[(<scope>)]: SER-XX <subject>`;
+  // pattern: anchored regex the subject must match (e.g. a branch ruleset's
+  // commit_message_pattern). Both '' → derived from pr.titleRule / pr.scopes,
+  // else a plain `<type>: <subject>`. Never "starts with the issue id".
+  commit: {
+    format: '',
+    pattern: '',
+  },
   // Repo-owned skills the suite hands off to. '' → no handoff; do it inline.
   skills: {
     createIssue: '',

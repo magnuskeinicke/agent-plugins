@@ -26,7 +26,8 @@ An absent optional `docs/agents/repo-config.md` uses defaults. An existing inval
 is an error: fix its syntax/shape before dispatching or claiming work. Never
 interpret parse errors as permission to change venue or skip configured gates.
 For a pipeline, pass its pinned planning configuration with `--config <file>`
-on `init`, `model`, and standalone `task` commands. `init` stores the resolved
+on `init`, `model`, `commit-rule`, `commit-check`, and standalone `task`
+commands (after `init`, `--slice <run-id>` reads the ledger's pinned copy). `init` stores the resolved
 configuration in the ledger; subsequent commands reuse it across resumes.
 
 ## Model roles
@@ -114,7 +115,11 @@ If a writer can edit source but cannot commit in its sandbox, it returns
 `committed=false`, the exact `editedFiles`, and test evidence. The parent checks
 the diff against those files and the pre-pass status, runs any denied gates,
 stages only those owned paths, commits, then updates `committed`, `head`, and
-gate evidence from actual results before `init` / `apply-fix`. Unknown or
+gate evidence from actual results before `init` / `apply-fix`. The parent's
+commit subject follows the repo's commit rule — `node "$engine" commit-rule
+--slice <run-id> --subject "<one line>"` prints it as `subject` — and must pass
+`node "$engine" commit-check --range <pre-commit-head>..HEAD` before `init` /
+`apply-fix`; reword with `git commit --amend -m` on a mismatch. Unknown or
 pre-existing dirty files remain untouched. Claude workers that can commit
 continue doing so; the parent still verifies their commit and evidence.
 

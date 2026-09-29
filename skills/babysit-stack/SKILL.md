@@ -55,6 +55,7 @@ fallback and say so once.
 | `<COMMENT-BOT>` | `pr.commentReviewer` — `{login, command}` of the comment-summoned bot (CodeRabbit: `coderabbitai[bot]`, `@coderabbitai review`) | **skip Phase C** — record `n/a` |
 | `<STACK>` | `pr.stackTool` | plain branches; every PR targets `<BASE>`, nothing to restack |
 | `<GATE>` | `gates.all` | the fixer discovers the repo's lint/test/build commands and names which it used |
+| `<COMMIT-RULE>` | `commit.format` / `commit.pattern` — resolved by the engine (`node "<plugin-root>/engine/cli.mjs" commit-rule`) | the `pr.titleRule` / `pr.scopes` shape, else `<type>: <subject>` |
 
 Also read `tracker.docPath` when it exists. Stack mechanics (rebase/push after
 fixing a lower branch) follow the `<STACK>` skill — invoke it before running any
@@ -154,8 +155,10 @@ name or thread id, `<n>` = attempt) contains only:
   `gh run view <run-id> --log-failed`, and the failure signature;
 - **thread:** `path:line`, the reviewer's comment body verbatim, the thread id,
   and which bot/human raised it;
-- `<GATE>` and the repo contract pointers (`docs/agents/repo-config.md`,
-  `tracker.docPath`);
+- `<GATE>` and the repo contract pointers (`docs/agents/repo-config.md`, or
+  the pinned config when the run has one, and `tracker.docPath`);
+- the `text` of `commit-rule` (below) — the fixer's `summary` becomes the
+  `<subject>` slot of that shape: one line, no type or issue prefix;
 - **every prior attempt on this signature/thread** — `summary` + `whyItFailed`
   from the state file. The fresh agent must not re-try what already failed;
 - the discipline rules verbatim: test-first, minimal, no scope creep; a failing
@@ -343,10 +346,18 @@ Fix commits must land on the *owning* PR's branch:
 - Stage **only the fixer's `editedFiles`, by name** — never `git add -A` /
   `git add .`:
   ```bash
+  engine="<plugin-root>/engine/cli.mjs"   # add --config <pinned config> to both engine calls when the run has one
+  before=$(git rev-parse HEAD)
   git add <file1> <file2> ...
-  git commit -m "<ISSUE> <what>"
+  git commit -m "$(node "$engine" commit-rule --issue <slice-id> --type fix --scope <PR scope> \
+    --subject "<fixer summary>" | jq -r .subject)"
+  node "$engine" commit-check --range "$before..HEAD"   # must print ok: true before the push
   ```
-  Afterwards compare `git status --porcelain` with the snapshot; pre-existing
+  The subject follows `<COMMIT-RULE>`, never "issue id first" unless the rule
+  says so. `commit-rule` prints an empty `subject` when the format is prose, not
+  a template — write it by hand from `format`. `commit-check` exits non-zero on
+  a mismatch: this commit is yours, so `git commit --amend -m "<conforming
+  subject>"` and re-check before pushing. Afterwards compare `git status --porcelain` with the snapshot; pre-existing
   entries stay uncommitted (say so once if any).
 - After committing to a **lower** branch, restack everything above it before
   the next phase: `gh stack view --json` succeeds → `gh stack rebase
@@ -435,7 +446,8 @@ pending; pending is waited on.
   Briefs and results travel as files under `.context/babysit-<parent>/`.
 - Never silence a gate to go green; warranted disablement is `needs-human`.
 - Stage fix commits by explicit file name only — `git add -A`/`git add .` are
-  banned here.
+  banned here. Every fix commit's subject follows `<COMMIT-RULE>` and passes
+  `commit-check` before it is pushed.
 - Never resolve a thread you didn't address; never resolve a `needs-human`
   thread — that's the human's click.
 - Never touch branches held by other worktrees.

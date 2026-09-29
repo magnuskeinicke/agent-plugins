@@ -282,7 +282,9 @@ relay works the slices one at a time in that order.
 Grilling, `/to-prd`, and `/to-issues` write real files in this worktree:
 `CONTEXT.md`, `docs/adr/**`, and `docs/agents/repo-config.md` (`goldenPaths`
 write-backs). Run `git status --porcelain`, commit every one of them on the
-current branch now (one commit, e.g. `docs: <ISSUE> planning docs`) **and
+current branch now (one commit whose subject follows the repo's commit rule —
+`node "$engine" commit-rule --issue <ISSUE> --type docs --subject "planning docs"`
+prints it) **and
 push**: `git push -u origin <branch>`. The pushed branch is the relay's docs
 reference, named in the checkpoint and in every slice's `## Cloud dispatch`
 comment; the stack branches are cut from `<BASE>`, never from it. The tracker

@@ -38,6 +38,14 @@ import { FINDINGS_SCHEMA, VALIDATION_SCHEMA, ADJUDICATION_SCHEMA, FIX_RESULT_SCH
 import * as prompts from './lib/prompts.mjs';
 import { taskModels, resolveModel, SKILL_ROLES } from './lib/models.mjs';
 import { runTask } from './lib/runner.mjs';
+import {
+  resolveCommitRule,
+  renderCommitSubject,
+  commitRuleText,
+  commitsInRange,
+  commitOffenders,
+  commitViolationText,
+} from './lib/commit.mjs';
 
 const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const COPY_REVIEW_RUBRIC_PATH = join(PLUGIN_ROOT, 'agents', 'references', 'copy-review-rubric.md');
@@ -57,6 +65,15 @@ const UNCOMMITTED_FINDING = {
   detail:
     'The implementer reported committed=false. Reviewers inspect `git diff <base>...HEAD`, which cannot see uncommitted work. Commit only the owned edited files and report committed=true plus the new `head`; if sandbox git writes are denied, return the owned file list for the parent to commit.',
 };
+
+function commitSubjectsFinding(rule, offenders, since, example) {
+  return {
+    id: 'GATE-COMMIT-SUBJECT',
+    source: 'gate',
+    title: 'Commit subjects break the commit rule',
+    detail: `${commitViolationText(rule, offenders, since, example)} Change no code for this finding — rewrite only the commit messages, then report committed=true and the new \`head\`.`,
+  };
+}
 
 // ── plumbing ─────────────────────────────────────────────────────────────────
 
@@ -231,6 +248,37 @@ function reuseFingerprint(addedFiles, provenance) {
     .digest('hex');
 }
 
+// Commit-subject rule for this run: the ledger's pinned config, plus the
+// issue / type / scope the example subject is built from.
+function commitRule(state) {
+  const rule = resolveCommitRule(state.config);
+  const ctx = state.commitContext || {};
+  return { rule, example: renderCommitSubject(rule, { issue: ctx.issue, type: ctx.type, scope: ctx.scope }) };
+}
+
+// Where the next writer's commits start: the last recorded head, else the
+// point init checked from.
+function commitsStart(state) {
+  const hh = state.headHistory || [];
+  return hh[hh.length - 1] || state.commitsSince || state.base;
+}
+
+function writerCommitRule(state) {
+  const { rule, example } = commitRule(state);
+  return commitRuleText(rule, { example, since: commitsStart(state) });
+}
+
+// Checks every commit subject in since..head. Returns null when there is
+// nothing to check (no pattern, not a git work tree), else the offenders.
+function checkCommits(state, since, head = 'HEAD') {
+  const { rule } = commitRule(state);
+  if (!rule.pattern) return null;
+  const commits = commitsInRange(`${since}..${head}`);
+  return commits === null ? null : commitOffenders(rule, commits);
+}
+
+const ISSUE_ID = /^([A-Z][A-Z0-9]*-\d+|#\d+)$/;
+
 // ── commands ─────────────────────────────────────────────────────────────────
 
 function cmdInit(args) {
@@ -252,6 +300,14 @@ function cmdInit(args) {
     tasks: [],
     slice: args.slice,
     base: args.base,
+    // Commit-subject example inputs; commits before `commitsSince` (default
+    // base) are not the suite's and are never checked.
+    commitContext: {
+      issue: typeof args.issue === 'string' ? args.issue : ISSUE_ID.test(args.slice) ? args.slice : '',
+      type: typeof args['commit-type'] === 'string' ? args['commit-type'] : 'feat',
+      scope: typeof args['commit-scope'] === 'string' ? args['commit-scope'] : '',
+    },
+    commitsSince: typeof args['commits-since'] === 'string' ? args['commits-since'] : '',
     // Review-only: one classified reviewer round, no fix pass — findings are
     // the deliverable (magnus:review-code). `decide` ends the run either way.
     reviewOnly: bool(args['review-only']),
@@ -272,8 +328,23 @@ function cmdInit(args) {
     reuseCleanAt: null,
     verdict: null,
   };
+  // The implement pass's commits must already follow the commit rule; a
+  // mismatch turns round 1 into a gate-fix that rewrites them (worker-owned).
+  let commitCheck = { status: 'skipped', reason: 'review-only / inspect run — no commits of its own' };
+  if (!state.reviewOnly && !state.inspect) {
+    const since = state.commitsSince || state.base;
+    const offenders = checkCommits(state, since);
+    if (offenders === null) commitCheck = { status: 'skipped', reason: 'no commit pattern, or not a git work tree' };
+    else if (!offenders.length) commitCheck = { status: 'ok', since };
+    else {
+      state.gates.commitSubjects = false;
+      state.commitViolations = offenders;
+      commitCheck = { status: 'rejected', since, offenders,
+        error: commitViolationText(commitRule(state).rule, offenders, since, commitRule(state).example) };
+    }
+  }
   saveState(args, state);
-  out({ resumed: false, slice: state.slice, round: 1, phase: 'plan', stateFile: p });
+  out({ resumed: false, slice: state.slice, round: 1, phase: 'plan', stateFile: p, commitCheck });
 }
 
 function cmdPlan(args) {
@@ -283,9 +354,13 @@ function cmdPlan(args) {
 
   // Reviewers never see red code or uncommitted work: a red gate spends this
   // round on a gate-fix pass instead of a reviewer round, mechanically.
+  const { rule, example } = commitRule(state);
   const gateFindings = [
     ...(state.gates.testsGreen === false ? [TESTS_GATE_FINDING] : []),
     ...(state.gates.committed === false ? [UNCOMMITTED_FINDING] : []),
+    ...(state.gates.commitSubjects === false
+      ? [commitSubjectsFinding(rule, state.commitViolations || [], commitsStart(state), example)]
+      : []),
   ];
   if (gateFindings.length) {
     if (state.round >= maxRounds(state)) {
@@ -301,7 +376,7 @@ function cmdPlan(args) {
     const promptFile = join(roundDir, 'fix.md');
     writeFileSync(
       promptFile,
-      prompts.fixPrompt(contractText(args, state), gateFindings, inspectCmds(state).diffCmd, args['commit-rule'] || '', outputFile),
+      prompts.fixPrompt(contractText(args, state), gateFindings, inspectCmds(state).diffCmd, writerCommitRule(state), outputFile),
     );
     state.phase = 'fix';
     state.fixTargets = gateFindings.map((f) => f.id);
@@ -586,7 +661,7 @@ function cmdDecide(args) {
   const gateCleared =
     (state.gates.testsGreen === false && testsGreen) ||
     (state.gates.committed === false && committed);
-  state.gates = { testsGreen, committed };
+  state.gates = { ...state.gates, testsGreen, committed };
 
   const verdicts = args.verdicts
     ? readJson(args.verdicts, VALIDATION_SCHEMA, 'verdicts').verdicts
@@ -643,7 +718,7 @@ function cmdDecide(args) {
         contractText(args, state),
         targets,
         inspectCmds(state).diffCmd,
-        args['commit-rule'] || '',
+        writerCommitRule(state),
         outputFile,
       ),
     );
@@ -686,6 +761,16 @@ function cmdApplyFix(args) {
   if (state.phase !== 'fix') die(`phase is "${state.phase}", expected "fix"`);
   if (!args.result) die('--result <fix-result.json> is required');
   const fix = readJson(args.result, FIX_RESULT_SCHEMA, 'fix result');
+  // Refuse a fix range carrying a subject that breaks the commit rule — the
+  // fix pass redoes its commit (or the parent rewords its own), then re-runs.
+  if (fix.committed && fix.head) {
+    const since = commitsStart(state);
+    const offenders = checkCommits(state, since, fix.head);
+    if (offenders?.length) {
+      const { rule, example } = commitRule(state);
+      die(`apply-fix refused: ${commitViolationText(rule, offenders, since, example)}\nA fixer's commit → run the fix pass again with a fresh fixer; a parent-owned commit → reword it yourself. Then re-run apply-fix with the new result's \`head\`.`);
+    }
+  }
   const targets = state.ledger.entries.filter((e) =>
     (state.fixTargets || []).includes(e.id),
   );
@@ -693,6 +778,7 @@ function cmdApplyFix(args) {
   if (fix.head) state.headHistory.push(fix.head);
   state.fixTargets = [];
   state.gates = { testsGreen: fix.testsGreen, committed: fix.committed };
+  state.commitViolations = [];
   state.round += 1;
   state.phase = 'plan';
   state.tasks = [];
@@ -822,6 +908,41 @@ function cmdTask(args) {
     promptFile: args['prompt-file'], outputFile: args['output-file'] }, args.role, schemas[args.schema]));
 }
 
+// The resolved commit rule, rendered for prompts the skills write themselves
+// (implement pass, babysit fixes). `--subject` renders a complete subject.
+function cmdCommitRule(args) {
+  const state = args.slice && existsSync(statePath(args)) ? loadState(args) : null;
+  const cfg = state ? state.config : loadCfg(args);
+  const ctx = state?.commitContext || {};
+  const rule = resolveCommitRule(cfg);
+  const pick = (key, fallback) => (typeof args[key] === 'string' ? args[key] : fallback);
+  const values = { issue: pick('issue', ctx.issue || ''), type: pick('type', ctx.type || 'feat'), scope: pick('scope', ctx.scope || '') };
+  const example = renderCommitSubject(rule, values);
+  const subject = typeof args.subject === 'string' ? renderCommitSubject(rule, { ...values, subject: args.subject }) : undefined;
+  out({ ...rule, example, ...(subject === undefined ? {} : { subject }),
+    text: commitRuleText(rule, { example, since: typeof args.since === 'string' ? args.since : '' }) });
+}
+
+// Pre-push gate: every subject in the range must match the commit rule.
+// Prints the result; exits 1 on any offender.
+function cmdCommitCheck(args) {
+  const range = typeof args.range === 'string' ? args.range : typeof args.base === 'string' ? `${args.base}..HEAD` : '';
+  if (!range || !range.includes('..') || range.startsWith('-')) die('commit-check requires --base <ref> or --range <from>..<to>');
+  const state = args.slice && existsSync(statePath(args)) ? loadState(args) : null;
+  const rule = resolveCommitRule(state ? state.config : loadCfg(args));
+  if (!rule.pattern) {
+    out({ ok: true, range, ...rule, skipped: 'no commit pattern configured or derivable' });
+    return;
+  }
+  const commits = commitsInRange(range);
+  if (commits === null) die('commit-check must run inside a git work tree');
+  const offenders = commitOffenders(rule, commits);
+  const since = range.split(/\.\.\.?/)[0];
+  out({ ok: !offenders.length, range, ...rule, checked: commits.length, offenders,
+    ...(offenders.length ? { error: commitViolationText(rule, offenders, since, renderCommitSubject(rule, { issue: typeof args.issue === 'string' ? args.issue : '' })) } : {}) });
+  if (offenders.length) process.exit(1);
+}
+
 function cmdSnapshot(args) {
   if (!args.output) die('snapshot requires --output <config.md>');
   let cfg;
@@ -830,6 +951,10 @@ function cmdSnapshot(args) {
     const raw = execFileSync('git', ['show', `${args.ref}:docs/agents/repo-config.md`], { encoding: 'utf8' });
     cfg = resolveRepoConfig(parseRepoConfig(raw, String(args.ref)));
   } else cfg = loadCfg(args);
+  // Pin the resolved commit rule so every relay/babysit session reads it
+  // verbatim instead of re-deriving it.
+  const { format, pattern } = resolveCommitRule(cfg);
+  cfg = { ...cfg, commit: { format, pattern } };
   mkdirSync(dirname(resolve(args.output)), { recursive: true });
   writeFileSync(args.output, `## Config\n\n\`\`\`json\n${JSON.stringify(cfg, null, 2)}\n\`\`\`\n`);
   out({ configFile: resolve(args.output), ref: args.ref || null });
@@ -849,6 +974,8 @@ const COMMANDS = {
   run: cmdRun,
   task: cmdTask,
   snapshot: cmdSnapshot,
+  'commit-rule': cmdCommitRule,
+  'commit-check': cmdCommitCheck,
 };
 
 const [, , cmd, ...rest] = process.argv;
