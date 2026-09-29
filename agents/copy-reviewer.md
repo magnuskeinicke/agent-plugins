@@ -1,7 +1,7 @@
 ---
 name: copy-reviewer
 description: "Use this agent to review UI text for redundancy and remove labels, helper copy, tooltips, and instructions that merely restate what the interface already communicates. Use it for PRs or audits where copy minimalism matters; not for grammar, tone, brand voice, or broader UX review."
-model: opus
+model: sonnet
 effort: high
 color: yellow
 ---

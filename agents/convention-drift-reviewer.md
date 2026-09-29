@@ -1,7 +1,7 @@
 ---
 name: convention-drift-reviewer
 description: Use this agent to review implemented branch changes for convention drift and overcaution relative to the codebase's own established practice. It mines a peer-file baseline with quorum evidence before judging, flags new patterns, conventions, dependencies, or abstractions introduced without rationale, and flags code that is more defensive or complicated than comparable existing sites, citing exemplar file:line evidence or documented rules for every finding. Also supports a refute mode that adversarially re-checks findings against wider sampling. Not for spec-level pattern review (use kramme:codebase-pattern-reviewer) or absolute AI-slop pattern detection (use kramme:deslop-reviewer).
-model: opus
+model: sonnet
 effort: high
 color: cyan
 ---

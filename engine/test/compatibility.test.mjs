@@ -88,7 +88,7 @@ test('legacy Claude ledger resumes unfinished reviewers with Codex task manifest
   assert.equal(resumed.round, 1);
   assert.equal(resumed.tasks.length, 1);
   assert.equal(resumed.tasks[0].id, plan.reviewers[0].id);
-  assert.equal(resumed.tasks[0].execution.claude.model, 'opus');
+  assert.equal(resumed.tasks[0].execution.claude.model, 'sonnet');
   assert.equal(run('run', '--task', resumed.tasks[0].taskFile, '--runtime', 'codex', '--dry-run').command, 'codex');
   writeFileSync(resumed.tasks[0].outputFile, JSON.stringify({ reviewer: resumed.tasks[0].id, blockingFindings: [], notes: [] }));
   run('collect');
@@ -103,7 +103,7 @@ test('planning configuration survives a checkout that has no repo config', (t) =
   const base = git('rev-parse', 'HEAD');
   mkdirSync(join(dir, 'docs/agents'), { recursive: true });
   const config = join(dir, 'docs/agents/repo-config.md');
-  writeFileSync(config, '## Config\n```json\n' + JSON.stringify({ goldenPaths: { domain: 'lib/canonical.ts' }, routing: { codexModelAliases: { opus: 'custom-reviewer' } } }) + '\n```\n');
+  writeFileSync(config, '## Config\n```json\n' + JSON.stringify({ goldenPaths: { domain: 'lib/canonical.ts' }, routing: { models: { reviewer: { codex: { model: 'custom-reviewer' } } } } }) + '\n```\n');
   git('add', 'docs/agents/repo-config.md');
   git('-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'planning');
   const ref = git('rev-parse', 'HEAD');
