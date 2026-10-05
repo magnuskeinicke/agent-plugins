@@ -66,7 +66,7 @@ once, in your first message.
 | `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) — the **feature ticket**, the human's | the tracker's own id form (`#123` for GitHub Issues) |
 | `<PRD-ISSUE>` | derived — the sub-issue of `<ISSUE>` titled `PRD: …`; its description is the PRD, every slice hangs off it | none → stage GRILL / PRD creates it |
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
-| `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
+| `<BASE>` | `integrationBranch` | `$CONDUCTOR_DEFAULT_BRANCH` (the local Conductor repo's base branch), else `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<IN-PROGRESS>` | `tracker.statuses.inProgress` | discover Dev in progress via the shared lifecycle |
 | `<IN-REVIEW>` | `tracker.statuses.inReview` | discover Dev technical review via the shared lifecycle |
 | `<DONE>` | `tracker.statuses.done` | discover Done via the shared lifecycle |
@@ -299,7 +299,8 @@ this skill's job, not a command to hand back to the user.
 Resolve the venue once per pipeline and record it in the checkpoint:
 **`cloud`** (default) is the relay below; **`local`** is
 `references/local-loop.md`. Cloud needs a way to create sessions: the
-Conductor MCP (`create_workspace`, `create_session`, `get_session_status`,
+Conductor MCP (`create_workspace` — always with `branch` = the snapshot's
+`base`, see `references/cloud-relay.md`; `create_session`, `get_session_status`,
 `list_messages`) from a local session, or the `conductor` CLI
 (`/conductor/bin/conductor`, authenticated as you) inside a cloud sandbox —
 `conductor session create --workspace <id> --agent <agent> [--model --effort]
@@ -540,7 +541,7 @@ Before reporting done:
 - [ ] The reported stage matches live markers (`PRD:` sub-issue of the feature ticket, slice sub-issues of the PRD ticket, `## Cloud dispatch` comments, `gh pr list --state all`) — not conversation memory or the checkpoint alone.
 - [ ] After the grill, the human was asked nothing: `/to-prd` and `/to-issues` ran in pipeline mode; every assumption made downstream is recorded on its ticket/PR and listed in the report.
 - [ ] Planning docs (`CONTEXT.md`, `docs/adr/**`, `docs/agents/**`) were committed **and pushed** before the relay started; `git status --porcelain` shows none left over; the docs branch is in the checkpoint and every dispatch comment.
-- [ ] Cloud mode: the run ended as soon as the relay was confirmed working — no invocation waited on, polled or babysat a cloud session from outside beyond the bounded start confirmation. The checkpoint records `Tracker writes: sandbox | planning` from the bootstrap probe; under `planning`, every denied tracker write is a staged file that an outside invocation flushed (no marker silently dropped). Exactly one pipeline workspace for the stack; every worked slice's ticket carries exactly one `## Cloud dispatch` comment (workspace deep link, the session that worked it, docs branch); this session worked at most one PR and, if it did, started exactly one successor session before ending.
+- [ ] Cloud mode: the run ended as soon as the relay was confirmed working — no invocation waited on, polled or babysat a cloud session from outside beyond the bounded start confirmation. The checkpoint records `Tracker writes: sandbox | planning` from the bootstrap probe; under `planning`, every denied tracker write is a staged file that an outside invocation flushed (no marker silently dropped). Exactly one pipeline workspace for the stack, created with `branch` = the snapshot's `base` (or handed off); every worked slice's ticket carries exactly one `## Cloud dispatch` comment (workspace deep link, the session that worked it, docs branch); this session worked at most one PR and, if it did, started exactly one successor session before ending.
 - [ ] Every completed slice has a draft PR verified from durable markers (remote branch, `gh pr view`: draft, base = predecessor's branch), `gh stack view --json` shows the chain bottom → top, and `<NEXT>` has exactly one carrier or the report names why none does (stack complete).
 - [ ] Every PR a session opened was babysat to a terminal verdict in that same session before any successor was started; `babysit: GOAL MET` is stamped on its slice's `## Cloud dispatch` comment (local: slice checkpoint `COMPLETE`); no slice branch was cut on a predecessor short of that.
 - [ ] The stack-wide babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.

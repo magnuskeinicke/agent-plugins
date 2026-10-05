@@ -28,7 +28,7 @@ say so once.
 | `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) — the **feature ticket** (human-facing) | the tracker's own id form (`#123`) |
 | `<PRD-ISSUE>` | derived — the `PRD:`-titled sub-issue of `<ISSUE>`; parent of every slice, its description is the PRD | — |
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
-| `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
+| `<BASE>` | `integrationBranch` | `$CONDUCTOR_DEFAULT_BRANCH` (the local Conductor repo's base branch), else `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<IN-PROGRESS>` | `tracker.statuses.inProgress` | discover Dev in progress via the shared lifecycle |
 | `<NEXT>` | `labels.sliceNext` | no pointer label — the user names the next slice |
 | `<HITL>` | `labels.needsHuman` | read "needs a human decision" from the ticket body — informational, never a gate |

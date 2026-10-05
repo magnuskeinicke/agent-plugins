@@ -42,6 +42,16 @@ read commit subjects from it (`commit-rule` / `commit-check --config <snapshot>`
 never from a moving branch; the bootstrap checklist below verifies the written
 snapshot still carries that key.
 
+The snapshot also pins `integrationBranch` to the resolved `<BASE>` (config
+key, else the local Conductor repo's `$CONDUCTOR_DEFAULT_BRANCH`, else
+`origin/HEAD`) — a cloud sandbox has no `$CONDUCTOR_DEFAULT_BRANCH`, so its
+sessions must read the base from the snapshot. The command prints it as `base`.
+Pass that `base` as `branch` on **every** workspace creation (MCP
+`create_workspace`, CLI `conductor workspace create --branch`): omitted,
+Conductor cuts the workspace from the remote's default branch and ignores the
+project's cloud base-branch setting. A `null` base is a blocker — set
+`integrationBranch` rather than let Conductor pick.
+
 For standalone ticket dispatch, snapshot the caller's resolved config without
 `--ref`. An explicit ref or config that cannot be read is a blocker, never a
 reason to use defaults. Planning documents are read at that OID, not at a moving

@@ -23,7 +23,7 @@ so once.
 
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
-| `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
+| `<BASE>` | `integrationBranch` | `$CONDUCTOR_DEFAULT_BRANCH` (the local Conductor repo's base branch), else `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123`) |
 | `<PR-SKILL>` | `skills.createPr` | write the PR title/body inline, following `pr.titleRule` |
 | `<MEDIA-BRANCH>` | `pr.mediaBranch` | `pr-media` — only used when the top layer inherits an existing PR's visual section |

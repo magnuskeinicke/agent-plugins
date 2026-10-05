@@ -48,7 +48,9 @@ planning (grill → PRD → slices) in your session — local, or a cloud worksp
 the grilling session was handed off to — and then runs the stack as a
 **relay of fresh sessions in one pipeline workspace** (opt-in `local` keeps
 it in your worktree — `feature-goal/references/local-loop.md`): the workspace
-is created via the Conductor MCP (`create_workspace`, then a **bootstrap
+is created via the Conductor MCP (`create_workspace` with `branch` =
+`<BASE>` — omitted, Conductor cuts from the remote's default branch, not the
+project's base-branch setting — then a **bootstrap
 session** installs the plugin + `gh-stack` in the fresh sandbox) or is simply
 the handed-off one; then every PR gets its **own session** (`create_session`
 from a local session, `/conductor/bin/conductor session create` from inside
@@ -100,7 +102,10 @@ exactly.
 - **Cloud workspace via `/feature-goal`** — automatic: its dispatch runs the
   bootstrap session before the work session.
 - **Cloud workspace created by hand** (Mac app, iOS, MCP outside
-  feature-goal) — the sandbox is fresh and has no plugin. Paste this as the
+  feature-goal) — via MCP or `conductor workspace create`, pass `branch` /
+  `--branch` = the local repo's base branch (`$CONDUCTOR_DEFAULT_BRANCH`);
+  the API ignores the project's cloud base-branch setting. The sandbox is
+  fresh and has no plugin. Paste this as the
   **first message**, then start a **new session** (skills load only at
   session start; the install never appears mid-session):
 

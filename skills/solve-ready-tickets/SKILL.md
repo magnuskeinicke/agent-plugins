@@ -57,7 +57,7 @@ and name the missing information; never scan unrelated projects.
 | `<SKIP>` | `labels.managerSkip` | no pipeline exclusion to honour |
 | `<RISK:>` | `labels.riskPrefix` | no risk label to clear on decline |
 | `<AGENT:>` | `routing.labelPrefix` | no routing labels — every workspace gets this runtime's agent |
-| `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
+| `<BASE>` | `integrationBranch` | `$CONDUCTOR_DEFAULT_BRANCH` (the local Conductor repo's base branch), else `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<CLOUD-MODEL>` | shared registry `model --role implementer --runtime <agent> --cloud` | explicit model/effort; legacy cloud overrides remain supported |
 
 Also read the prose rules at `tracker.docPath` (workspace ids, how to fetch
@@ -83,7 +83,7 @@ Fan-out needs Conductor:
   `create_session`, `get_session_status`, `list_messages`, `list_models`.
 - **From inside a cloud sandbox** — the `conductor` CLI
   (`/conductor/bin/conductor`, authenticated as you):
-  `conductor workspace create`, `conductor session create --workspace <id>
+  `conductor workspace create --branch <BASE>`, `conductor session create --workspace <id>
   --agent <agent> [--model --effort] --name <name> --message "<prompt>" --json`,
   `conductor session status <id>`.
 
@@ -272,9 +272,13 @@ For each `dispatch` ticket, in parallel:
    - **name** `<ISSUE> <short slug of the title>` — this name **is** the
      ownership marker every later run matches on, so the `<ISSUE>` prefix is not
      optional.
-   - **branch** `<BASE>`. Conductor cuts the workspace's own branch from it,
-     which is exactly the virgin checkout `/work-issue` demands (it creates no
-     branch and no worktree of its own).
+   - **branch** `<BASE>` — always pass it (MCP `branch`, CLI `--branch`), as
+     the `base` the dispatch snapshot (item 2) reports; take that snapshot
+     before creating the workspace. Without it Conductor cuts from the
+     remote's default branch and ignores the project's cloud base-branch
+     setting. Conductor cuts the workspace's own branch from it, which is
+     exactly the virgin checkout `/work-issue` demands (it creates no branch
+     and no worktree of its own).
    - **agent** = the supported runtime selected in Step 1, else this runtime's
      agent. Resolve `<CLOUD-MODEL>` as `model` + `effort` for every session.
    - **first session** = bootstrap. The cloud MCP `create_workspace` creates
@@ -396,7 +400,7 @@ Before reporting done:
 - [ ] Selection paged the repo-scoped trigger queue to exhaustion, applied no implicit assignee/ready-for-dev filter, and treated `agent:ready` as a trigger rather than a runtime. Only explicit `max N` capped new workspaces.
 - [ ] Nothing in this run wrote, tested, or committed code, created a git branch/worktree itself, ran the development/review loop, or touched a PR.
 - [ ] No ticket was claimed here — the worker performed its own claim; the caller only applied queued operations when tracker access required it.
-- [ ] Every dispatched ticket has exactly one workspace, named `<ISSUE> …`, whose work session's entire prompt is `/work-issue <ISSUE>` — after a bootstrap session that replied `BOOTSTRAP OK`.
+- [ ] Every dispatched ticket has exactly one workspace, named `<ISSUE> …`, created with `branch` = the snapshot's `base`, whose work session's entire prompt is `/work-issue <ISSUE>` — after a bootstrap session that replied `BOOTSTRAP OK`.
 - [ ] The dispatcher authored only decline notes and applied only exact worker-authored queued operations (comments, labels, assignee and status), reading each effect back. Finalization verified parent technical review, generated descendants Done and correct PR issue links. No tracker attachments.
 - [ ] Declined tickets: `<AGENT-READY>` **and** `<RISK:>*` cleared in one additive write, every other label preserved, no routing label added, status unchanged, no workspace created.
 - [ ] The Step 4 report accounts for every queue ticket — completed, blocked, declined, failed to dispatch, or left to another owner — with **deep links**, and names every item that needs me.
