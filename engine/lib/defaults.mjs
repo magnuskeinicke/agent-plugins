@@ -7,7 +7,8 @@
 // Empty string / empty object means "not knowable generically": the skill or
 // engine degrades gracefully and says so rather than guessing.
 export const REPO_CONFIG_DEFAULTS = {
-  // '' → resolve at runtime from the repo's default branch
+  // '' → resolve at runtime from the local Conductor repo's base branch
+  // ($CONDUCTOR_DEFAULT_BRANCH), else the repo's default branch
   // (`git symbolic-ref --short refs/remotes/origin/HEAD`).
   integrationBranch: '',
   // Roots a reuse search starts from. [] → search the whole tree.

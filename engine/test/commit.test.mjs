@@ -34,7 +34,7 @@ function repo(t, config) {
   mkdirSync(join(dir, 'docs/agents'), { recursive: true });
   writeFileSync(join(dir, 'docs/agents/repo-config.md'), `## Config\n\n\`\`\`json\n${JSON.stringify(config)}\n\`\`\`\n`);
   const exec = (...args) =>
-    spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8' });
+    spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8', env: { ...process.env, CONDUCTOR_DEFAULT_BRANCH: '' } });
   const run = (...args) => {
     const r = exec(...args, '--slice', 'SER-1633', '--dir', join(dir, '.context'));
     assert.equal(r.status, 0, r.stderr);
@@ -167,4 +167,27 @@ test('snapshot pins the resolved commit rule for relay and babysit sessions', (t
   const pinned = parseRepoConfig(readFileSync(outFile, 'utf8'));
   assert.equal(pinned.commit.format, SER_TITLE_RULE);
   assert.equal(pinned.commit.pattern, '^[a-z]+(?:\\([A-Za-z0-9_./-]+\\))?: SER-\\d+ \\S.*$');
+});
+
+test('snapshot pins the base branch cloud workspaces are cut from', (t) => {
+  const outFile = (dir) => join(dir, '.context/planning/repo-config.md');
+  const snapshot = (r, env) => {
+    const res = spawnSync(process.execPath, [cli, 'snapshot', '--output', outFile(r.dir)], {
+      cwd: r.dir, encoding: 'utf8', env: { ...process.env, CONDUCTOR_DEFAULT_BRANCH: '', ...env },
+    });
+    assert.equal(res.status, 0, res.stderr);
+    return { base: JSON.parse(res.stdout).base, pinned: parseRepoConfig(readFileSync(outFile(r.dir), 'utf8')).integrationBranch };
+  };
+
+  const plain = repo(t, {});
+  plain.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  plain.git('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main');
+  assert.deepEqual(snapshot(plain), { base: 'main', pinned: 'main' });
+  assert.deepEqual(snapshot(plain, { CONDUCTOR_DEFAULT_BRANCH: 'development' }), { base: 'development', pinned: 'development' });
+
+  const explicit = repo(t, { integrationBranch: 'origin/release' });
+  assert.deepEqual(snapshot(explicit, { CONDUCTOR_DEFAULT_BRANCH: 'development' }), { base: 'release', pinned: 'origin/release' });
+
+  const bare = repo(t, {});
+  assert.deepEqual(snapshot(bare), { base: null, pinned: '' });
 });

@@ -38,7 +38,7 @@ values over it two levels deep, so partial objects are fine (set
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `integrationBranch` | string | `''` → `origin/HEAD` | branch PRs merge into and stacks base off |
+| `integrationBranch` | string | `''` → `$CONDUCTOR_DEFAULT_BRANCH`, else `origin/HEAD` | branch PRs merge into and stacks base off |
 | `sourceDirs` | string[] | `[]` → whole tree | roots a reuse search starts from; dirs that must be free of untracked files before a push |
 | `conventionsFile` | string | `CLAUDE.md` | the repo's written conventions |
 

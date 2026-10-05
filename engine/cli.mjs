@@ -954,10 +954,22 @@ function cmdSnapshot(args) {
   // Pin the resolved commit rule so every relay/babysit session reads it
   // verbatim instead of re-deriving it.
   const { format, pattern } = resolveCommitRule(cfg);
-  cfg = { ...cfg, commit: { format, pattern } };
+  // Pin the base too: Conductor cuts cloud workspaces from the remote's default
+  // branch unless told otherwise, and a cloud sandbox has no
+  // CONDUCTOR_DEFAULT_BRANCH to fall back on.
+  const base = (cfg.integrationBranch || process.env.CONDUCTOR_DEFAULT_BRANCH || originHead()).replace(/^origin\//, '');
+  cfg = { ...cfg, integrationBranch: cfg.integrationBranch || base, commit: { format, pattern } };
   mkdirSync(dirname(resolve(args.output)), { recursive: true });
   writeFileSync(args.output, `## Config\n\n\`\`\`json\n${JSON.stringify(cfg, null, 2)}\n\`\`\`\n`);
-  out({ configFile: resolve(args.output), ref: args.ref || null });
+  out({ configFile: resolve(args.output), ref: args.ref || null, base: base || null });
+}
+
+function originHead() {
+  try {
+    return execFileSync('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return '';
+  }
 }
 
 const COMMANDS = {

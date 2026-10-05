@@ -50,7 +50,7 @@ fallback and say so once.
 | --- | --- | --- |
 | `<ISSUE>` | `tracker.issuePrefix` + number (e.g. `PROJ-1234`) | the tracker's own id form (`#123`) |
 | `<TRACKER>` | `tracker.kind` (`linear` → Linear MCP) | GitHub Issues via `gh` |
-| `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
+| `<BASE>` | `integrationBranch` | `$CONDUCTOR_DEFAULT_BRANCH` (the local Conductor repo's base branch), else `git symbolic-ref --short refs/remotes/origin/HEAD` |
 | `<BOT>` | `pr.botReviewer` — the review-request bot (Copilot) | **skip Phase B** — record `n/a` |
 | `<COMMENT-BOT>` | `pr.commentReviewer` — `{login, command}` of the comment-summoned bot (CodeRabbit: `coderabbitai[bot]`, `@coderabbitai review`) | **skip Phase C** — record `n/a` |
 | `<STACK>` | `pr.stackTool` | plain branches; every PR targets `<BASE>`, nothing to restack |

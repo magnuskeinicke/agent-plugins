@@ -18,7 +18,7 @@ Division of labour: systematic code quality belongs to `/review-code`, scope-vs-
 
 ## Scope
 
-Resolve the base, first match wins: an explicit `--base <branch>`; a PR number's own base branch; `integrationBranch` from `docs/agents/repo-config.md` (`## Config`); the repo default (`git symbolic-ref --short refs/remotes/origin/HEAD`). Name the base you resolved in the closing sentence. `git fetch origin <base>` first. The scope is the committed branch diff (`git diff origin/<base>...HEAD`) plus anything staged, unstaged, or untracked. Empty scope → say so and stop.
+Resolve the base, first match wins: an explicit `--base <branch>`; a PR number's own base branch; `integrationBranch` from `docs/agents/repo-config.md` (`## Config`); `$CONDUCTOR_DEFAULT_BRANCH` (the local Conductor repo's base branch); the repo default (`git symbolic-ref --short refs/remotes/origin/HEAD`). Name the base you resolved in the closing sentence. `git fetch origin <base>` first. The scope is the committed branch diff (`git diff origin/<base>...HEAD`) plus anything staged, unstaged, or untracked. Empty scope → say so and stop.
 
 ## Read in three tiers
 
@@ -94,7 +94,7 @@ Inspired by kramme-cc-workflow (MIT) — https://github.com/Abildtoft/kramme-cc-
 
 Before reporting done:
 
-- [ ] Base resolved in first-match order (`--base` → PR base → `integrationBranch` → repo default) and named in the closing sentence.
+- [ ] Base resolved in first-match order (`--base` → PR base → `integrationBranch` → `$CONDUCTOR_DEFAULT_BRANCH` → repo default) and named in the closing sentence.
 - [ ] Manifest tier covered every changed file: name-status, numstat, `git status`, and the branch's own log.
 - [ ] Every observation carries exactly one disposition — `route` (owning skill/lane named), `reject` (why it turned ordinary), or `block` (requirement exceeded named).
 - [ ] Closing sentence names the base ref, the changed-file count, and any file whose hunks were not fully read.

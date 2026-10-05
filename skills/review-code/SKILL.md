@@ -18,7 +18,7 @@ defaults apply and you say so once.
 
 | Placeholder | Config key | Absent → |
 | --- | --- | --- |
-| `<BASE>` | `integrationBranch` | `git symbolic-ref --short refs/remotes/origin/HEAD` |
+| `<BASE>` | `integrationBranch` | `$CONDUCTOR_DEFAULT_BRANCH` (the local Conductor repo's base branch), else `git symbolic-ref --short refs/remotes/origin/HEAD` |
 
 Which reviewers exist and when they trigger: `../work-slice/references/reviewer-roster.md`
 (documentation; `engine/lib/roster.mjs` is the source of truth). The host's
