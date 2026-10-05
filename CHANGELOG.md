@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.1 — 2026-10-05
+
+### Changed
+
+- **Every worker runs on Opus 5.5 / GPT-6.1 Sol at high effort.** All roles in
+  `engine/lib/models.mjs` resolve to `opus` (cloud `opus-5-5-1m`) on Claude and `gpt-6.1-sol` on
+  Codex, effort `high`. `gpt-5.6-terra`, `gpt-6-luna` and the split babysitter profile are gone.
+- All review agents (`agents/*.md`) run on `opus` at `high`, including the former Sonnet lanes and
+  the `xhigh` architecture-strategist / design-iterator.
+- Defaults: `routing.cloudModels` uses `high` with Codex `gpt-6.1-sol`; `routing.codexModelAliases`
+  maps both `sonnet` and `opus` to `gpt-6.1-sol`.
+
 ## 0.12.0 — 2026-09-29
 
 ### Changed
