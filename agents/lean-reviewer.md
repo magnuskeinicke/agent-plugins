@@ -1,7 +1,7 @@
 ---
 name: lean-reviewer
 description: Use this agent to review PR changes for code that can be deleted, avoided, or replaced by existing code, the standard library, native platform features, or installed dependencies. It is a deletion-focused review pass, not a general correctness or style review.
-model: sonnet
+model: opus
 effort: high
 color: cyan
 ---

@@ -88,7 +88,7 @@ test('legacy Claude ledger resumes unfinished reviewers with Codex task manifest
   assert.equal(resumed.round, 1);
   assert.equal(resumed.tasks.length, 1);
   assert.equal(resumed.tasks[0].id, plan.reviewers[0].id);
-  assert.equal(resumed.tasks[0].execution.claude.model, 'sonnet');
+  assert.equal(resumed.tasks[0].execution.claude.model, 'opus');
   assert.equal(run('run', '--task', resumed.tasks[0].taskFile, '--runtime', 'codex', '--dry-run').command, 'codex');
   writeFileSync(resumed.tasks[0].outputFile, JSON.stringify({ reviewer: resumed.tasks[0].id, blockingFindings: [], notes: [] }));
   run('collect');
