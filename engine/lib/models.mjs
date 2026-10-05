@@ -4,19 +4,16 @@ const profile = (claude, codex, effort, access) => ({
 });
 
 export const ROLE_MODELS = {
-  planner: profile('opus', 'gpt-6-sol', 'xhigh', 'workspace-write'),
-  implementer: profile('opus', 'gpt-6-sol', 'xhigh', 'workspace-write'),
-  fixer: profile('opus', 'gpt-6-sol', 'xhigh', 'workspace-write'),
-  adjudicator: profile('opus', 'gpt-6-sol', 'xhigh', 'read-only'),
-  reviewer: profile('sonnet', 'gpt-6-sol', 'high', 'read-only'),
-  verifier: profile('sonnet', 'gpt-6-sol', 'high', 'read-only'),
-  explorer: profile('sonnet', 'gpt-5.6-terra', 'medium', 'read-only'),
-  triage: profile('sonnet', 'gpt-5.6-terra', 'medium', 'read-only'),
-  babysitter: {
-    claude: { model: 'sonnet', effort: 'medium', access: 'workspace-write' },
-    codex: { model: 'gpt-6-sol', effort: 'xhigh', access: 'workspace-write' },
-  },
-  dispatcher: profile('sonnet', 'gpt-6-luna', 'medium', 'workspace-write'),
+  planner: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
+  implementer: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
+  fixer: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
+  adjudicator: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
+  reviewer: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
+  verifier: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
+  explorer: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
+  triage: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
+  babysitter: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
+  dispatcher: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
 };
 
 export const SKILL_ROLES = {

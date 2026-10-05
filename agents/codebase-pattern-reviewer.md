@@ -1,7 +1,7 @@
 ---
 name: codebase-pattern-reviewer
 description: Use this agent during spec or design review to detect whether a proposed implementation introduces new codebase patterns, conventions, dependencies, file structures, or abstractions without rationale, or in diff reuse audit mode to hunt duplicates of existing code in a diff and audit the implementer's provenance table. Best for pre-implementation spec audits and the review loop's reuse lane; not for line-level correctness review.
-model: sonnet
+model: opus
 effort: high
 color: blue
 ---

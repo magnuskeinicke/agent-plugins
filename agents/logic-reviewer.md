@@ -1,7 +1,7 @@
 ---
 name: logic-reviewer
 description: Use this agent to review code for business logic flaws and race conditions. Checks for state machine violations, numeric overflow, edge cases in validation, and TOCTOU (time-of-check-time-of-use) bugs.
-model: sonnet
+model: opus
 effort: high
 color: red
 ---

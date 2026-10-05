@@ -1,7 +1,7 @@
 ---
 name: pr-test-analyzer
 description: Use this agent to review a pull request for test coverage quality and important gaps. It checks whether new behavior, edge cases, and regressions are exercised before a PR is marked ready; not for writing tests or doing general code review.
-model: sonnet
+model: opus
 effort: high
 color: cyan
 ---

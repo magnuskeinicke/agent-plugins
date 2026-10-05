@@ -92,13 +92,13 @@ export const REPO_CONFIG_DEFAULTS = {
     delegate: {},
     dispatch: 'cloud',
     cloudModels: {
-      claude: { model: 'opus-5-5-1m', effort: 'xhigh' },
-      codex: { model: 'gpt-6-sol', effort: 'xhigh' },
+      claude: { model: 'opus-5-5-1m', effort: 'high' },
+      codex: { model: 'gpt-6.1-sol', effort: 'high' },
     },
     // Translate the existing Claude roster pins for Codex workers.
     codexModelAliases: {
-      sonnet: 'gpt-5.6-terra',
-      opus: 'gpt-6-sol',
+      sonnet: 'gpt-6.1-sol',
+      opus: 'gpt-6.1-sol',
     },
   },
   // area → path patterns (regex sources; object form `{re, flags}` carries
