@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.2 — 2026-10-05
+
+### Fixed
+
+- **Cloud workspaces are cut from the local repo's base branch.** Conductor's `create_workspace`
+  API ignores the project's cloud base-branch setting and cuts from the remote's default branch
+  unless `branch` is passed. `/feature-goal` and `/solve-ready-tickets` now always pass it.
+- The engine `snapshot` resolves the base (`integrationBranch`, else `$CONDUCTOR_DEFAULT_BRANCH`,
+  else `origin/HEAD`), pins it as `integrationBranch` so cloud sessions inherit it, and prints it
+  as `base`.
+- `<BASE>` fallbacks across skills and `CONTRACT.md` consult `$CONDUCTOR_DEFAULT_BRANCH` before
+  `origin/HEAD`.
+
 ## 0.12.1 — 2026-10-05
 
 ### Changed
