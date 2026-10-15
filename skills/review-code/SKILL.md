@@ -111,7 +111,7 @@ Print, from `report`'s output plus the findings files:
 - **Advisory** (`report.advisoryNotes`): 60–79 confidence or confident-but-pre-existing — worth a glance, never "fix before ship".
 - **Unverified** (`report.unverified`): listed so nothing dies silently; noise unless something rings true.
 - **Notes**: the `notes` arrays from `.context/<run-id>/round-1/findings/*.json` — judgement-call points, grouped by reviewer.
-- **Consolidations**: the `consolidations` arrays from the same files — generalizable-code candidates (the workflow skills would file these as tickets; here just list them).
+- **Follow-up candidates**: `node "$engine" followups --slice <run-id>`. List `file` / `batch` (the workflow skills would file these, per `../work-slice/references/followups.md`) and `demoted` with its reason. Here, only list them.
 
 Then **stop** — findings are the deliverable. Do not fix anything unless the user asks; if they do, fixing happens in the main session as a normal task (there is no fix loop in this skill).
 
@@ -153,5 +153,5 @@ Before reporting done:
 - [ ] Verdict verbatim (`clean` or `N blocking finding(s) (CR-…)`) plus which reviewers ran and which died.
 - [ ] Blocking, advisory, and unverified findings presented separately — unverified listed, never silently dropped.
 - [ ] Untracked source files were named in the contract (invisible to the diff); a PR-diff-only target's degraded-verification caveat is stated.
-- [ ] Notes and consolidations from `.context/<run-id>/round-1/findings/*.json` are in the report.
+- [ ] Notes from `.context/<run-id>/round-1/findings/*.json` and the `followups` selection are in the report.
 - [ ] The working tree is untouched — no edits, commits, or checkouts; the round stopped at the report.

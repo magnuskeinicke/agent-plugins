@@ -319,7 +319,12 @@ dispute with evidence, never silently drop:
    (file:line, test output, spec text), then resolve. Real evidence only.
 3. **Outdated** (`isOutdated` and the code it pointed at is gone) → one-line
    reply why it no longer applies, resolve.
-4. **Genuine judgement call / scope decision the human owns** → reply with the
+4. **Out of scope** (a suggestion about code this PR did not change, or a
+   refactor/generalisation beyond the PR's purpose, and not a bug the PR
+   introduces) → one-line reply: `Outside this PR's scope; not pursued.`
+   Then resolve. **Never file a ticket for it.** Babysit files no follow-up
+   tickets (`../work-slice/references/followups.md`).
+5. **Genuine judgement call / scope decision the human owns** → reply with the
    analysis and options, **leave it unresolved**, flag `needs-human`.
 
 **Thread cap:** a thread that bounces (re-opened or re-objected after a fix)

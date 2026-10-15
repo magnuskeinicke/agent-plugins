@@ -38,7 +38,8 @@ sub-sections, no prose:
 - an **assumption** taken where the ticket left a decision open;
 - an **outstanding review finding** the loop shipped without fixing;
 - a **leanness concern** (this ticket wanted the full pipeline);
-- a **follow-up ticket** filed instead of widening this diff — id + one clause.
+- a **follow-up ticket** `followups` selected instead of widening this diff — id + one clause
+  (`references/followups.md`).
 
 Anything that needs more than a line does not belong on the PR — it belongs in
 the diff, in a follow-up ticket, or nowhere.
@@ -411,6 +412,6 @@ stale and lets the next capture stage re-render them — a stale screenshot
 presented as current is a false claim.
 
 `## Notes` rides in the creation write — never as a comment. A later run that
-must add a note (a capped fix round, a follow-up ticket filed during babysit)
+must add a note (a capped fix round, a finding shipped unfixed)
 folds it into the same push-time body edit that refreshes `## Verification`,
 replacing the text between the `magnus:notes` markers.

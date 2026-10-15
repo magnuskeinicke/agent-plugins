@@ -44,18 +44,29 @@ export const FINDINGS_SCHEMA = {
           detail: {
             type: 'string',
             description:
-              'What is generalizable, and which existing call sites would adopt it.',
+              'What is duplicated, and what the shared version in the target lib would look like.',
           },
           targetLib: {
             type: 'string',
             description:
               'The existing lib the code should be consolidated into.',
           },
+          rootCause: {
+            type: 'string',
+            description:
+              'Stable slug naming the duplication (what, not where) — dedupes the candidate across rounds and slices.',
+          },
+          existingCallSites: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              '"path:line" of each EXISTING copy outside this diff that would adopt the shared version. Fewer than two real sites → the engine demotes the candidate to a note.',
+          },
         },
         required: ['title', 'detail'],
       },
       description:
-        'Reuse audit only: generalizable-new-code that belongs in an existing lib as FOLLOW-UP work. Never blocking — the orchestrator files these as tickets, keeping the slice diff small.',
+        'Reuse audit only: code already duplicated at 2+ existing call sites outside the diff that belongs in an existing lib as FOLLOW-UP work. Never blocking. The engine `followups` command decides which, if any, become tickets.',
     },
   },
   required: ['reviewer', 'blockingFindings', 'notes'],

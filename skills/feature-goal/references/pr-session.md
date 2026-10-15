@@ -96,7 +96,7 @@ verbatim: implement + engine-CLI review loop (the implementer and every fix
 pass are freshly spawned agents per its writer-spawn ladder — you orchestrate,
 you don't implement), the artifact-free Playwright user-story loop (it captures
 nothing — all visual evidence is Step 8's, after this PR's babysit verdict), the
-text-only QA evidence + consolidation tickets, then Step 5 with these readings:
+text-only QA evidence + `followups` tickets, then Step 5 with these readings:
 
 - **5.1 (stale remote branch)** — does not apply: nothing was renamed.
 - **Push** with `gh stack push --remote origin` (pushes the tracked stack;

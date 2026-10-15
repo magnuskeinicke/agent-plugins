@@ -68,7 +68,7 @@ work-slice verbatim.
    > `<predecessor-branch | BASE>` @ `<oid>`, checkpoint `BRANCH_READY`. Do
    > NOT rename, reset, or create branches. Run Steps 3–8 verbatim (implement
    > + engine-CLI review loop, artifact-free Playwright loop, text-only QA
-   > evidence + consolidation tickets, draft PR with `## Issues` linking the
+   > evidence + `followups` tickets, draft PR with `## Issues` linking the
    > human parent/PRD/this slice and `## Verification` (no media yet) +
    > `gh stack link` by PR number, no PR comment, skeleton map + `<NEXT>`
    > pointer). Capture no media before the babysit verdict. Step 5.1 does not apply (nothing was

@@ -14,8 +14,7 @@ function outputContract(outputFile) {
 {
   "reviewer": "<your roster id>",
   "blockingFindings": [{"title", "file", "line", "detail", "suggestedFix", "rootCause"}],
-  "notes": ["judgement-call / debatable points — never blocking"],
-  "consolidations": [{"title", "detail", "targetLib"}]  // reuse audit only
+  "notes": ["judgement-call / debatable points — never blocking"]
 }
 Every blocking finding needs a stable "rootCause" slug (what is wrong, not where — it powers cross-round identity). Do not pad findings to look productive: empty arrays are the correct result for a clean diff. Findings you cannot verify at the cited file/line do not go in blockingFindings.`;
 }
@@ -69,19 +68,20 @@ export function reviewerPrompt({
 // Extra prompt material for the reuse audit (codebase-pattern-reviewer in
 // diff reuse audit mode): the magnus-only libMap duplicate hunt + provenance
 // table audit, fed from repo config.
-export function reuseAuditExtra(cfg, libMapText, goldenText, provenance) {
+export function reuseAuditExtra(cfg, libMapText, goldenText, provenance, knownFollowups = []) {
   const provRows = (provenance || [])
     .map(
       (p) =>
         `- ${p.file} → ${p.mirroredFrom || `[deviation: ${p.deviation || 'MISSING'}]`}`,
     )
     .join('\n');
+  const known = knownFollowups.map((c) => `- ${c.rootCause}: ${c.title}`).join('\n');
   return `
 Reuse audit scope — every function/component/hook/util/type ADDED by the diff, in new files OR added to modified files:
 - Search ${sourceRootsText(cfg)} for an existing equivalent BEFORE accepting it${libMapText ? ' — use this lib map as the search index:\n' + libMapText : ' (no lib map configured — search blind, still strict)'}.
 - An equivalent exists → BLOCKING finding: use it and delete the copy.
-- Genuinely generalizable new code → a "consolidations" entry naming the target lib — NOT blocking.
-- DRY within the change itself: the same logic/markup/query shape repeated across the diff → BLOCKING when a small local helper would remove it; a consolidations entry when the extraction is follow-up-sized. Only flag real duplication (same reason to change).
+- Consolidations are rare. Emit one ONLY when the added code repeats logic that ALREADY exists at 2+ call sites outside this diff, and a shared version belongs in an existing lib: a "consolidations" entry with "targetLib", a stable "rootCause" slug, and "existingCallSites" ("path:line" for each existing copy outside the diff) — NOT blocking. Code that only this diff uses, "could be reused later", or "might generalize" is speculative: emit nothing (a note at most). The engine demotes any entry without two real call sites outside the diff.
+- DRY within the change itself: the same logic/markup/query shape repeated across the diff → BLOCKING when a small local helper would remove it, otherwise a note — never a consolidation. Only flag real duplication (same reason to change).${known ? `\nAlready-recorded consolidations — do NOT re-emit these, even reworded:\n${known}` : ''}
 - YAGNI: options/params/config no call site passes, wrapper layers with a single caller, generality no current caller needs → BLOCKING when the fix is inlining/deleting; a note when debatable.${goldenText ? `\nGolden-path exemplars (binding for implementers):\n${goldenText}` : ''}${
     provRows
       ? `\nAlso audit the implementer's provenance table — every added file must cite a real mirroredFrom exemplar (verify it exists and is actually mirrored) or an explicit deviation reason; a missing, false, or hand-wavy row is a BLOCKING finding:\n${provRows}`
