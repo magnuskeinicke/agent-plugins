@@ -328,7 +328,7 @@ Mode: apply | dry-run   ·   In queue: <n>   ·   Dispatched now: <k>   ·   Lim
 | Ticket   | Title         | Triage    | Outcome                                    |
 | -------- | ------------- | --------- | ------------------------------------------ |
 | <id-1>   | <short title> | dispatch  | workspace <deep link> · GOAL MET + QA handoff |
-| <id-2>   | <short title> | dispatch  | workspace <deep link> · Blocked: bot unavailable |
+| <id-2>   | <short title> | dispatch  | workspace <deep link> · Blocked: needs-human thread |
 | <id-3>   | <short title> | escalate  | declined → re-triage (manager)             |
 | <id-4>   | <short title> | —         | dispatch failed: BOOTSTRAP FAILED (<link>) |
 

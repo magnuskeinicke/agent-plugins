@@ -314,7 +314,9 @@ slices — undecided points become `## Assumptions` on the PRD / slice / PR).
 PR-producing skill ends by running `magnus:babysit-stack` to a terminal
 verdict; the only things that end a run early are safety stops (dirty
 worktree, no diff, gut-check hard-stop) and `needs-human` escalations —
-judgement-call review threads, a stuck bot, an exhausted fix cap.
+judgement-call review threads, stuck CI, an exhausted fix cap. Review bots
+are best-effort: a rate-limited or otherwise unavailable bot is skipped and
+disclosed on the PR, never a blocker.
 
 ### Review targeting
 

@@ -126,8 +126,8 @@ A run ends at exactly five kinds of boundary:
   successor. It emits the handoff marker and ends. Nothing waits on it.
 - **Blocked** — nothing actionable remains but the goal isn't met: a PR
   session's babysit of its own PR, or the stack-wide babysit, ended NOT MET
-  with only `needs-human` items (judgement-call threads, a stuck bot, an
-  exhausted fix cap), a slice's loop hard-stopped (gut-check block), a
+  with only `needs-human` items (judgement-call threads, stuck CI, an
+  exhausted fix cap — never an unavailable review bot), a slice's loop hard-stopped (gut-check block), a
   bootstrap failed, or a relay session died twice on the same slice. Report
   each blocker plainly as the stop reason; the human unblocks, then
   re-invokes.
@@ -383,7 +383,7 @@ agents per its own rules. It returns with a terminal verdict:
   ticket), set
   the checkpoint stage to DONE, and stop.
 - **NOT MET** → by construction nothing actionable is left: only
-  `needs-human` threads, a stuck bot, or a capped fix signature remain. That
+  `needs-human` threads, stuck CI, or a capped fix signature remain. That
   is **Blocked**: record the verdict, report the blockers verbatim as the
   stop reason, end with the resume line. The human resolves them (or
   answers on the PR), then re-invokes; the next invocation starts a fresh

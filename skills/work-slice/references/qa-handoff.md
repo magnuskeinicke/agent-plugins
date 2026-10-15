@@ -48,8 +48,8 @@ not a thread and it is never appended to:
 ## When it is written — after the PR is done, never before
 
 The handoff is written **only once `/babysit-stack` reports GOAL MET** for the
-ticket's PR (the whole stack's PRs, for `/feature-goal`): CI green, both review
-bots satisfied, every thread resolved. Bot rounds change code, and code changes
+ticket's PR (the whole stack's PRs, for `/feature-goal`): CI green, every available review
+bot satisfied (an unavailable one skipped and disclosed), every thread resolved. Bot rounds change code, and code changes
 invalidate captures — a handoff written at PR-open time is stale by the time QA
 reads it.
 

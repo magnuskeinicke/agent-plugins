@@ -124,7 +124,7 @@ Run **`/babysit-stack <PR number>`**. It is a babysitting mode, not a pass: CI g
 
 - **GOAL MET** → go to Step 7, including tracker finalization: the parent moves
   to **`<IN-REVIEW>`** after the handoff, while the PR remains draft.
-- **NOT MET** → nothing actionable is left (only `needs-human` threads, a stuck bot, or a capped fix signature). Report the blockers verbatim as the stop reason and end — **capturing nothing and posting no handoff**; evidence and the handoff are owed only to a finished PR. The human resolves the blockers on the PR, then re-invokes — babysit resumes from its state file. Never re-run babysit back-to-back on the same NOT MET state.
+- **NOT MET** → nothing actionable is left (only `needs-human` threads, stuck CI, or a capped fix signature; a rate-limited or unavailable review bot is skipped and disclosed, never a blocker). Report the blockers verbatim as the stop reason and end — **capturing nothing and posting no handoff**; evidence and the handoff are owed only to a finished PR. The human resolves the blockers on the PR, then re-invokes — babysit resumes from its state file. Never re-run babysit back-to-back on the same NOT MET state.
 
 ## Step 7 — Capture the evidence, then write the QA handoff
 

@@ -147,8 +147,9 @@ thread replies. Then:
   body with one `gh pr edit`. Record `sourceHead` in its media manifest; recapture after any later head change —
   `/feature-goal`'s QA handoff re-uses these files. Then §4, then §5 (pass the
   baton).
-- **NOT MET** → by construction only `needs-human` threads, a stuck bot, or
-  a capped fix signature remain. That is **Blocked**: rewrite the pipeline
+- **NOT MET** → by construction only `needs-human` threads, stuck CI, or
+  a capped fix signature remain (an unavailable review bot is skipped, never
+  a blocker). That is **Blocked**: rewrite the pipeline
   checkpoint, report the blockers verbatim as the stop reason, and end
   **without** starting the next session. The human acts on the PR and
   re-invokes `/feature-goal <ISSUE>`; the next PR session finds this slice
