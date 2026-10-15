@@ -10,7 +10,9 @@ description: >
   polls; ends only at GOAL MET or when everything left needs a human. Use when I
   say "babysit the stack", "babysit this PR", "watch the PRs", "resolve the
   review comments", "get the stack green", "run copilot then coderabbit", or as
-  the finish stage of /feature-goal, /work-slice and /work-issue.
+  the finish stage of /feature-goal, /work-slice and /work-issue. Review bots
+  are best-effort: a rate-limited or otherwise unavailable bot is skipped and
+  disclosed, never a blocker.
 argument-hint: "[PRD issue id | feature issue id | PR numbers…]"
 ---
 
@@ -25,8 +27,10 @@ passed to all constituent skills; a missing named snapshot blocks the run.
 
 
 Take open draft PRs and drive them to the terminal state: **every PR CI-green,
-every configured review bot satisfied, every review thread resolved (or
-replied-to and explicitly flagged for the human)**. This is the finish stage
+every available review bot satisfied, every review thread resolved (or
+replied-to and explicitly flagged for the human)**. A bot that is rate-limited
+or otherwise unavailable is skipped and disclosed, never waited on
+([Unavailable bots](#unavailable-bots--skip-never-block)). This is the finish stage
 of every PR-producing skill in the suite.
 
 **Babysitting mode: one invocation runs until terminal or blocked.** It loops
@@ -89,7 +93,7 @@ that's `/feature-goal` / `/work-slice`'s job.
 
 **State file:** `.context/babysit-<parent>.json` — per PR: CI attempt counters
 + failure signatures + first-seen-pending timestamps; per bot: `rounds`,
-`lastTriggerAt`, `triggerHead`, `satisfiedHead`, `stuck`; each PR also records
+`lastTriggerAt`, `triggerHead`, `satisfiedHead`, `unavailable`; each PR also records
 `requiredBots` in phase order and `ciHead`; per thread: attempt counters; plus
 **one record per fix attempt** (`outcome`, `summary`, `whyItFailed`) — the next
 attempt's fixer is a fresh agent and only knows what was tried because this
@@ -115,22 +119,66 @@ watch). Review phases form an ordered chain: a fix in Phase B invalidates
 Phases B and C, while a fix in Phase C preserves Phase B and restarts at Phase
 C. A Phase D fix invalidates only the final configured bot and reruns it after
 CI, so the final configured bot is always the last reviewer of the final head.
+Throughout, "final configured bot" means the last configured bot **not marked
+`unavailable`**; an unavailable bot's phase counts as done.
 
 ### Waiting — bounded, never busy
 
-Every wait is **one bounded command**, polling every 60 s, at most 20 minutes:
+Every wait is **one bounded command**, polling every 60 s, at most 10 minutes:
 
 ```bash
-timeout 1200 bash -c 'until <condition>; do sleep 60; done'   # exit 124 = still waiting
+timeout 600 bash -c 'until <condition>; do sleep 60; done'   # exit 124 = still waiting
 ```
 
 (Runtime blocks foreground `sleep`? Use its monitor/wait tool with the same
 bound.) A wait that expires is not a failure — re-check state; if nothing at
 all changed (no run started, no review posted), wait **once more**. Two empty
-waits in a row (≈40 min) on the same event = **stuck** → flag `needs-human`
-with what never arrived (usual causes: bot not enabled for the repo/org,
-runner outage, lost webhook) and stop waiting on it. Never poll faster than
-60 s, never loop without a timeout.
+waits in a row (≈20 min) on the same event = **stuck** and stop waiting on it.
+A stuck **CI** event (runner outage, lost webhook) → flag `needs-human` with
+what never arrived. A stuck **bot** round is not a blocker: mark the bot
+`unavailable` (`no review delivered`) and move on — see below. Never poll
+faster than 60 s, never loop without a timeout.
+
+### Unavailable bots — skip, never block
+
+AI review bots are best-effort. Run them whenever they are available, but a bot
+that cannot review is **skipped, not waited on**: babysit never ends NOT MET
+and never flags `needs-human` because a review bot was unavailable. Mark a bot
+`unavailable` for the PR on concrete evidence only:
+
+- **Rate limit / quota** — the trigger is answered by a rate-limit or
+  usage-limit notice instead of a review (CodeRabbit: a comment headed `Rate
+  limit exceeded` with `Please wait <N> minutes and <S> seconds before
+  requesting another review`; Copilot: a review or comment saying it hit a
+  quota/limit), in a bot comment, review or check run.
+- **Error / paused** — the bot reports it could not review (`Review failed`,
+  `encountered an error`, `wasn't able to review`, `Reviews paused`), or its
+  check run concludes with such an error.
+- **Rejected trigger** — the reviewers API refuses the request (bot not enabled
+  for the repo, org or plan).
+- **No-show** — two empty bounded waits on the same trigger (the stuck rule).
+
+**Never wait for a rate limit to lift**, however short the reset it names: a
+rate-limit, quota, error or rejection notice marks the bot `unavailable` at
+once — no wait, no re-trigger.
+
+Record `bots.<login>.unavailable = {reason, head, at, evidence}` (`evidence` =
+the notice's comment/review id or the API error line), leave `satisfiedHead`
+unset, and continue as if the phase were complete: Phase B unavailable →
+Phase C; Phase C unavailable → Phase D. A rate-limit or error notice is **never
+a satisfied round** — it reviewed nothing. Threads the bot raised in earlier
+rounds, or in a late review that still arrives, are Phase D work like any
+other. Do not re-trigger an `unavailable` bot again in this run; a later
+invocation clears the mark and gives the bot one fresh trigger on the current
+head (a no-show then marks it after **one** empty wait).
+
+**Disclose it** — skipping is fine, hiding it is not: the bot's column in the
+verdict table reads `unavailable (<reason>)`, the VERDICT line names the skipped
+bot, and the PR body's `## Notes` gets one bullet `<bot> did not review the
+final head: <reason>` (between the `magnus:notes` markers, folded into the next
+push-time body edit, or one `gh pr edit` of its own when no push follows;
+`../work-slice/references/pr-evidence.md`). Remove that bullet if a
+later run gets the bot's current-head review.
 
 ## Fix agents — one fresh spawn per attempt
 
@@ -200,7 +248,7 @@ gh pr checks <n> --json name,state,bucket,link,workflow
 - **All `pass`/`skipping`** → re-read the PR head; only if unchanged throughout this check, record `ciHead` and mark Phase A done. Check run `head_sha` must match; no checks is a blocker unless the repo explicitly has no CI.
 - **`cancel`** → never turns green on its own. Re-run once (`gh run rerun
   <run-id>`); still cancelled or now failing → treat as `fail`.
-- **`pending`** → wait: `timeout 1200 gh pr checks <n> --watch --interval 30
+- **`pending`** → wait: `timeout 600 gh pr checks <n> --watch --interval 30
   --fail-fast` (expiry = still pending, not a failure), then re-read; the
   stuck rule above applies (`gh run list --branch <headRefName>` shows nothing
   running for a check pending >30 min → `needs-human`).
@@ -234,8 +282,8 @@ same check is a new failure (fresh cap); note the churn.
 
 Both bot phases run the **same round protocol**; only the trigger differs.
 Phase B runs first (`<BOT>`, the review-request bot); Phase C starts only once
-Phase B is satisfied (or `n/a`). Skip a phase entirely when its bot is
-unconfigured — record `n/a`.
+Phase B is satisfied (or `n/a` / `unavailable`). Skip a phase entirely when its
+bot is unconfigured — record `n/a`.
 
 **Trigger** (read the current PR head, record `triggerHead`, `lastTriggerAt` = now, `rounds += 1` in the state file):
 
@@ -245,8 +293,8 @@ unconfigured — record `n/a`.
     -f 'reviewers[]=copilot-pull-request-reviewer[bot]'
   ```
   Re-requesting after a fix push is exactly how the bot re-reviews. If the API
-  rejects the request (bot review not enabled), record `stuck` once, flag
-  `needs-human`, and skip the phase — don't retry every round.
+  rejects the request (bot review not enabled), mark the bot `unavailable` and
+  skip the phase — don't retry every round.
 - `<COMMENT-BOT>`: `gh pr comment <n> --body '<command>'` (CodeRabbit:
   `@coderabbitai review`). Same command after every fix push.
 
@@ -269,7 +317,10 @@ cannot prove which commit was reviewed. An ambiguous comment keeps the bounded
 wait pending; request a review on the current head, then apply the usual stuck
 cap if no attributable completion arrives. Once current-head completion is
 proved, a no-action round is delivered and may be satisfied without a review
-object. Never infer success from an empty page or an API error.
+object. Never infer success from an empty page or an API error. While waiting,
+also read the bot's comments, reviews and check runs after `lastTriggerAt` for
+a rate-limit, quota or error notice — one ends the wait and goes to
+[Unavailable bots](#unavailable-bots--skip-never-block).
 
 **Address** every unresolved thread on the PR (Phase D's classification and
 mechanics — fix / dispute-with-evidence / outdated / needs-human), the bot's
@@ -292,6 +343,9 @@ the next round reviews green code.
   CodeRabbit summary reporting zero actionable comments, is the same thing.)
 - Threads left `needs-human` don't block the bot's *satisfied* flag (it said
   its piece) — they block the final verdict in Phase D.
+- **The bot could not review** (rate limit, quota, error, no-show) → mark it
+  `unavailable` and move on to the next phase. That is never a reason for
+  `needs-human` or NOT MET.
 
 **Round cap: 5 rounds per bot per PR.** Round 6 wanted → the bot and the fixer
 are chasing each other; flag `needs-human` with the still-open threads and stop
@@ -332,7 +386,8 @@ gets **2 fix attempts**, then `needs-human`.
 
 After a Phase D fix push, invalidate CI and the final configured bot only, then
 restart at Phase A and rerun that final bot before returning to Phase D. If no
-bot is configured, restart at Phase A and return directly to Phase D.
+bot is configured, or every configured bot is `unavailable`, restart at Phase A
+and return directly to Phase D.
 
 **Post-hoc bot rule:** a check belonging to a service that comments only after
 it completes (coverage, error trackers, hosted analysis) still `pending` →
@@ -395,17 +450,17 @@ the per-thread replies.
 | PR | Slice | CI | <BOT> | <COMMENT-BOT> | Unresolved threads | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | #123 | <slice-1 id> | green | satisfied (2 rounds) | satisfied (1 round) | 0 | — |
-| #124 | <slice-2 id> | green | satisfied (1 round) | stuck | 1 needs-human | coderabbit never delivered round 2 |
+| #124 | <slice-2 id> | green | satisfied (1 round) | unavailable (rate limit) | 1 needs-human | coderabbit rate-limited; skipped |
 
 Actions this run: <commits pushed, threads resolved, rounds triggered, restacks>
 Blockers (needs-human): <list, or none>
 
-VERDICT: GOAL MET | NOT MET — <the one-line reason: n needs-human threads / missing PRs / stuck bot / capped CI signature>
+VERDICT: GOAL MET | NOT MET — <the one-line reason: n needs-human threads / missing PRs / stuck CI / capped CI signature>; skipped bots: <login (reason), or none>
 ```
 
 Before the verdict, write a per-PR JSON view of its state with `requiredBots`
 (in phase order),
-`ciHead` and `bots.<login>.satisfiedHead`, then run:
+`ciHead`, `bots.<login>.satisfiedHead` and `bots.<login>.unavailable`, then run:
 
 ```bash
 node "<plugin-root>/engine/github.mjs" <n> <per-pr-state.json>
@@ -413,20 +468,25 @@ node "<plugin-root>/engine/github.mjs" <n> <per-pr-state.json>
 
 The helper re-reads all pages and compares recorded CI/bot evidence with the
 ordered review chain. Reconstruct `requiredBots` from the pinned config in
-Phase B → Phase C order; never leave the array empty to skip configured bots.
-Every earlier bot must have a `satisfiedHead`, and the final configured bot's
-`satisfiedHead` must equal the live head. This makes the final bot the terminal
+Phase B → Phase C order; never leave the array empty to skip configured bots —
+an unavailable bot stays in `requiredBots` and is skipped through its
+`unavailable` record, which the helper reports back as `skippedBots`.
+Every earlier available bot must have a `satisfiedHead`, and the final
+available bot's `satisfiedHead` must equal the live head. This makes the final bot the terminal
 reviewer: its current-head pass covers fixes made after earlier phases. Legacy
 `satisfied: true` flags without a SHA require a fresh round. Its GOAL MET also
 requires zero unresolved threads. Recheck every non-merged PR after the final
 restack, not only the last PR visited.
 
 **GOAL MET** requires ALL of, for every non-merged slice: an open PR, CI green
-on the current head, every configured bot phase completed in order, the final
-configured bot **satisfied on the current head**, and **zero unresolved threads
-— no exceptions**. When both are configured, `<BOT>` may retain its earlier
+on the current head, every configured bot phase completed in order (an
+`unavailable` bot's phase counts as completed), the final available bot
+**satisfied on the current head**, and **zero unresolved threads — no
+exceptions**. When both are available, `<BOT>` may retain its earlier
 completed-phase SHA while `<COMMENT-BOT>` must match the current head; when
-only one is configured, that bot is final and must match. `needs-human` threads
+only one is available, that bot is final and must match; when none is, CI and
+threads alone decide. A skipped bot never turns GOAL MET into NOT MET — it is
+disclosed in the VERDICT line and the PR's `## Notes`. `needs-human` threads
 therefore always mean NOT MET, named as the reason so the human knows the loop
 waits on them. Merged slices count as done. A run ends NOT MET **only** when
 nothing actionable is left — it never ends merely because something is
@@ -436,9 +496,12 @@ pending; pending is waited on.
 
 - **Never merge, approve, or mark a PR ready.** Drafts stay drafts; promoting
   and merging are the human's calls.
-- **Runs until terminal or blocked** — but every wait is bounded (20 min per
+- **Runs until terminal or blocked** — but every wait is bounded (10 min per
   poll, two empty polls = stuck) and every loop has a cap; no unbounded watch,
   no polling under 60 s.
+- **Review bots are best-effort.** A rate-limited, out-of-quota, erroring,
+  not-enabled or no-show bot is marked `unavailable`, skipped and disclosed —
+  never `needs-human`, never NOT MET on its own.
 - Bot reviews are **GitHub-only**: requested via the reviewers API or summoned
   by PR comment, read back from PR reviews/threads. Never run a review CLI.
 - Bots run **in order** — `<BOT>` to satisfied, then `<COMMENT-BOT>` as the
@@ -482,9 +545,11 @@ pending; pending is waited on.
 ## Red Flags — STOP
 
 - About to run a review CLI, or to judge the code yourself instead of the bots — stop: bot reviews happen on GitHub; trigger, wait, read back.
-- About to trigger Phase C while Phase B is unsatisfied, or any bot round on red CI — stop: phases are sequential; green first.
+- About to trigger Phase C while Phase B is unsatisfied (and not `unavailable`), or any bot round on red CI — stop: phases are sequential; green first.
+- About to flag `needs-human`, end NOT MET, wait out a rate-limit reset, or keep waiting because a review bot is rate-limited, out of quota, erroring or not delivering — stop: mark it `unavailable`, disclose it, move on.
+- About to count a rate-limit or error notice as a satisfied round — stop: it reviewed nothing; that bot is `unavailable`, not satisfied.
 - About to trigger round 6 for a bot on one PR — stop: 5 is the cap; `needs-human` with the open threads.
-- About to poll without a timeout, faster than 60 s, or a third time on an event that never moved — stop: two empty bounded polls = stuck → `needs-human`.
+- About to poll without a timeout, faster than 60 s, or a third time on an event that never moved — stop: two empty bounded polls = stuck → `needs-human` for CI, `unavailable` for a bot.
 - About to edit code yourself, or re-prompt the previous attempt's fix agent — stop: spawn a fresh fixer with the prior attempts in its brief.
 - `git status` disagrees with the fixer's `editedFiles` — stop: don't commit; flag `needs-human`.
 - About to `git add -A` / `git add .` — stop: stage the fixer's `editedFiles` by name.
@@ -494,7 +559,7 @@ pending; pending is waited on.
 - About to end the run with an actionable item left (a fixable thread, a deliverable bot round, a re-runnable check) — stop: babysitting mode finishes or blocks, it does not pause.
 - About to classify checks from the human-readable table — stop: `gh pr checks --json`, key on `bucket`.
 - About to `gh pr comment` the verdict block, a per-PR summary, or any "babysit report" onto the PR — stop: the verdict is the terminal report + state file (+ the dispatch-comment `babysit:` line under `/feature-goal`); PR comments are for the bot summon and thread replies only.
-- About to record a bot as `stuck` while a `Review finished` / zero-actionable comment from it sits after `lastTriggerAt` — stop: that is a delivered, satisfied round.
+- About to record a bot as `unavailable` while a `Review finished` / zero-actionable comment from it sits after `lastTriggerAt` — stop: that is a delivered, satisfied round.
 
 ## Verification
 
@@ -502,13 +567,15 @@ Before reporting done:
 
 - [ ] The verdict block is printed: per-PR table (CI / `<BOT>` / `<COMMENT-BOT>` / unresolved threads / Notes), actions, blockers, one-line VERDICT reason.
 - [ ] GOAL MET only if every non-merged slice has an open PR, CI green, every
-  configured bot phase completed in order, the final configured bot satisfied
-  on the current head, and zero unresolved threads.
-- [ ] NOT MET only with nothing actionable left — every open item is `needs-human`, capped, or stuck, and the reason names it.
+  configured bot phase completed in order (or skipped as `unavailable`), the
+  final available bot satisfied on the current head, and zero unresolved
+  threads.
+- [ ] NOT MET only with nothing actionable left — every open item is `needs-human`, capped, or stuck CI, and the reason names it. An unavailable bot is never the reason.
+- [ ] Every `unavailable` bot has its evidence in the state file, is named in the table and VERDICT line, and has its `## Notes` bullet on the PR.
 - [ ] Bot rounds ran in order (B before C), each on green CI; a fix owned by C
   or D did not return to B, the final configured bot reviewed the current head,
   each wait was bounded, and round counts per bot are in the table.
 - [ ] Every thread resolved this run has a reply (commit sha, evidence, or outdated-note); `needs-human` threads are left unresolved and named.
-- [ ] `.context/babysit-<parent>.json` is updated (CI counters/signatures, per-bot rounds/satisfied/stuck, thread counters) and `.context/` is in `.git/info/exclude`.
+- [ ] `.context/babysit-<parent>.json` is updated (CI counters/signatures, per-bot rounds/satisfied/unavailable, thread counters) and `.context/` is in `.git/info/exclude`.
 - [ ] Every fix came from a freshly spawned agent with brief + result on disk under `.context/babysit-<parent>/`; fix commits contain exactly its `editedFiles`.
 - [ ] After any lower-branch fix, everything above was restacked and pushed; the worktree ends on the top branch.

@@ -39,7 +39,9 @@ sub-sections, no prose:
 - an **outstanding review finding** the loop shipped without fixing;
 - a **leanness concern** (this ticket wanted the full pipeline);
 - a **follow-up ticket** `followups` selected instead of widening this diff — id + one clause
-  (`references/followups.md`).
+  (`references/followups.md`);
+- a **skipped review bot** — `<bot> did not review the final head: <reason>` (rate limit,
+  quota, error, never delivered), written by `/babysit-stack`.
 
 Anything that needs more than a line does not belong on the PR — it belongs in
 the diff, in a follow-up ticket, or nowhere.
@@ -61,8 +63,8 @@ The order is fixed, in every flow:
    artifacts**: no screenshots, no video, nothing published, nothing posted;
 2. the draft PR is opened — its body carries `## Verification` (+ `## Notes`);
    **no `## Visual verification` block yet**;
-3. `/babysit-stack` drives the PR to **GOAL MET** — CI green, every configured
-   bot satisfied, every thread resolved, refreshing `## Verification` as it
+3. `/babysit-stack` drives the PR to **GOAL MET** — CI green, every available
+   bot satisfied (a rate-limited or unavailable one skipped), every thread resolved, refreshing `## Verification` as it
    pushes fixes;
 4. **the capture stage** (below) runs on the finished branch: one Playwright
    capture run → publish to `<MEDIA-BRANCH>` → **one** body edit inserting
@@ -412,6 +414,6 @@ stale and lets the next capture stage re-render them — a stale screenshot
 presented as current is a false claim.
 
 `## Notes` rides in the creation write — never as a comment. A later run that
-must add a note (a capped fix round, a finding shipped unfixed)
+must add a note (a capped fix round, a finding shipped unfixed, a skipped review bot)
 folds it into the same push-time body edit that refreshes `## Verification`,
 replacing the text between the `magnus:notes` markers.

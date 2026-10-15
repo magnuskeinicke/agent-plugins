@@ -180,7 +180,7 @@ The review loop only proves **our** reviewers are satisfied. "Everything in orde
   run the shared capture stage after that PR's current-head verdict, republish,
   and replace its existing visual section and linked QA handoff. Reuse matching
   media. No captures happen inside the review/fix loop. Then report and stop.
-- **NOT MET** → nothing actionable is left: `needs-human` threads (including this skill's own stalled-verdict ledger posted in Step 4), a stuck bot, or a capped fix signature. Report them verbatim as the stop reason and end; the human unblocks, then re-invokes — babysit resumes from its state file. Never re-run babysit back-to-back on the same NOT MET state.
+- **NOT MET** → nothing actionable is left: `needs-human` threads (including this skill's own stalled-verdict ledger posted in Step 4), stuck CI, or a capped fix signature — never an unavailable review bot, which babysit skips and discloses. Report them verbatim as the stop reason and end; the human unblocks, then re-invokes — babysit resumes from its state file. Never re-run babysit back-to-back on the same NOT MET state.
 
 A PR that already had bot rounds before this skill ran is fine — babysit's per-bot round counter lives in its state file and its 5-rounds-per-bot cap still applies; never work around it.
 

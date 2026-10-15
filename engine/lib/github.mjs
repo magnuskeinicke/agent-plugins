@@ -44,7 +44,11 @@ export async function reviewSnapshot({ owner, repo, pr }, request) {
 
 export function currentReviewVerdict(snapshot, state, orderedBotLogins) {
   const reasons = [];
-  const requiredBots = orderedBotLogins.filter(Boolean);
+  const configuredBots = orderedBotLogins.filter(Boolean);
+  // An unavailable bot (rate-limited, out of quota, erroring, not enabled, never delivered) is skipped,
+  // not waited on: the last available bot becomes the terminal reviewer.
+  const unavailable = configuredBots.filter((login) => state.bots?.[login]?.unavailable?.reason);
+  const requiredBots = configuredBots.filter((login) => !unavailable.includes(login));
   const finalReviewer = requiredBots.at(-1);
   if (!snapshot.complete) reasons.push('review snapshot is incomplete');
   if (snapshot.state !== 'open') reasons.push('PR is not open');
@@ -55,7 +59,8 @@ export function currentReviewVerdict(snapshot, state, orderedBotLogins) {
     else if (login === finalReviewer && satisfiedHead !== snapshot.head) reasons.push(`${login} has not reviewed the current head`);
   }
   if (snapshot.unresolved.length) reasons.push(`${snapshot.unresolved.length} unresolved threads`);
-  return { verdict: reasons.length ? 'NOT MET' : 'GOAL MET', head: snapshot.head, reasons };
+  return { verdict: reasons.length ? 'NOT MET' : 'GOAL MET', head: snapshot.head, reasons,
+    skippedBots: unavailable.map((login) => ({ login, reason: state.bots[login].unavailable.reason })) };
 }
 
 export function deliveredReviews(snapshot, login, trigger) {
