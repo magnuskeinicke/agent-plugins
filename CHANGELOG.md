@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.13.0 — 2026-10-15
+
+### Changed
+
+- **Far fewer follow-up tickets.** The new engine `followups` command decides what gets filed, so
+  skills no longer turn every `consolidations` entry into its own ticket. It reads candidates from
+  the reuse audit only, ignoring other lanes. It dedupes them across rounds by fingerprint and
+  checks every claimed call site against the work tree. A candidate needs two existing sites
+  outside the diff to qualify. At most one becomes its own ticket. The rest are appended to a
+  single rolling `Follow-ups:` ticket, and everything else is demoted to the terminal summary.
+- `consolidations` gain `rootCause` and `existingCallSites`. The reuse audit is told that
+  speculative generalisation and duplication inside the diff are never consolidations. In later
+  rounds it also receives the already-recorded candidates so it does not re-emit them.
+- `work-slice` / `work-issue` file only what `followups` returns, deduped by a
+  `magnus:followup:<fingerprint>` marker against open tickets
+  (`skills/work-slice/references/followups.md`). `iterate-pr` and `review-code` list the same
+  selection.
+- Advisory findings are a PR note at most, never a ticket.
+- `babysit-stack` Phase D gains an **out of scope** outcome: decline on the thread, resolve, and
+  never file a ticket.
+
 ## 0.12.2 — 2026-10-05
 
 ### Fixed
