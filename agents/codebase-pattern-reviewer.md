@@ -24,7 +24,7 @@ The caller specifies the mode in their prompt. With no mode specified, run the s
 Review an implemented diff, not a spec. The caller's prompt supplies the diff scope, the search roots, and (when the host repo provides them) a lib map to use as the search index, golden-path exemplars, and the implementer's provenance table. In this mode:
 
 - For every function/component/hook/util/type ADDED by the diff — in new files OR added to modified files — search the given roots for an existing equivalent BEFORE accepting it. An equivalent exists → blocking finding: use it and delete the copy.
-- Genuinely generalizable new code → a `consolidations` entry naming the target lib — follow-up work, never blocking.
+- Added code that repeats logic ALREADY present at 2+ call sites outside the diff → a `consolidations` entry with `targetLib`, a stable `rootCause` slug, and `existingCallSites` (`path:line` per existing copy) — follow-up work, never blocking. Code that only this diff uses, or that "might generalize later", is speculative: no entry (a note at most). The engine demotes entries without two verified call sites.
 - DRY within the change itself; YAGNI/speculative abstraction — per the caller's rules.
 - Audit the provenance table when one is supplied: every added file must cite a real `mirroredFrom` exemplar (verify it exists and is actually mirrored) or an explicit `deviation` reason. A missing, false, or hand-wavy row is a blocking finding.
 - The Evidence Standard and Guardrails below still apply: cite existing-code evidence (`file:line`) or the bounded search that found none; never force an abstraction over incidental similarity.

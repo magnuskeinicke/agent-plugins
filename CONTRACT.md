@@ -145,7 +145,8 @@ skill's own summary and before any trailer — the spec is
 - **`## Notes`** — omitted unless a human must act on something. At most five
   one-line bullets: an assumption taken where the ticket left a decision open, a
   finding shipped unfixed, a leanness concern, a follow-up ticket filed instead
-  of widening the diff.
+  of widening the diff. Follow-up tickets come only from the engine's
+  `followups` selection (`skills/work-slice/references/followups.md`).
 
 The host's `skills.createPr` receives the rendered sections as its
 verification content; when it has no slot for them the suite makes exactly one

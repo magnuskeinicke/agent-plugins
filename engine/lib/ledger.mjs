@@ -223,8 +223,8 @@ export function fmtFeedback(blocking) {
 }
 
 // Thresholds: confidence ≥80 AND diff-caused → eligible for the fix pass.
-// Confidence 60–79, or ≥80 but pre-existing → advisory (a PR note or a
-// consolidations follow-up — never fixed in-slice). Below 60 → dropped as
+// Confidence 60–79, or ≥80 but pre-existing → advisory (a PR note at most —
+// never fixed in-slice, never a ticket). Below 60 → dropped as
 // UNVERIFIED (recorded in the ledger so a repeat is visible). A missing
 // verdict (validator died or skipped one) fails open: the finding stays
 // eligible rather than silently dying.

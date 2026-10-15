@@ -76,7 +76,7 @@ single overwritten block — full OIDs, never abbreviations:
 Stages, in order: `CLAIMED` (Step 1 done) → `BRANCH_READY` (Step 2 done) →
 `IMPLEMENTED` (Step 3 implement pass committed) → `REVIEWED` (review loop
 verdict recorded) → `VERIFIED` (Playwright loop done or skipped-with-reason) →
-`EVIDENCE_POSTED` (Step 4 QA evidence + consolidation tickets) → `PR_OPENED`
+`EVIDENCE_POSTED` (Step 4 QA evidence + `followups` tickets) → `PR_OPENED`
 (Step 5.2) → `STACK_LINKED` (Step 5.3–5.4) → `HANDED_OFF` (Step 6 pointer
 advanced) → `BABYSAT` (Step 7 babysit GOAL MET) → `COMPLETE` (Step 8 evidence
 captured, published and in the PR body). **Rewrite the block at every stage
@@ -227,6 +227,7 @@ node "$engine" decide --slice <id> --verdicts <verdicts.json>
 # action=incomplete → preserve the pending round; retry missing tasks once, then report a blocker.
 # action=converged|stalled|hard-stop → report the terminal loop result:
 node "$engine" report --slice <id>
+node "$engine" followups --slice <id>   # the only follow-up ticket candidates (Step 4)
 ```
 
 **Running an emitted task.** Use the shared runtime contract: every task has
@@ -253,7 +254,7 @@ The stop conditions live in the CLI (convergence, two-round stall, per-fingerpri
 
 ### 3.4 Read out the result
 
-`incomplete` preserves the round and stops advancement until missing workers recover. `report` returns the verdict, the ledger report (open / addressed / deferred / disputed entries with `CR-NNN` ids, dispute evidence, adjudication rulings), and the advisory notes. Also gather the `consolidations` arrays from `.context/<slice-id>/round-*/findings/*.json` (reuse-audit follow-up candidates) and the notes from the implement/fix results. Checkpoint `REVIEWED` only for a completed review verdict. On `incomplete`, keep the prior stage and pending task manifests; never mark it reviewed. A `hard-stop` (gut-check block) goes straight to the user — no PR.
+`incomplete` preserves the round and stops advancement until missing workers recover. `report` returns the verdict, the ledger report (open / addressed / deferred / disputed entries with `CR-NNN` ids, dispute evidence, adjudication rulings), and the advisory notes. Also run `node "$engine" followups --slice <slice-id>` (the only follow-up ticket candidates — `references/followups.md`) and gather the notes from the implement/fix results. Checkpoint `REVIEWED` only for a completed review verdict. On `incomplete`, keep the prior stage and pending task manifests; never mark it reviewed. A `hard-stop` (gut-check block) goes straight to the user — no PR.
 
 ### 3.5 Playwright user-story loop (skill-owned, max 3 rounds) — verification only, no evidence
 
@@ -283,12 +284,12 @@ Checkpoint: `VERIFIED`. Before Step 4, run the slice's tests + lint/typecheck gr
 - The loop outcome: the **verdict verbatim**, which reviewers ran, how many review rounds it took, whether the Playwright loop ran and converged (or how many of its 3 rounds it used) — plus the ledger report: open / deferred / disputed entries with their `CR-NNN` ids.
 - Any judgement-call findings — advisory notes the relevance gate demoted, and disputed entries with their adjudication rulings (an upheld dispute is back open; a deadlock is yours to adjudicate on the PR).
 - The **provenance table** (added file → mirrored exemplar or declared deviation) — the convention audit trail.
-- Any **consolidations** the reuse audit surfaced, and any **ratchet candidates**: a convention finding that showed up in 2+ rounds (or that you recognise from earlier slices) is a candidate for a lint rule / Nx module-boundary tag — name it so the human can move it from review into the tests gate.
+- The `followups` selection (`file` / `batch` / `demoted`), and any **ratchet candidates**: a convention finding that showed up in 2+ rounds (or that you recognise from earlier slices) is a candidate for a lint rule / Nx module-boundary tag — name it so the human can move it from review into the tests gate.
 - The branch + its base (the stack position).
 
 **QA evidence → the slice ticket (when the Playwright loop ran) — text only, no images.** Slice tickets are internal, the user and AI only (`references/qa-handoff.md`), and visual proof exists in exactly two places: the PR body's `## Visual verification` and the human ticket's one `## QA handoff` — both written after GOAL MET, both from the same Step 8 captures. So this comment carries **no screenshots, no video, no uploads, no attachments**: post/update a comment starting with `## QA evidence` — one row per acceptance criterion, PASS/FAIL + one clause on what was observed. When the `<FIDELITY>` check ran, append a `### Design fidelity` subsection — one row per deviation (severity, screen, description; blocking ones also appear as FAILed criteria above). Failed criteria stay marked FAIL so the next agent sees exactly what broke. Idempotent: update an existing `## QA evidence` comment rather than adding a second.
 
-**Consolidation follow-ups → the tracker (when the loop surfaced `consolidations`):** file each as its own ticket on the team (same create flow as `tracker.docPath`): title from the consolidation, body = the detail + targetLib + a link back to this slice's PR, labels = the chore type label + `<SKIP>`. This is the strict boundary that keeps the slice diff small — generalisation happens in its own reviewed change, never by scope-creeping this slice. List the created ticket ids in the terminal summary and as `## Notes` bullets in the PR body (Step 5). Checkpoint: `EVIDENCE_POSTED`.
+**Follow-up tickets → the tracker (only what `followups` returned):** file per `references/followups.md`. Dedupe by marker against open tickets. `file` (at most one) becomes its own ticket, `batch` is appended to the feature's single rolling `Follow-ups:` ticket, and `demoted` is never filed. Nothing else from the run becomes a ticket: advisory findings, notes, deferred entries, ideas. Generalisation happens in its own reviewed change, never by scope-creeping this slice, and only where the duplication already exists. List what was filed in the terminal summary and as `## Notes` bullets in the PR body (Step 5). Checkpoint: `EVIDENCE_POSTED`.
 
 Then open the draft PR (Step 5) **without asking**. Open it even when the loop stalled — carry the unresolved blocking findings + judgement-call notes into the PR body / a review comment so they surface on the draft. Do not reach Step 5 with incomplete coverage or a failed verification gate. Other stops: no committed diff (nothing to PR), or a gut-check `hard-stop` — report the blocker.
 
@@ -409,7 +410,7 @@ The captured files stay in `.context/<slice-id>/evidence/media/` and on `<MEDIA-
 - Don't modify the PRD ticket's description, the feature ticket's description/comments, or sibling slices' bodies. Parent/PRD claim fields follow `issue-lifecycle.md`. Besides those claim fields, the only writes beyond this slice's own ticket: moving the `<NEXT>` pointer, posting/updating the "Skeleton map" comment on downstream deltas, and extending the `## Implementation deltas` comment on the PRD ticket (Step 6).
 - **Conventions are binding, not advisory:** exemplar mirroring per the slice's Convention contract; every added file carries a provenance row (`mirroredFrom` or a declared `[deviation: reason]`) — silent deviation is a blocking finding; no new helper without a `<SRC>` search.
 - **Contract freeze:** a delta never alters the skeleton's published contract (schema/types/API shape). A needed contract change stops the slice and escalates — the stack gets restructured, not quietly edited.
-- **Consolidation never widens a slice:** in-slice extraction only within this slice's own new code + at most one existing call site; everything wider becomes a filed follow-up ticket (Step 4), named in the PR body's `## Notes` (Step 5).
+- **Consolidation never widens a slice:** in-slice extraction only within this slice's own new code + at most one existing call site; anything wider is a follow-up only when `followups` selects it (Step 4, `references/followups.md`), named in the PR body's `## Notes` (Step 5). Everything else is a note or nothing.
 - **No pre-PR confirmation gate.** Once the loop finishes, open the draft PR automatically (Step 4→5); the only skips are "no committed diff" and a gut-check hard-stop. Never promote it to ready or merge — that stays the human's call on the draft.
 - **Babysit is part of the slice** (Step 7) unless an orchestrator owns the stack's babysit, and **Step 8 follows it** — evidence belongs to a finished PR. Bot reviews happen on GitHub only — never run a review CLI.
 

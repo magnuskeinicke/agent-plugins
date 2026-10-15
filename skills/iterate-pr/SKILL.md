@@ -167,7 +167,7 @@ Then print, from `report`'s output plus the findings/fix files:
 - Reviewers per round; dead reviewers; findings the relevance gate demoted (`advisoryNotes`) or dropped (`unverified`).
 - What the fix passes changed (diff stat) and the pushed head.
 - Judgement-call notes and disputed findings with their adjudication rulings (a deadlock is the human's to settle on the PR).
-- Consolidation candidates from `.context/pr-<n>/round-*/findings/*.json` (offer to file them on `<TRACKER>` with the chore type label + the triage opt-out label from `labels`, per `tracker.docPath` — file only if the user says yes; this skill has no slice machinery that auto-files them).
+- Follow-up candidates from `node "$engine" followups --slice pr-<n>`: `file` / `batch` only (`demoted` is listed, never offered). Offer to file them per `../work-slice/references/followups.md`, and file only if the user says yes. This skill never auto-files.
 
 If round 1 was already clean, say so and push nothing.
 

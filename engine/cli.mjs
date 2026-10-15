@@ -7,6 +7,7 @@ import {
   existsSync,
   readdirSync,
   copyFileSync,
+  statSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -38,6 +39,7 @@ import { FINDINGS_SCHEMA, VALIDATION_SCHEMA, ADJUDICATION_SCHEMA, FIX_RESULT_SCH
 import * as prompts from './lib/prompts.mjs';
 import { taskModels, resolveModel, SKILL_ROLES } from './lib/models.mjs';
 import { runTask } from './lib/runner.mjs';
+import { mergeFollowups, selectFollowups } from './lib/followups.mjs';
 import {
   resolveCommitRule,
   renderCommitSubject,
@@ -326,6 +328,7 @@ function cmdInit(args) {
       committed: args.committed === undefined ? null : bool(args.committed),
     },
     reuseCleanAt: null,
+    followups: [],
     verdict: null,
   };
   // The implement pass's commits must already follow the commit rule; a
@@ -439,7 +442,7 @@ function cmdPlan(args) {
     const outputFile = join(findingsDir, `${r.id}.json`);
     const extra =
       r.id === 'codebase-pattern-reviewer'
-        ? prompts.reuseAuditExtra(cfg, buildLibMap(cfg), buildGoldenPaths(cfg), provenance)
+        ? prompts.reuseAuditExtra(cfg, buildLibMap(cfg), buildGoldenPaths(cfg), provenance, state.followups || [])
         : r.id === 'copy-reviewer'
           ? prompts.copyReviewRubricExtra(copyReviewRubric)
           : '';
@@ -593,6 +596,9 @@ function cmdCollect(args) {
   const reuse = reports.find((r) => r.reviewer === 'codebase-pattern-reviewer');
   if (reuse && reuse.blockingFindings.length === 0)
     state.reuseCleanAt = state.planMeta?.reuseFp ?? null;
+  // Follow-up candidates come from the reuse audit only; any other lane's
+  // consolidations are ignored. `followups` decides what gets filed.
+  if (reuse) state.followups = mergeFollowups(state.followups || [], reuse.consolidations, state.round);
 
   const { kept, suppressed } = ledgerSuppress(state.ledger, raw);
   kept.forEach((f, i) => (f.id = `R${state.round}-${String(i + 1).padStart(2, '0')}`));
@@ -860,6 +866,50 @@ function cmdReport(args) {
   });
 }
 
+// The run's follow-up tickets: candidates with 2+ verified call sites outside
+// the diff, capped — the skill files exactly this and nothing else.
+function cmdFollowups(args) {
+  const state = loadState(args);
+  const root = gitOut(['rev-parse', '--show-toplevel']) || process.cwd();
+  const { diffCmd } = inspectCmds(state);
+  const nameOnly = diffCmd.startsWith('git diff')
+    ? diffCmd.replace('git diff', 'git diff --name-only')
+    : `${diffCmd} --name-only`;
+  // No file list → call sites cannot be proven outside the diff: fail closed.
+  const listed = shellOut(nameOnly, root);
+  const diffFiles = new Set((listed || '').split('\n').map((f) => f.trim()).filter(Boolean));
+  const inDiff = listed === null ? () => true : (p) => diffFiles.has(p);
+  const siteExists = (path, line) => {
+    const abs = join(root, path);
+    if (!existsSync(abs) || !statSync(abs).isFile()) return false;
+    return readFileSync(abs, 'utf8').split('\n').length >= line;
+  };
+  const selection = selectFollowups(state.followups || [], { siteExists, inDiff });
+  out({
+    ...selection,
+    ...(listed === null ? { warning: `\`${nameOnly}\` failed — every candidate demoted` } : {}),
+    next: selection.file.length || selection.batch.length
+      ? 'skip any candidate whose marker already appears on an open tracker ticket; file `file` as its own ticket and append `batch` to the one rolling follow-ups ticket — nothing else becomes a ticket'
+      : 'nothing to file',
+  });
+}
+
+function gitOut(gitArgs) {
+  try {
+    return execFileSync('git', gitArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return '';
+  }
+}
+
+function shellOut(cmd, cwd) {
+  try {
+    return execFileSync('sh', ['-c', cmd], { encoding: 'utf8', cwd, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch {
+    return null;
+  }
+}
+
 function cmdStatus(args) {
   const state = loadState(args);
   out({
@@ -981,6 +1031,7 @@ const COMMANDS = {
   adjudicate: cmdAdjudicate,
   'apply-adjudication': cmdApplyAdjudication,
   report: cmdReport,
+  followups: cmdFollowups,
   status: cmdStatus,
   model: cmdModel,
   run: cmdRun,
