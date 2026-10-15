@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.13.1 — 2026-10-15
+
+### Fixed
+
+- **Babysitting no longer blocks on unavailable AI reviewers.** `babysit-stack` still runs Copilot
+  and CodeRabbit whenever they can review, but a bot that is rate-limited, out of quota, erroring,
+  not enabled, or never delivers is now marked `unavailable` and skipped. It is no longer
+  `needs-human` and no longer makes the verdict NOT MET. Babysit never waits for a rate limit to
+  lift: the first rate-limit notice skips the bot. The last available bot becomes the terminal
+  reviewer. When no bot is available, CI and threads alone decide.
+- Every bounded wait is now at most 10 minutes (was 20), so a stuck event is called after two
+  empty waits, about 20 minutes (was 40).
+- A skipped bot is disclosed: as `unavailable (<reason>)` in the verdict table, in the VERDICT line,
+  and as a `## Notes` bullet on the PR body.
+- The engine verdict check (`engine/github.mjs <pr> <state>`) accepts
+  `bots.<login>.unavailable` and reports the skipped bots as `skippedBots`. A skipped bot never
+  waives CI or unresolved threads.
+- `work-slice`, `work-issue`, `iterate-pr`, `feature-goal` and `CONTRACT.md` no longer list a stuck
+  bot as a blocker.
+
 ## 0.13.0 — 2026-10-15
 
 ### Changed
