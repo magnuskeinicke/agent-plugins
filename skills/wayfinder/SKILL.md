@@ -59,6 +59,13 @@ execution into the map; absent that, produce decisions, never deliverables.
 title with the id riding inside the link — `[Decide rollout strategy](url)`,
 never a bare wall of `SER-1801, SER-1802`.
 
+**The driver decides.** The driver — the user who charted the map — is the
+only decider on it. Every HITL ticket is theirs to answer; never name,
+assign or route a ticket to anyone else, even when the question touches a
+colleague's area or another team's work. What someone else knows is input:
+research it, or leave it to the driver to ask them. The decision is the
+driver's.
+
 ## Step 1 — Classify the invocation
 
 - **Chart mode** — the argument is an idea or a **seed**: a ticket that is not
@@ -113,7 +120,7 @@ never a bare wall of `SER-1801, SER-1802`.
    Step 4 and the research rules in `references/ticket-types.md`. Research is
    the only type that may resolve in the charting session or in parallel.
 6. **Stop.** Report the map, its destination, the frontier (by name, with
-   type and decider), the fog, and the command that works the next ticket:
+   type — HITL or AFK), the fog, and the command that works the next ticket:
    `/wayfinder <map>`. Charting hand-resolves nothing beyond step 5.
 
 ## Step 3 — Pick and claim one ticket (work mode)
@@ -134,10 +141,10 @@ never a bare wall of `SER-1801, SER-1802`.
    → yield and pick the next frontier ticket or stop. Never infer that a claim
    is abandoned from elapsed time; clear one only on its owner's release or the
    user's explicit say-so.
-5. **HITL check.** A HITL ticket names its **decider**. If the decider is not
-   the person in this session, say so and ask whether they are present or the
-   user is relaying their answers verbatim; record which in the resolution.
-   Never answer for an absent decider.
+5. **HITL check.** A HITL ticket is decided by the driver. If the person in
+   this session is not the driver, say so and stop. The driver may bring in
+   what others told them — record that as evidence — but the recorded answer
+   is the driver's. Never answer for the driver.
 
 ## Step 4 — Resolve the claimed ticket
 
@@ -191,7 +198,7 @@ decision.
 The tracker is the only shared state, so any session — local, another
 Conductor workspace, or a cloud session — can work the map. Use a clean
 workspace; the docs branch carries `CONTEXT.md`/ADR changes between them.
-HITL tickets need their decider in the session. Claims keep concurrent
+HITL tickets need the driver in the session. Claims keep concurrent
 sessions off each other's tickets.
 
 **Dispatching AFK tickets to the cloud** (only when the user asks):
@@ -222,12 +229,14 @@ sessions off each other's tickets.
 - **DOES NOT**: implement, prototype into production code, open PRs, run
   `/to-prd`, `/to-issues` or `/feature-goal`, write on a human ticket beyond
   related links (the seed and feature tickets stay theirs), apply
-  `<AGENT-READY>` or any routing label, or answer a HITL ticket for its decider.
+  `<AGENT-READY>` or any routing label, answer a HITL ticket for the driver, or
+  name or assign anyone but the driver as a ticket's decider.
 
 ## Red Flags — STOP
 
 - About to resolve a second non-research ticket in this session — stop; report and end.
-- About to answer a grilling or prototype question yourself — stop; HITL tickets resolve only through their decider.
+- About to answer a grilling or prototype question yourself — stop; HITL tickets resolve only through the driver.
+- About to name someone other than the driver as a decider, or assign a ticket to them — stop; the driver decides everything on the map.
 - About to work a ticket you have not claimed, or one claimed by another session — stop; claim or yield.
 - About to restate a decision's reasoning on the map — stop; the map gists and links, the ticket holds the detail.
 - About to pre-slice fog into speculative tickets — stop; ticket only questions you can state precisely now.
@@ -240,9 +249,9 @@ sessions off each other's tickets.
 
 Before reporting done:
 
-- [ ] Chart: exactly one open `wayfinder:map` under the seed, with Destination, Notes (driver, seed, docs branch), empty Decisions so far, fog and scope sections; every ticket a sub-issue with one `wayfinder:<type>` label, `<SKIP>`, a precise question, a decider, and native blockers that match the body.
+- [ ] Chart: exactly one open `wayfinder:map` under the seed, with Destination, Notes (driver, seed, docs branch), empty Decisions so far, fog and scope sections; every ticket a sub-issue with one `wayfinder:<type>` label, `<SKIP>`, a precise question, HITL (driver) or AFK (agent) as its decider, no assignee but the driver, and native blockers that match the body.
 - [ ] Work: exactly one non-research ticket was claimed and resolved this session; its resolution comment, `<DONE>` status, released claim and Decisions-so-far line all exist; graduated fog was removed; new tickets were wired.
-- [ ] No HITL answer was invented; a relayed answer names its decider.
+- [ ] No HITL answer was invented; every HITL resolution is confirmed by the driver; no ticket names or is assigned to anyone else.
 - [ ] Doc changes, if any, are pushed to the docs branch and the push was read back.
 - [ ] No ticket carries `<AGENT-READY>` or a routing label; no human ticket got a comment or description edit.
 - [ ] The report names tickets by title, states the frontier and fog, and ends with the next command — or, when clear, `WAYFINDER CLEAR` with the per-feature `/feature-goal` order.
