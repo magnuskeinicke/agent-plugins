@@ -1,0 +1,32 @@
+sources:
+  - id: pocock-wayfinder
+    url: https://raw.githubusercontent.com/mattpocock/skills/639df6e7386dfddc739b2aecdeff37a876f2483b/skills/engineering/wayfinder/SKILL.md
+    title: "Matt Pocock skills — wayfinder"
+    rationale: >
+      The core model is adapted from this skill (MIT): the map as a tracker
+      issue that indexes rather than stores, decision tickets as child issues
+      with native blocking, the research / prototype / grilling / task types
+      with HITL vs AFK, the fog-of-war frontier, out-of-scope handling,
+      create-then-wire charting, research fan-out at chart time, one ticket per
+      session, and "plan, don't do". Adapted to this suite's repo contract,
+      tracker audiences, statuses and /feature-goal handoff.
+    usage: adapted
+    reference_ref: 639df6e7386dfddc739b2aecdeff37a876f2483b
+    license: MIT
+    last_reviewed_at: 2026-10-19
+  - id: kramme-discovery-wayfinder
+    url: https://github.com/Abildtoft/kramme-cc-workflow/tree/main/kramme-cc-workflow/skills/kramme%3Adiscovery%3Awayfinder
+    title: "kramme-cc-workflow — kramme:discovery:wayfinder"
+    rationale: >
+      Guardrails adapted from kramme's local-backend port (MIT, Copyright (c)
+      2026 Abildtoft): the WAYFINDER NOT NEEDED gate, reconcile-before-select,
+      claim-then-recheck with never inferring abandonment from elapsed time,
+      honouring a named ticket only when it is on the frontier, the retry-safe
+      resolution order, the resolution contract, and the exit brief. Its local
+      .context backend was not adopted: state must travel between Conductor
+      workspaces and cloud sessions, so this skill is tracker-native.
+    usage: adapted
+    reference_ref: bcc4d9b92271a985dd343d0e7a8689ab8ee10e5f
+    reference_version: "0.88.0"
+    license: MIT
+    last_reviewed_at: 2026-10-19
