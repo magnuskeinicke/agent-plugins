@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.14.0 — 2026-10-19
+
+### Added
+
+- **`/wayfinder` charts initiatives too big for one grill.** It is adapted from Matt Pocock's
+  `wayfinder` and kramme's `kramme:discovery:wayfinder`, both MIT, with sources in
+  `skills/wayfinder/references/sources.yaml`. A seed becomes a `Wayfinder: …` map issue. The seed
+  can be a ticket, an idea, or a whole Linear project (`project:<name>`, URL or `P-…` id). A
+  project seed reads every issue, milestone and document in the project. Its map lives in the
+  project with no parent issue. The map is labelled `wayfinder:map`. Its research, prototype,
+  grilling and task decision tickets are sub-issues with native blocking. Every session claims and resolves one
+  frontier ticket: assignee plus a claim comment, rechecked against competing sessions. It then
+  records a resolution comment, gists it on the map and graduates fog. Research tickets fan out as
+  subagents at chart time. Grilling tickets run `/grill-with-docs` scoped to one question and push
+  `CONTEXT.md`/ADR changes to the map's `wayfinder/<map>` docs branch, so the state travels between
+  local and cloud workspaces. A clear map ends in a `## Handoff` table of features in build order.
+- `/feature-goal` reads that handoff. Under a CLEAR map, it merges the docs branch and runs a delta
+  grill covering only what the map left open. Under an ACTIVE map, it stops before claiming the
+  parent.
+- The engine maps the `wayfinder` skill to the `planner` role.
+
 ## 0.13.1 — 2026-10-15
 
 ### Fixed
