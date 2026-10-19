@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.1 — 2026-10-19
+
+### Fixed
+
+- **Only the driver decides on a wayfinder map.** A HITL ticket's decider used to be "the person
+  who must answer", so charting named colleagues as deciders. The driver (the user who charted the
+  map) is now the only decider on a map. A ticket's `## Decider` is `driver` or `agent`, never
+  another person. Claims assign only the driver. A colleague's or another team's knowledge counts as
+  input or research. A session whose user is not the driver stops at the HITL check. Resolutions
+  read `Confirmed by <driver>`.
+
 ## 0.14.0 — 2026-10-19
 
 ### Added
