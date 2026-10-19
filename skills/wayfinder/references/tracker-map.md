@@ -108,7 +108,8 @@ clearing relates the rest.
 
 - **Title:** the decision as a short imperative ("Decide rollout strategy",
   "Find which settings the AI endpoint supports").
-- **Parent:** the map. Same team and project. Unassigned until claimed.
+- **Parent:** the map. Same team and project. Unassigned until claimed; a
+  claim assigns the driver. Never assign anyone else.
 - **Status:** the team's unstarted/backlog state. Claimed → `<IN-PROGRESS>`;
   resolved → `<DONE>`; out of scope → the team's canceled state.
 - **Blocking:** the tracker's native relation (Linear `blockedBy`), so the
@@ -126,7 +127,7 @@ clearing relates the rest.
 
 ## Decider
 
-<HITL: the person who must answer — and why | AFK: agent>
+<HITL: driver | AFK: agent>
 
 Blocked by: <ticket links, or none>
 
@@ -136,6 +137,10 @@ Workflow: wayfinder
 Map: <map id and URL>
 Role: decision
 ```
+
+The decider is always the driver or the agent — never another person's name,
+even when the question leans on someone else's knowledge (say that under
+**Why it is on the route** if it helps the driver).
 
 ## Create, then wire
 
@@ -181,7 +186,7 @@ other unreleased claim remains** on it.
 
 **Answer:** <direct answer to the question>
 
-**Evidence:** <links to research docs, prototype, code, sources> | Confirmed by <decider> (<present | relayed by <driver>>)
+**Evidence:** <links to research docs, prototype, code, sources> | Confirmed by <driver>
 
 **Implications:** <what this decides for the route; constraints later tickets inherit>
 
@@ -217,7 +222,7 @@ After the resolution, if docs changed: commit only those files (subject per the
 repo's commit rule, type `docs`), then `git push origin HEAD:refs/heads/<docs-branch>`.
 On a non-fast-forward reject: `git fetch origin`, `git rebase origin/<docs-branch>`,
 push again. A rebase conflict in `CONTEXT.md` keeps both sides' entries (the
-glossary is additive; reconcile a term both sides defined with the decider's
+glossary is additive; reconcile a term both sides defined with the driver's
 wording from the resolution comments); an ADR number collision renumbers this
 session's ADR to the next free number. Read the remote head back and cite it in the resolution's
 **Evidence**. Never open a PR from it; `/feature-goal` merges it into its
