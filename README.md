@@ -137,6 +137,21 @@ asking: `/to-prd` and `/to-issues` run in pipeline mode (no confirmations, no HI
 undecided points become recorded `## Assumptions`), and every PR-producing skill ends by
 babysitting its PR. Runs end at GOAL MET or when only `needs-human` items remain.
 
+### Before the pipeline: initiatives too big for one grill
+
+When an initiative spans several features or carries decisions that need research or other
+people (a whole new settings page, say), one grilling session cannot hold it. Run
+**`/magnus:wayfinder <seed ticket | project:<name> | idea>`** first (a whole Linear project works
+as the seed). It charts a decision map on the tracker: a
+`Wayfinder: …` issue (`wayfinder:map`) whose sub-issues are research, prototype, grilling and task
+tickets wired with native blocking. Then run `/magnus:wayfinder <map>` once per ticket, in any
+workspace, local or cloud. Each session claims and resolves one frontier ticket, records the answer
+on that ticket, gists it on the map and graduates fog into new tickets. Grill-written
+`CONTEXT.md`/ADR changes go to the map's `wayfinder/<map>` docs branch so they travel between
+workspaces. When nothing is left to decide, the map's `## Handoff` lists the features in build
+order, and `/magnus:feature-goal <feature>` runs a **delta grill** on top of the decisions each
+feature inherits. Wayfinder plans; it never builds.
+
 Standalone entry points onto the same machinery:
 
 | Command | Use for |
@@ -146,6 +161,7 @@ Standalone entry points onto the same machinery:
 | `/magnus:review-code` | one read-only reviewer round on any diff, PR, or working tree |
 | `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
 | `/magnus:babysit-stack` | babysit a PR or stack to GOAL MET: CI, Copilot rounds, CodeRabbit rounds, threads |
+| `/magnus:wayfinder <seed \| project:<name> \| map>` | chart, or work one ticket of, a tracker-native decision map for an initiative too big for one grill |
 
 `/work-issue`, `/review-code`, `/iterate-pr`, and `/babysit-stack` run wherever
 you invoke them. `/solve-ready-tickets` dispatches to Conductor cloud workspaces

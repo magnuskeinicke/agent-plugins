@@ -21,7 +21,7 @@ export const SKILL_ROLES = {
   'iterate-pr': 'fixer', 'babysit-stack': 'babysitter', 'solve-ready-tickets': 'dispatcher',
   'daily-ticket-manager': 'triage', 'grill-with-docs': 'planner', 'to-prd': 'planner',
   'to-issues': 'planner', 'improve-codebase-architecture': 'planner', 'review-code': 'reviewer',
-  'gut-check': 'reviewer', 'split-pr': 'planner', 'init-repo': 'planner',
+  'gut-check': 'reviewer', 'split-pr': 'planner', 'init-repo': 'planner', 'wayfinder': 'planner',
   'gh-stack': 'inherit', 'conductor-workspace': 'inherit', 'verify-before-done': 'inherit',
   'write-comments': 'inherit',
 };

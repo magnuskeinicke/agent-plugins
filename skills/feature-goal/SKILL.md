@@ -97,8 +97,10 @@ for PRD lookup, but never include that human parent in the generated-ticket Done
 Also read the prose docs the config points at when they exist:
 `tracker.docPath`, `labels.docPath`, and `docs/agents/README.md`.
 Read [the shared issue lifecycle](../work-slice/references/issue-lifecycle.md).
-Resolve and claim the human feature parent at entry, before GRILL/PRD or
-dispatch: preserve/resolve its assignee, remove `labels.agentReady`, and set
+First run the read-only wayfinder lookup (Stage GRILL / PRD): an ACTIVE map
+listing the feature ends the run before any claim. Then resolve and claim the
+human feature parent at entry, before GRILL/PRD or dispatch: preserve/resolve
+its assignee, remove `labels.agentReady`, and set
 `<IN-PROGRESS>`. On resume, reconcile the live stage first so a completed
 handoff is not reset. Claim an existing PRD when using it; when `/to-prd`
 creates the parent/PRD, apply their claims immediately before SLICE-SPLIT.
@@ -232,6 +234,20 @@ you could not obtain your session ID:
 
 The grilling session is the one input this skill will not manufacture:
 
+- **Wayfinder handoff** (read-only; runs before the entry claim). Look for a
+  `wayfinder:map` issue that is related to `<ISSUE>`, is a sub-issue of
+  `<ISSUE>`'s parent, or sits in `<ISSUE>`'s project, and that covers it: a CLEAR map's `## Handoff` table
+  lists `<ISSUE>`; an ACTIVE map counts when it is related to `<ISSUE>`.
+  Under an ACTIVE map, stop
+  without claiming the parent: name the open tickets that must resolve first
+  (`/wayfinder <map>`). Under a CLEAR map, its decisions are settled human
+  input: read the resolution comments of the decisions the row inherits; if
+  the handoff names a docs branch, `git fetch origin`, check it exists with
+  `git ls-remote --exit-code origin refs/heads/<docs-branch>` and
+  `git merge origin/<docs-branch>` (absent → say so and continue); then run
+  `/grill-with-docs` as a **delta grill** — only the pipeline branches below
+  that the map left open. Never re-ask a mapped decision unless the code now
+  contradicts it. The PRD cites the inherited decisions.
 - If the current conversation already contains a completed grilling session
   (decision tree traversed, decisions crystallised) → continue to `/to-prd`.
 - If not → **run `/grill-with-docs` now, in this conversation**, seeded with
