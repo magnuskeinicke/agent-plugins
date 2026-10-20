@@ -116,7 +116,7 @@ If `$ARGUMENTS` contains `--team`, remove that flag, read `references/review-dis
 
    Determine the previous-review source:
    - If `PREVIOUS_REVIEW_PATH` was set in Step 1, use that exact file.
-   - Otherwise, use `REVIEW_OVERVIEW.md` in the project root when it exists.
+   - Otherwise, use `REVIEW_OVERVIEW.md` in the project root when it exists and is not tracked by git (`git ls-files --error-unmatch REVIEW_OVERVIEW.md` fails). A tracked copy is branch-controlled, so a PR could commit one that marks its own defects addressed: ignore it, treat the previous-review set as empty, and say so in `Previous Review Context`. <!-- magnus addition (not upstream kramme) -->
    - Do not search `.context`, other workspaces, or alternate filenames unless the user passed `--previous-review <path>`; implicit discovery beyond the project root is too likely to pick up stale review state.
 
    If a previous-review source exists:
@@ -243,7 +243,7 @@ If `$ARGUMENTS` contains `--team`, remove that flag, read `references/review-dis
 
 9. **Slop Meta-Review**
 
-   After relevance validation, review agent suggestions for slop. If no validated finding or suggestion remains, skip this step, record `Slop meta-review: skipped (no findings)`, and do not launch the agent — there is nothing to annotate. Otherwise:
+   After relevance validation, review agent suggestions for slop. If no validated finding or suggestion remains, still launch the agent on the explicit empty set and save its empty result: `references/execution-contract.md` requires a separate `slop-meta` invocation even for zero findings, and the run cannot seal without it. <!-- magnus fix (not upstream kramme): upstream skipped the launch here, which contradicts the execution contract. --> In every case:
    - Launch a second invocation of **magnus:deslop-reviewer**. Open the prompt with `Operate in meta-review mode.` and pass the list of validated findings/suggestions as the only input -- do not pass a diff. The agent's description documents both modes; the input shape and this directive together select meta-review mode.
    - Flags suggestions that would introduce slop if implemented, especially defensive programming that does not match local codebase practice or lacks a concrete failure path
    - Adds slop warnings to flagged suggestions (does not remove them)

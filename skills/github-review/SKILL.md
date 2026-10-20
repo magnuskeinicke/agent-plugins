@@ -164,7 +164,9 @@ fi
 
 TMP_PARENT=$(mktemp -d "${TMPDIR:-/tmp}/kramme-review-pr-${PR_NUMBER}.XXXXXX")
 WORKTREE_DIR="$TMP_PARENT/wt"
-if ! git worktree add --quiet --detach "$WORKTREE_DIR" "$HEAD_OID"; then
+# magnus addition (not upstream kramme): disable hooks so a PR-modified hook in a
+# tracked core.hooksPath directory (husky, .githooks) cannot run on checkout.
+if ! git -c core.hooksPath=/dev/null worktree add --quiet --detach "$WORKTREE_DIR" "$HEAD_OID"; then
   echo "Failed to create review worktree." >&2
   if ! rmdir "$TMP_PARENT"; then
     echo "Could not remove temporary parent automatically: $TMP_PARENT" >&2

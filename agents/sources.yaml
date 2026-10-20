@@ -59,6 +59,11 @@ sources:
       fix: adversarial-review's assets/review-result.schema.json drops the
       findings `allOf` (OpenAI strict structured output rejects it); the
       runner's own jq check still enforces the severity/action pairing.
+      Three more fixes came from the first adversarial run on this vendoring:
+      github-review creates its worktree with hooks disabled;
+      pr-code-review and pr-product-review ignore a git-tracked previous
+      report; and pr-code-review always launches the slop meta-review, as
+      its execution contract requires.
       Each skill's own references/sources.yaml is upstream's
       record of its sources.
     usage: vendored
