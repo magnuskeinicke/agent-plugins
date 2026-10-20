@@ -19,18 +19,17 @@ test('every roster + off-loop id has a vendored agent file', () => {
 test('round 1 minimal diff: always-on + round1 tier, no unmet conditionals', () => {
   const sel = selectReviewers({ round: 1, changedFiles: ['src/util.ts'] });
   const got = ids(sel);
-  for (const id of ['code-reviewer', 'silent-failure-hunter', 'deslop-reviewer', 'lean-reviewer', 'code-simplifier', 'codebase-pattern-reviewer', 'comment-analyzer'])
+  for (const id of ['code-reviewer', 'silent-failure-hunter', 'deslop-reviewer', 'cleanup-reviewer', 'codebase-pattern-reviewer', 'comment-analyzer'])
     assert.ok(got.includes(id), `${id} should always run round 1`);
-  for (const id of ['injection-reviewer', 'a11y-auditor', 'removal-planner', 'pr-test-analyzer'])
+  for (const id of ['security-reviewer', 'a11y-auditor', 'pr-test-analyzer'])
     assert.ok(!got.includes(id), `${id} should not trigger`);
 });
 
-test('security area launches the whole bundle together', () => {
+test('security area launches the security reviewer', () => {
   const areas = selectAreas(compileAreaPaths(REPO_CONFIG_DEFAULTS.areaPaths), ['src/auth/login.ts'], []);
   assert.ok(areas.includes('security'));
   const got = ids(selectReviewers({ round: 1, areas, changedFiles: ['src/auth/login.ts'] }));
-  for (const id of ['injection-reviewer', 'auth-reviewer', 'data-reviewer', 'logic-reviewer'])
-    assert.ok(got.includes(id), `${id} missing from security bundle`);
+  assert.ok(got.includes('security-reviewer'));
 });
 
 test('backend force-adds security, frontend force-adds performance', () => {
@@ -48,7 +47,7 @@ test('conditional triggers: tests, types, deletions, conventions gate, overengin
   const base = { round: 1, changedFiles: ['src/a.test.ts'] };
   assert.ok(ids(selectReviewers(base)).includes('pr-test-analyzer'));
   assert.ok(ids(selectReviewers({ round: 1, changedFiles: ['src/schema.prisma'] })).includes('type-design-analyzer'));
-  assert.ok(ids(selectReviewers({ round: 1, changedFiles: ['a.ts'], deletedFiles: ['b.ts'] })).includes('removal-planner'));
+  assert.ok(ids(selectReviewers({ round: 2, changedFiles: ['a.ts'], deletedFiles: ['b.ts'] })).includes('cleanup-reviewer'), 'a fix-round deletion re-runs cleanup');
   const many = Array.from({ length: 10 }, (_, i) => `src/f${i}.ts`);
   assert.ok(ids(selectReviewers({ round: 1, changedFiles: many })).includes('convention-drift-reviewer'));
   assert.ok(!ids(selectReviewers({ round: 1, changedFiles: ['a.ts'] })).includes('overengineering-reviewer'));
@@ -67,7 +66,7 @@ test('fix rounds: always-on + open-finding owners + reuse rerun until clean', ()
   assert.ok(got.includes('code-reviewer'));
   assert.ok(got.includes('performance-oracle'), 'open-finding owner re-runs');
   assert.ok(got.includes('codebase-pattern-reviewer'), 're-runs until clean pass');
-  assert.ok(!got.includes('lean-reviewer'), 'round1 tier does not re-run');
+  assert.ok(!got.includes('cleanup-reviewer'), 'round1 tier does not re-run');
   assert.ok(!got.includes('comment-analyzer'), 'round1 tier does not re-run on a code-only fix range');
   const docsFix = ids(selectReviewers({ round: 2, changedFiles: ['docs/adr/0003-x.md'], openSources: [], reuseClean: true }));
   assert.ok(docsFix.includes('comment-analyzer'), 'docs touched in the fix range re-triggers it');
@@ -80,8 +79,8 @@ test('overlay: generalists get all triggered areas, specialists their own, deslo
   const overlays = focusOverlay(cfg, ['security', 'frontend']);
   assert.equal(overlays.length, 2);
   assert.equal(overlayFor('code-reviewer', ['security', 'frontend'], overlays).length, 2);
-  const auth = overlayFor('auth-reviewer', ['security', 'frontend'], overlays);
-  assert.deepEqual(auth.map((o) => o.area), ['security']);
+  const security = overlayFor('security-reviewer', ['security', 'frontend'], overlays);
+  assert.deepEqual(security.map((o) => o.area), ['security']);
   assert.equal(overlayFor('deslop-reviewer', ['security', 'frontend'], overlays).length, 0);
 });
 

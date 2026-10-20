@@ -30,13 +30,15 @@ export const ROSTER = [
 
   // Round-1 tier: run once on the full slice diff; later rounds only re-run
   // them when they own an open finding (openSources).
+  // One invocation covers the lean, removal, refactor and simplify
+  // dimensions (kramme merged lean-reviewer, code-simplifier and
+  // removal-planner into it).
   {
-    id: 'lean-reviewer',
+    id: 'cleanup-reviewer',
     tier: 'round1',
-  },
-  {
-    id: 'code-simplifier',
-    tier: 'round1',
+    // Deletions need their reference trace re-checked on the fix round that
+    // made them.
+    when: (i) => i.deletedFiles.length > 0 || i.hints.includes('removal'),
   },
   {
     id: 'codebase-pattern-reviewer',
@@ -73,10 +75,6 @@ export const ROSTER = [
       i.hints.includes('types'),
   },
   {
-    id: 'removal-planner',
-    when: (i) => i.deletedFiles.length > 0 || i.hints.includes('removal'),
-  },
-  {
     id: 'convention-drift-reviewer',
     mode: 'convention review mode',
     when: (i) =>
@@ -96,11 +94,9 @@ export const ROSTER = [
     when: (i) =>
       ['performance', 'backend', 'database'].some((a) => i.areas.includes(a)),
   },
-  // Security bundle — launched together (kramme rule), on the security area.
-  { id: 'injection-reviewer', when: (i) => i.areas.includes('security') },
-  { id: 'auth-reviewer', when: (i) => i.areas.includes('security') },
-  { id: 'data-reviewer', when: (i) => i.areas.includes('security') },
-  { id: 'logic-reviewer', when: (i) => i.areas.includes('security') },
+  // One invocation runs all four security lenses (injection, access control,
+  // data protection, logic).
+  { id: 'security-reviewer', when: (i) => i.areas.includes('security') },
   // UI tier.
   { id: 'a11y-auditor', when: (i) => i.areas.includes('frontend') },
   {
@@ -129,20 +125,15 @@ export const OVERLAY_AREAS = {
   'code-reviewer': ['*'],
   'silent-failure-hunter': ['backend', 'database', 'security'],
   'deslop-reviewer': [],
-  'lean-reviewer': ['*'],
-  'code-simplifier': ['*'],
+  'cleanup-reviewer': ['*'],
   'codebase-pattern-reviewer': ['*'],
   'pr-test-analyzer': [],
   'comment-analyzer': [],
   'type-design-analyzer': ['database'],
-  'removal-planner': [],
   'convention-drift-reviewer': ['*'],
   'overengineering-reviewer': [],
   'performance-oracle': ['performance', 'backend', 'database'],
-  'injection-reviewer': ['security'],
-  'auth-reviewer': ['security'],
-  'data-reviewer': ['security'],
-  'logic-reviewer': ['security'],
+  'security-reviewer': ['security'],
   'a11y-auditor': ['frontend'],
   'copy-reviewer': ['frontend', 'i18n'],
 };

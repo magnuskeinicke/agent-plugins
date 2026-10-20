@@ -38,7 +38,7 @@ test('full loop: findings → fix → clean re-review → converged', () => {
   assert.equal(plan.round, 1);
   assert.ok(plan.prePass, 'round 1 has the gut-check pre-pass');
   const rIds = plan.reviewers.map((r) => r.id);
-  assert.ok(rIds.includes('code-reviewer') && rIds.includes('a11y-auditor') && rIds.includes('auth-reviewer'));
+  assert.ok(rIds.includes('code-reviewer') && rIds.includes('a11y-auditor') && rIds.includes('security-reviewer'));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
   assert.ok(existsSync(cr.promptFile));
   assert.match(readFileSync(cr.promptFile, 'utf8'), /widget renders/, 'contract embedded in prompt');

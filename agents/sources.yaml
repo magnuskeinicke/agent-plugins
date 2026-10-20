@@ -3,7 +3,7 @@ sources:
     url: https://github.com/Abildtoft/kramme-cc-workflow/tree/main/kramme-cc-workflow/agents
     title: "kramme-cc-workflow — reviewer agent definitions"
     rationale: >
-      All 25 agent definition files in this directory are vendored from
+      All 20 agent definition files in this directory are vendored from
       kramme-cc-workflow (MIT, Copyright (c) 2026 Abildtoft). Filenames and
       frontmatter `name:` fields drop the `kramme:` prefix so they surface
       under this plugin's namespace; bodies are otherwise verbatim, except
@@ -15,19 +15,59 @@ sources:
       `codex exec` child's system prompt. The engine's roster mapping lives in
       engine/lib/roster.mjs.
     usage: vendored
-    vendored_ref: 56c49f34ce70a8a9be10f08bd91ea6d4e732a384
-    vendored_version: "0.77.0"
+    vendored_ref: f493eee798fdcc8aedff6dd4ed894671f16d642b
+    vendored_version: "0.88.0"
     license: MIT
-    last_reviewed_at: 2026-08-28
+    last_reviewed_at: 2026-10-20
   - id: kramme-copy-review-rubric
-    url: https://github.com/Abildtoft/kramme-cc-workflow/blob/56c49f34ce70a8a9be10f08bd91ea6d4e732a384/kramme-cc-workflow/skills/kramme%3Acode%3Acopy-review/references/copy-review-rubric.md
+    url: https://github.com/Abildtoft/kramme-cc-workflow/blob/f493eee798fdcc8aedff6dd4ed894671f16d642b/kramme-cc-workflow/skills/kramme%3Acode%3Acopy-review/references/copy-review-rubric.md
     title: "kramme-cc-workflow — copy review rubric"
     rationale: >
       Vendored verbatim into agents/references/copy-review-rubric.md and
       injected into every copy-reviewer task. The engine adds only the JSON
       schema mapping needed by this plugin's findings loop.
     usage: vendored
-    vendored_ref: 56c49f34ce70a8a9be10f08bd91ea6d4e732a384
-    vendored_version: "0.77.0"
+    vendored_ref: f493eee798fdcc8aedff6dd4ed894671f16d642b
+    vendored_version: "0.88.0"
     license: MIT
-    last_reviewed_at: 2026-09-15
+    last_reviewed_at: 2026-10-20
+  - id: kramme-cc-workflow-review-skills
+    url: https://github.com/Abildtoft/kramme-cc-workflow/tree/f493eee798fdcc8aedff6dd4ed894671f16d642b/kramme-cc-workflow
+    title: "kramme-cc-workflow — PR reviewer skills and their shared scripts"
+    rationale: >
+      Vendored near-verbatim so the plugin can review someone else's pull
+      request: skills/github-review (kramme:pr:github-review),
+      skills/linear-review-pr (kramme:linear:review-pr),
+      skills/pr-code-review (kramme:pr:code-review),
+      skills/pr-product-review (kramme:pr:product-review), skills/humanize
+      (kramme:text:humanize) and skills/adversarial-review
+      (kramme:pr:adversarial-review), plus the files they load from the plugin root:
+      scripts/{collect-review-diff,resolve-base,review-tree-fingerprint,verify-rewrite-state}.sh,
+      scripts/lib/, scripts/dev-server/, hooks/confirm-review-artifacts.txt,
+      shared/pr-review/references/model-selection.md and
+      shared/architecture/references/architecture-language.md. The only edits:
+      vendored skill and agent names are rewritten from `kramme:` to
+      `magnus:`, frontmatter `name:` drops the namespace, and each SKILL.md
+      gets one note under its title covering this provenance, the Codex
+      plugin-root and reviewer-launch fallbacks, and upstream-only `kramme:*`
+      skill mentions. Three magnus additions are marked inline: github-review
+      takes `--adversarial` and runs adversarial-review as a fourth pass; the
+      adversarial runner defaults its model and effort to the engine's
+      `reviewer` role; and shared/pr-review/references/model-selection.md
+      pins every review subagent to that role (Claude opus / Codex
+      gpt-6.1-sol, both high) instead of inheriting the session model. One
+      fix: adversarial-review's assets/review-result.schema.json drops the
+      findings `allOf` (OpenAI strict structured output rejects it); the
+      runner's own jq check still enforces the severity/action pairing.
+      Three more fixes came from the first adversarial run on this vendoring:
+      github-review creates its worktree with hooks disabled;
+      pr-code-review and pr-product-review ignore a git-tracked previous
+      report; and pr-code-review always launches the slop meta-review, as
+      its execution contract requires.
+      Each skill's own references/sources.yaml is upstream's
+      record of its sources.
+    usage: vendored
+    vendored_ref: f493eee798fdcc8aedff6dd4ed894671f16d642b
+    vendored_version: "0.88.0"
+    license: MIT
+    last_reviewed_at: 2026-10-20

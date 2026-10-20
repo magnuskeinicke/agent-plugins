@@ -14,6 +14,8 @@ Scaffold a fresh repo's half with `/magnus:init-repo`.
 
 ```
 skills/<name>/SKILL.md      # one dir per skill (+ assets)
+scripts/, shared/, hooks/   # plugin-root files the vendored kramme review skills
+                            # (github-review & co.) load; see agents/sources.yaml
 agents/<id>.md              # reviewer roster — vendored from kramme-cc-workflow
                             # (MIT, see agents/sources.yaml); Claude subagent def
                             # = Codex `codex exec` child system prompt
@@ -160,6 +162,7 @@ Standalone entry points onto the same machinery:
 | `/magnus:solve-ready-tickets` | dispatch every eligible `agent:ready` issue (or configured `labels.agentReady`) into its own cloud workspace running `/work-issue`; `dry-run` previews, `max N` caps new workspaces |
 | `/magnus:review-code` | one read-only reviewer round on any diff, PR, or working tree |
 | `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
+| `/magnus:github-review [<n>]` | review someone else's PR as the requested reviewer: code + product + Linear-requirement passes, a local report, then (on your OK or `--draft-review`) one **unsubmitted pending** GitHub review; `--adversarial` adds a cross-provider pass (Codex from Claude, Claude from Codex) |
 | `/magnus:babysit-stack` | babysit a PR or stack to GOAL MET: CI, Copilot rounds, CodeRabbit rounds, threads |
 | `/magnus:wayfinder <seed \| project:<name> \| map>` | chart, or work one ticket of, a tracker-native decision map for an initiative too big for one grill |
 

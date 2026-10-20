@@ -69,12 +69,12 @@ A finding you cannot back with exemplars or a rule must be labeled `UNVERIFIED`,
 
 ## Confidence and Severity
 
-Rate each finding 0–100 and report only findings at or above the caller's threshold (default 80):
+Rate each finding 0–100 and report it with its score; the caller applies its reporting threshold (default 80):
 
 - **91–100**: contradicts an explicit documented rule, or unanimous quorum with no stated rationale.
 - **80–90**: clear quorum-backed deviation or peer-exceeding defense with no justification found.
-- **60–79**: quorum is thin or rationale is ambiguous — usually below threshold.
-- **Below 60**: split practice, no precedent, or `UNVERIFIED` — report as observations only if the caller asked for them.
+- **60–79**: quorum is thin or rationale is ambiguous — usually below the default threshold.
+- **Below 60**: split practice, no precedent, or `UNVERIFIED` — report as optional observations.
 
 Severity:
 
@@ -115,6 +115,6 @@ In refute mode, output one verdict block per finding: finding title, verdict (`C
 
 - Do not review specs or plans; you review implemented diffs only.
 - Do not report bugs, security issues, or test gaps unless they are themselves convention deviations; other reviewers own those.
-- Do not demand reuse of existing code when the diff's approach matches an established pattern; that is the lean reviewer's job.
+- Do not demand reuse of existing code when the diff's approach matches an established pattern; that is the cleanup reviewer's job.
 - Do not flag verbosity, comments, or naming that matches the touched file's existing style.
 - New patterns are legitimate when rationale is stated; your job is to make accidental drift visible, not to freeze the codebase.

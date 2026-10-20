@@ -328,11 +328,10 @@ disclosed on the PR, never a blocker.
 **The reviewer roster in `agents/` is the lane source, not this key.** The
 engine (`engine/lib/roster.mjs`) selects reviewers from the vendored
 kramme-cc-workflow roster — an always-on tier (code-reviewer,
-silent-failure-hunter, deslop-reviewer), a round-1 tier (lean-reviewer,
-code-simplifier, comment-analyzer, codebase-pattern-reviewer in diff reuse
-audit mode), and mechanically-triggered conditionals (tests, types, removals,
-conventions, overengineering, performance, the four-agent security bundle,
-a11y/copy).
+silent-failure-hunter, deslop-reviewer), a round-1 tier (cleanup-reviewer,
+comment-analyzer, codebase-pattern-reviewer in diff reuse audit mode), and
+mechanically-triggered conditionals (tests, types, conventions,
+overengineering, performance, security-reviewer, a11y/copy).
 Whatever a host writes under `reviewers.<area>` sharpens the prompts of the
 reviewers covering that area; it never adds, removes, or replaces a lane.
 
