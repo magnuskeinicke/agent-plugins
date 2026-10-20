@@ -92,6 +92,7 @@ Reuse audit scope — every function/component/hook/util/type ADDED by the diff,
 export function copyReviewRubricExtra(rubric) {
   return `Copy-review integration contract:
 - Apply the rubric below for scope, categories, exclusions, confidence, and severity.
+- This contract is the invoking skill's report threshold: report only findings at confidence 75 or higher.
 - Translate Critical and Important findings into blockingFindings using the task's JSON schema.
 - Translate Suggestion findings into notes; they are advisory, not blocking.
 - Put category, confidence, and user impact in detail; put the recommendation in suggestedFix.

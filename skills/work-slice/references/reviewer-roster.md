@@ -18,20 +18,15 @@ system prompt. The host repo's `repoConfig.reviewers` / `areaPaths` are an
 | `code-reviewer` | always | every round |
 | `silent-failure-hunter` | always | every round |
 | `deslop-reviewer` | always | every round |
-| `lean-reviewer` | round 1 | full slice diff; later rounds only while it owns an open finding |
-| `code-simplifier` | round 1 | same re-run rule |
+| `cleanup-reviewer` | round 1 | full slice diff, one invocation over the lean, removal, refactor and simplify dimensions; later rounds while it owns an open finding, or when the fix range deletes files (hint `removal`) |
 | `codebase-pattern-reviewer` | round 1, *diff reuse audit mode* | re-runs each fix round until a clean pass with an unchanged added-file set + provenance table (the CLI tracks the fingerprint); carries the magnus provenance audit + libMap duplicate hunt |
 | `comment-analyzer` | round 1 | full slice diff — owns the rename-over-comment lane (a comment a better function/parameter/variable name would delete); re-triggers on a fix round that touched docs/markdown, or hint `comments` |
 | `pr-test-analyzer` | conditional | test files touched, or any file added |
 | `type-design-analyzer` | conditional | type/schema files touched, or hint `types` |
-| `removal-planner` | conditional | files deleted, or hint `removal` |
 | `convention-drift-reviewer` | conditional, *convention review mode* | ≥10 changed files, or hint `conventions` |
 | `overengineering-reviewer` | conditional, *necessity-review mode* | files added, or >150 inserted lines |
 | `performance-oracle` | area | `performance`, `backend`, or `database` triggered |
-| `injection-reviewer` | area (security bundle) | `security` triggered — the four security reviewers always launch together |
-| `auth-reviewer` | area (security bundle) | `security` triggered |
-| `data-reviewer` | area (security bundle) | `security` triggered |
-| `logic-reviewer` | area (security bundle) | `security` triggered |
+| `security-reviewer` | area | `security` triggered — one invocation runs the injection, access-control, data-protection and logic lenses |
 | `a11y-auditor` | area | `frontend` triggered |
 | `copy-reviewer` | area | `frontend` triggered AND the change is user-facing |
 
@@ -62,9 +57,8 @@ The implementer's `touchedAreas` declaration adds areas paths alone would miss.
 
 `OVERLAY_AREAS` maps each reviewer to the host `reviewers.<area>` overlays its
 prompt picks up (intersected with the round's triggered areas). Generalists
-(`code-reviewer`, `lean-reviewer`, `code-simplifier`,
-`codebase-pattern-reviewer`, `convention-drift-reviewer`) take every triggered
-area's overlay; specialists take only their own (e.g. the security bundle takes
+(`code-reviewer`, `cleanup-reviewer`, `codebase-pattern-reviewer`, `convention-drift-reviewer`) take every triggered
+area's overlay; specialists take only their own (e.g. `security-reviewer` takes
 `security`, `copy-reviewer` takes `frontend` + `i18n`); some take none.
 
 ## Model roles

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.15.0 — 2026-10-20
+
+### Added
+
+- **`/github-review` reviews someone else's PR.** It is vendored near-verbatim from kramme's
+  `kramme:pr:github-review` (MIT, provenance in `agents/sources.yaml`), with the skills it delegates
+  to: `pr-code-review`, `pr-product-review`, `linear-review-pr` and `humanize`. It fetches the PR
+  into a throwaway worktree pinned to its head. It runs the code pass, adds the product/UX pass when
+  UI files changed, and traces every linked Linear issue's requirements against the diff in both
+  directions. It checks the existing threads against the live code and writes
+  `GITHUB_PR_REVIEW_OVERVIEW.md`. After your OK (or with `--draft-review`), it creates one
+  unsubmitted pending GitHub review. It never submits, approves or requests changes.
+- **`/adversarial-review` and `/github-review --adversarial`.** Vendored from
+  `kramme:pr:adversarial-review`, it sends the clean committed branch to the other provider (Codex
+  from Claude, Claude from Codex) in an isolated read-only snapshot. It then validates each returned
+  finding against the diff.
+- Review subagents in the vendored skills run the engine's `reviewer` role: Claude `opus` (Opus 5.5)
+  and Codex `gpt-6.1-sol`, both at high effort. They no longer inherit the session model.
+
+### Changed
+
+- **Reviewer agents refreshed to kramme v0.88.0.** Upstream merged seven agents into two.
+  `security-reviewer` replaces `injection-reviewer`, `auth-reviewer`, `data-reviewer` and
+  `logic-reviewer`, running all four lenses in one invocation. `cleanup-reviewer` replaces
+  `lean-reviewer`, `code-simplifier` and `removal-planner`. The engine roster follows: cleanup runs
+  in round 1 and re-runs on a fix round that deletes files. Security runs when the `security` area
+  triggers. Agents now report every finding with its confidence and leave filtering to the caller.
+  The engine's copy-review contract carries the 75-confidence threshold that left the rubric.
+
 ## 0.14.1 — 2026-10-19
 
 ### Fixed
