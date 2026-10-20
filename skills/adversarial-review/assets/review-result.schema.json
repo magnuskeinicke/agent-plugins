@@ -2,7 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["summary", "findings", "positive_observations", "coverage"],
+  "required": [
+    "summary",
+    "findings",
+    "positive_observations",
+    "coverage"
+  ],
   "properties": {
     "summary": {
       "type": "string",
@@ -21,48 +26,21 @@
           "evidence",
           "recommendation"
         ],
-        "allOf": [
-          {
-            "if": {
-              "properties": {
-                "severity": {
-                  "enum": ["critical", "important"]
-                }
-              },
-              "required": ["severity"]
-            },
-            "then": {
-              "properties": {
-                "action_class": {
-                  "enum": ["gated_auto", "manual"]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "severity": {
-                  "enum": ["suggestion", "fyi"]
-                }
-              },
-              "required": ["severity"]
-            },
-            "then": {
-              "properties": {
-                "action_class": {
-                  "enum": ["advisory"]
-                }
-              }
-            }
-          }
-        ],
         "properties": {
           "severity": {
-            "enum": ["critical", "important", "suggestion", "fyi"]
+            "enum": [
+              "critical",
+              "important",
+              "suggestion",
+              "fyi"
+            ]
           },
           "action_class": {
-            "enum": ["gated_auto", "manual", "advisory"]
+            "enum": [
+              "gated_auto",
+              "manual",
+              "advisory"
+            ]
           },
           "location": {
             "type": "string",
@@ -92,7 +70,10 @@
     "coverage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["files_examined", "limitations"],
+      "required": [
+        "files_examined",
+        "limitations"
+      ],
       "properties": {
         "files_examined": {
           "type": "array",
