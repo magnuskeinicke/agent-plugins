@@ -116,7 +116,12 @@ exactly.
   > && claude plugin install magnus@magnus-skills`, verify with
   > `claude plugin list`. Codex: `codex plugin marketplace add
   > https://github.com/magnuskeinicke/agent-plugins.git &&
-  > codex plugin add magnus@magnus-skills`.
+  > codex plugin add magnus@magnus-skills`. If the plugin was already
+  > installed at an older version, run `claude plugin marketplace update
+  > magnus-skills && claude plugin update magnus@magnus-skills`. If `claude plugin list` shows
+  > `dev@melatech`, merge `"MT_GATES": "off"` into the `env` block of the
+  > gitignored `.claude/settings.local.json` (step 3 of the cloud-relay
+  > bootstrap checklist).
 
   Never put the install in a host repo's shared `.conductor/settings.toml`
   setup script — it would run (and fail, private repo) for every colleague's

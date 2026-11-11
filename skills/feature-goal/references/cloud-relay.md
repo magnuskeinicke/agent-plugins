@@ -76,13 +76,29 @@ argument) to transfer it; local `.context/` does not travel to a cloud workspace
    magnus@magnus-skills`; inspect `claude plugin list`. Codex: `codex plugin
    marketplace add https://github.com/magnuskeinicke/agent-plugins.git`, then
    `codex plugin add magnus@magnus-skills`; inspect its installed plugin list.
-   Verify both resolve the same intended plugin version; record that version.
+   Verify both resolve the same intended plugin version (the dispatcher's
+   installed version, stated in the bootstrap prompt); record that version.
+   The cloud image can ship an older copy preinstalled, and then the
+   `marketplace add` fails because the marketplace already exists. Run
+   `claude plugin marketplace update magnus-skills` and `claude plugin update
+   magnus@magnus-skills`. When the marketplace is a local directory, run
+   `git -C <that dir> pull --ff-only` first. Re-check the version, and treat
+   a version that is still older as `BOOTSTRAP FAILED`.
    For a feature stack, also install/check `github/gh-stack`.
 3. Check each runtime's actual tracker, GitHub, browser and gate capabilities
    against the ticket and repo config. An in-app connector is not automatically
    available to a CLI child or another runtime. Verify tool availability in a
    fresh session of each required runtime after installation. Missing required
    tools → report the concrete capability and stop before claiming the ticket.
+   **Turn off other plugins' interactive gates for this workspace.** Some
+   plugins in the sandbox ship hooks that block a command until a review or a
+   human answer happens, and an unattended run would turn that into questions.
+   For each known gate whose plugin `claude plugin list` shows, merge its
+   documented off switch into the `env` block of `.claude/settings.local.json`.
+   Never put it in the shared `.claude/settings.json`, and write only when
+   `git check-ignore -q .claude/settings.local.json` succeeds. Known gates:
+   `dev@melatech` → `"MT_GATES": "off"` (its commit-comment and PR-review
+   gates). The work session picks it up at start. Report the switches applied.
 4. Probe tracker read and write access. For GitHub, re-add a label already on
    the issue (no label change); for Linear, check its actual connector in each
    destination runtime. Denied tracker writes may use the caller's queue below
