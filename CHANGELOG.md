@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.15.1 — 2026-11-11
+
+### Fixed
+
+- **Unattended runs no longer stop to ask questions.** Three cloud `/work-issue` runs (SER-1820,
+  SER-1821 and SER-1822) asked the user four questions between them. Most came from the team's
+  `dev@melatech` plugin: its PR gate forced an extra `mt-code-review`, and that review handed its
+  "user's call" rulings and "owner actions" back to the user.
+  - The cloud bootstrap checklist (step 3) now turns off other plugins' interactive gates for the
+    workspace only. It writes `"MT_GATES": "off"` into the gitignored `.claude/settings.local.json`
+    when `dev@melatech` is installed. The manual bootstrap message in `conductor-workspace` and the
+    wayfinder dispatch do the same.
+  - If such a gate still fires, `work-issue` meets the gate's demand and decides any question
+    itself. It records each decision as a `## Notes` bullet and never repeats the gate's jargon to
+    the user.
+- **Verified out-of-diff defects are filed without asking.** A reviewer can find a pre-existing
+  production bug or a test gap that belongs to shipped code or a sibling ticket. These used to end
+  the run with "your call". `followups.md` now has a `## Discoveries` section: verify each defect,
+  then file at most one bug ticket and one test-gap ticket per run, deduped by a
+  `magnus:discovery:` marker. Other tickets are never edited. `work-issue` and `work-slice` follow
+  it.
+- **The cloud bootstrap updates a stale preinstalled plugin.** The cloud image ships its own copy
+  of the plugin, and `marketplace add` fails on it. Step 2 now runs `marketplace update` +
+  `plugin update` (with a `git pull` first when the marketplace is a local directory). A version
+  that stays older than the dispatcher's makes the bootstrap report `BOOTSTRAP FAILED`.
+- **`work-issue` no longer ends a turn between steps.** A new red flag stops it ending the turn
+  after a fix or before the next review round when nothing is blocking.
+
 ## 0.15.0 — 2026-10-20
 
 ### Added

@@ -103,7 +103,7 @@ Work-slice Step 3 applies verbatim — implement pass, then the engine-CLI revie
 
 ## Step 4 — Present + follow-ups
 
-Work-slice Step 4 applies verbatim, minus stack talk and **minus every tracker write**: print the terminal summary (AC ticked/flagged, rounds used, converged vs cap-hit with outstanding findings, disputed notes, provenance table, diff stat) and file **only what `node "$engine" followups --slice <issue-id>` returns**, per `../work-slice/references/followups.md`: at most one own ticket, the rest appended to the single rolling `Follow-ups: consolidation candidates` ticket, deduped by marker, `demoted` never filed. Nothing else becomes a ticket.
+Work-slice Step 4 applies verbatim, minus stack talk and **minus every tracker write**: print the terminal summary (AC ticked/flagged, rounds used, converged vs cap-hit with outstanding findings, disputed notes, provenance table, diff stat) and file **only what `node "$engine" followups --slice <issue-id>` returns**, per `../work-slice/references/followups.md`: at most one own ticket, the rest appended to the single rolling `Follow-ups: consolidation candidates` ticket, deduped by marker, `demoted` never filed. Verified defects outside the diff (a pre-existing production bug, a test gap that belongs to shipped code or a sibling ticket) are filed per that reference's `## Discoveries`: at most one bug ticket and one test-gap ticket, never a question to the user. Nothing else becomes a ticket.
 
 **Nothing at all is written on the ticket in this step.** A standalone ticket is the human's: it gets one suite comment, the `## QA handoff`, and it is written in **Step 7 — after the PR is done**, so it can never go stale behind a bot round (`../work-slice/references/qa-handoff.md`). No `## QA evidence` table, no acceptance criteria, no assumptions, no progress note, ever. Keep the run's evidence in `.context/<issue-id>/evidence/` for Step 5 and Step 7 to render from.
 
@@ -116,7 +116,7 @@ No stack, so this is the short form of work-slice Step 5:
 3. **`<PR-SKILL>`** for the title regex, conflict check and Summary; pass the parent ID/URL and the shared lifecycle's `## Issues` section. Keep test plans in the PR body to preserve the human ticket's one-comment rule. Then draft it: `pr=$(gh pr view --json number --jq .number); gh pr ready "$pr" --undo`.
 4. **Write `## Verification`** per `../work-slice/references/pr-evidence.md`, rendered from `evidence/verification.jsonl` — handed to `<PR-SKILL>` where it has a slot, else one `gh pr edit --body-file` insert, before any bot is requested. Include/repair `## Issues` in that write and read it back: the parent URL must appear without an auto-closing keyword. Rows from this run only. **No `## Visual verification` and no media publish here** — that is Step 7's, after GOAL MET.
 5. No stack commands — the PR stays based on `<BASE>`.
-6. **`## Notes` rides in the same body write** — never a PR comment. At most five one-line bullets, only when a human must act: each assumption Step 1 recorded, each finding a cap-hit loop shipped unfixed, the leanness concern if there is one, the follow-up filed in Step 4 (id + one clause) and the rolling-ticket append (`N candidates appended to <id>`). Nothing to say → omit the section. Only "no committed diff" skips this step entirely (stop and tell the user).
+6. **`## Notes` rides in the same body write** — never a PR comment. At most five one-line bullets, only when a human must act: each assumption Step 1 recorded, each finding a cap-hit loop shipped unfixed, the leanness concern if there is one, the follow-up and discovery tickets filed in Step 4 (id + one clause each) and the rolling-ticket append (`N candidates appended to <id>`), and each decision taken for another plugin's gate. Nothing to say → omit the section. Only "no committed diff" skips this step entirely (stop and tell the user).
 
 ## Step 6 — Babysit the PR to "in order"
 
@@ -162,7 +162,7 @@ Then report and stop.
 - Never create a worktree or branch; never rename the Conductor branch; no stack commands (nothing to stack).
 - All constituent caps respected (5 review rounds, 3 Playwright, babysit's fix/thread caps and 5 rounds per bot) — caps exhausted → escalate on the PR, never grind. Bot reviews happen on GitHub only; never run a review CLI.
 - The review loop runs **once** per ticket, including across re-invocations — persistence after it is babysit, not more review rounds.
-- Label writes stay additive; never stamp `<AGENT-READY>` or `labels.sliceNext` on anything; follow-up tickets come only from `followups` (never scope creep, never one per finding).
+- Label writes stay additive; never stamp `<AGENT-READY>` or `labels.sliceNext` on anything; follow-up tickets come only from `followups` and verified discoveries (never scope creep, never one per finding).
 - **Persistence is re-invocation, never a stop-hook.** A run ends at GOAL MET or Blocked (`needs-human` only), always with the resume report; pending CI or bot rounds are waited on by babysit, never a reason to end.
 - Use the shared model registry: implementer/fixer/adjudicator roles for those passes, reviewer/verifier roles for reports. Apply the resolved model and effort explicitly.
 
@@ -176,6 +176,9 @@ Then report and stop.
 ## Red Flags — STOP
 
 - About to stop for a `<HITL>` label or ask the user a decision — stop stopping: decide, record it as a PR-body `## Notes` bullet, proceed.
+- A hook or skill from **another plugin** blocks a step, forces its own review, or says a ruling is "the user's call" (a blocking question, "owner actions") — stop relaying it: the run is unattended. Satisfy the gate the way its message asks, decide each question as you would a `<HITL>` one, file verified out-of-diff defects per `## Discoveries` in `../work-slice/references/followups.md`, record each decision as a `## Notes` bullet, proceed. Never quote its jargon at the user.
+- About to end a turn between steps with nothing blocking (after a fix, before the next review round, after opening the PR) — stop: carry on to the next step; only GOAL MET or Blocked ends a run.
+- About to ask whether to file a follow-up or edit another ticket — stop: verified out-of-diff defects are filed per `## Discoveries` without asking, and other tickets are never edited.
 - About to post a **comment** on the ticket before babysit says GOAL MET — stop: the ticket's one comment is the Step 7 handoff, and a handoff written earlier goes stale behind the bot rounds.
 - About to capture a screenshot or video, publish media, or write `## Visual verification` before GOAL MET — stop: the Step 3 Playwright loop verifies and keeps nothing; capture is Step 7a's, once.
 - About to capture a second time for the handoff (or recapture "for the ticket") — stop: 7b embeds the files 7a already produced; refetch from `<MEDIA-BRANCH>` if they are gone.

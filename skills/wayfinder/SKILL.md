@@ -208,6 +208,7 @@ sessions off each other's tickets.
    `<map id> wayfinder`, whose first session bootstraps: install the plugin for
    the runtime (step 2 of the bootstrap checklist in
    [the cloud relay contract](../feature-goal/references/cloud-relay.md)),
+   turn off other plugins' interactive gates (its step 3),
    verify the tracker connector can read and write, and reply `BOOTSTRAP OK`.
    Record the workspace id in the map's Notes.
 2. Start one fresh session per AFK frontier ticket with the entire message
