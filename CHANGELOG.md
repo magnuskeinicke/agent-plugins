@@ -36,6 +36,18 @@
   prompt regions with a per-run token and isolates Codex harder. The other vendored review
   skills and their shared scripts stay at kramme 0.88.0 for now.
 
+### Fixed
+
+- **Cloud Gate 5 can read Codex's reply.** Found by a test in a Conductor cloud workspace: the
+  runner matched only `assistant` messages, but a Codex session answers with an `agentMessage`
+  item, so every cloud Codex review blocked. Both reply shapes are read now.
+- **A cloud Codex reviewer reads the repository.** Upstream's cloud prompt forbade every command,
+  and Codex reads files by running commands, so it judged only the patch text. It may now run
+  read-only inspection commands; the tree-integrity check still rejects any write.
+- **Failures say why.** A blocked Gate 5 keeps the runner's stderr, and a failed CLI worker
+  reports the reason it printed on stdout (in a cloud sandbox `claude -p` prints
+  `Not logged in`). Claude-hosted cloud runs use native subagents (`runtime.md`).
+
 ## 0.15.1 — 2026-11-11
 
 ### Fixed
