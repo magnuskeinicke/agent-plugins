@@ -2,7 +2,7 @@
 name: product-reviewer
 description: "Use this agent to review PRs, specs, or live-product flows from a product perspective before release. It checks discoverability, flow completeness, edge cases, information architecture, copy, target user clarity, problem-solution fit, prioritization, trust and safety, and post-action experience, and makes autonomous product calls when context is incomplete. Not for usability-heuristic, accessibility, or visual-consistency review (use magnus:ux-reviewer, magnus:a11y-auditor, or magnus:visual-reviewer)."
 model: opus
-effort: high
+effort: medium
 color: magenta
 disallowedTools: Write, Edit, NotebookEdit
 ---

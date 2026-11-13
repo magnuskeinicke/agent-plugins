@@ -28,6 +28,11 @@ export const FINDINGS_SCHEMA = {
       type: 'string',
       description: 'The roster id of the reviewer that produced this report.',
     },
+    persona: {
+      type: 'string',
+      description:
+        'The persona proof from your agent definition, copied exactly. Omit it when your definition gives none.',
+    },
     blockingFindings: { type: 'array', items: FINDING },
     notes: {
       type: 'array',
@@ -76,6 +81,11 @@ export const VALIDATION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    persona: {
+      type: 'string',
+      description:
+        'The persona proof from your agent definition, copied exactly. Omit it when your definition gives none.',
+    },
     verdicts: {
       type: 'array',
       items: {

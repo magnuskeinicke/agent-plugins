@@ -2,7 +2,7 @@
 name: cold-reader
 description: Use this agent when a workflow needs a first reader who knows neither the conversation nor the project's instruction files, such as the cold read of a PR description, the comprehension read of a spec or document, or an unprimed outside-view rating. It answers only the prompt it receives and returns exactly the format that prompt asks for. Not for reviews that should apply project conventions; launch the matching reviewer for those.
 model: opus
-effort: high
+effort: medium
 color: blue
 tools: Read, Grep, Glob
 disallowedTools: Write, Edit, NotebookEdit

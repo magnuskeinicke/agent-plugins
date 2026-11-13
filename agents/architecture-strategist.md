@@ -2,7 +2,7 @@
 name: architecture-strategist
 description: "Use this agent to review code changes for module design: whether modules stay deep (a small interface over substantial behavior), whether callers go through public interfaces instead of internal imports, whether one change stays in one place, and whether new seams have real variation. Best for diffs that add or remove a module, change a module's public interface, or add dependencies between modules; not for line-level style, naming, or general code quality."
 model: opus
-effort: high
+effort: medium
 color: purple
 disallowedTools: Write, Edit, NotebookEdit
 ---

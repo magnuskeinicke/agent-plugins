@@ -53,16 +53,16 @@ test('full loop: findings → fix → clean re-review → converged', () => {
   assert.match(copyPrompt, /Suggestion findings into notes/);
 
   for (const task of plan.reviewers)
-    writeFileSync(task.outputFile, findingsFile({ reviewer: task.id, blockingFindings: [], notes: [] }));
+    writeFileSync(task.outputFile, findingsFile({ reviewer: task.id, persona: `magnus:${task.id}`, blockingFindings: [], notes: [] }));
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'read all 2 files vs origin/main' }));
-  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', blockingFindings: [{ title: 'Missing null check', detail: 'boom on empty', file: 'components/Widget.tsx', rootCause: 'null-widget' }], notes: [] }));
+  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', persona: 'magnus:code-reviewer', blockingFindings: [{ title: 'Missing null check', detail: 'boom on empty', file: 'components/Widget.tsx', rootCause: 'null-widget' }], notes: [] }));
   const reuse = plan.reviewers.find((r) => r.id === 'codebase-pattern-reviewer');
-  writeFileSync(reuse.outputFile, findingsFile({ reviewer: 'codebase-pattern-reviewer', blockingFindings: [], notes: [] }));
+  writeFileSync(reuse.outputFile, findingsFile({ reviewer: 'codebase-pattern-reviewer', persona: 'magnus:codebase-pattern-reviewer', blockingFindings: [], notes: [] }));
 
   const collect = run('collect');
   assert.equal(collect.findingCount, 1);
   assert.ok(collect.validator, 'validator step emitted');
-  writeFileSync(collect.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R1-01', diffCaused: true, confidence: 92 }] }));
+  writeFileSync(collect.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: 'R1-01', diffCaused: true, confidence: 92 }] }));
 
   const decide = run('decide', '--verdicts', collect.validator.outputFile, '--tests-green', 'true', '--committed', 'true');
   assert.equal(decide.action, 'fix');
@@ -84,7 +84,7 @@ test('full loop: findings → fix → clean re-review → converged', () => {
   assert.match(readFileSync(cr2.promptFile, 'utf8'), /CR-001 \[addressed\]/, 'ledger history injected');
 
   for (const r of plan2.reviewers)
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   const collect2 = run('collect');
   assert.equal(collect2.findingCount, 0);
   const decide2 = run('decide');
@@ -128,7 +128,7 @@ test('red tests gate spends the round on a gate fix, not reviewer findings', () 
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   for (const r of plan.reviewers)
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   run('collect');
   const decide = run('decide', '--tests-green', 'false');
   assert.equal(decide.action, 'fix');
@@ -144,7 +144,7 @@ test('invalid findings files are excluded and reported, never silently eaten', (
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
   writeFileSync(cr.outputFile, '{"not": "a report"}');
   for (const r of plan.reviewers.filter((r) => r.id !== 'code-reviewer'))
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   const collect = run('collect');
   assert.equal(collect.invalid.length, 1);
   assert.match(collect.invalid[0].errors.join(' '), /missing required/);
@@ -156,11 +156,11 @@ test('disputes route through the adjudicator; upheld ships in a stalled verdict'
   let plan = run('plan', '--changed-files', 'src/a.ts', '--head', 'h1');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
-  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', blockingFindings: [{ title: 'Race in cache', detail: 'two writers', rootCause: 'cache-race' }], notes: [] }));
+  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', persona: 'magnus:code-reviewer', blockingFindings: [{ title: 'Race in cache', detail: 'two writers', rootCause: 'cache-race' }], notes: [] }));
   for (const r of plan.reviewers.filter((r) => r.id !== 'code-reviewer'))
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   const collect = run('collect');
-  writeFileSync(collect.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R1-01', diffCaused: true, confidence: 95 }] }));
+  writeFileSync(collect.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: 'R1-01', diffCaused: true, confidence: 95 }] }));
   const decide = run('decide', '--verdicts', collect.validator.outputFile);
   writeFileSync(decide.fix.outputFile, JSON.stringify({ summary: 'disputed instead', committed: true, head: 'h2', testsGreen: true, testEvidence: 'ok', disputed: [{ id: 'CR-001', title: 'Race in cache', evidence: 'single-writer by design, see src/a.ts:10' }] }));
   run('apply-fix', '--result', decide.fix.outputFile);
@@ -168,7 +168,7 @@ test('disputes route through the adjudicator; upheld ships in a stalled verdict'
   // clean round 2 → loop wants to end → adjudication of the dispute
   plan = run('plan', '--changed-files', 'src/a.ts');
   for (const r of plan.reviewers)
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   run('collect');
   const decide2 = run('decide');
   assert.equal(decide2.action, 'adjudicate');
@@ -194,11 +194,11 @@ test('review-only: findings end the run as a report, no fix pass (magnus:review-
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
-  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', blockingFindings: [{ title: 'Off-by-one', detail: 'loop bound', file: 'src/a.ts', rootCause: 'loop-bound' }, { title: 'Old wart', detail: 'pre-existing', file: 'src/a.ts', rootCause: 'wart' }, { title: 'Ghost', detail: 'cannot see it', file: 'src/a.ts', rootCause: 'ghost' }], notes: [] }));
+  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', persona: 'magnus:code-reviewer', blockingFindings: [{ title: 'Off-by-one', detail: 'loop bound', file: 'src/a.ts', rootCause: 'loop-bound' }, { title: 'Old wart', detail: 'pre-existing', file: 'src/a.ts', rootCause: 'wart' }, { title: 'Ghost', detail: 'cannot see it', file: 'src/a.ts', rootCause: 'ghost' }], notes: [] }));
   for (const r of plan.reviewers.filter((r) => r.id !== 'code-reviewer'))
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   const collect = run('collect');
-  writeFileSync(collect.validator.outputFile, JSON.stringify({ verdicts: [
+  writeFileSync(collect.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [
     { id: 'R1-01', diffCaused: true, confidence: 92 },
     { id: 'R1-02', diffCaused: false, confidence: 90 },
     { id: 'R1-03', diffCaused: true, confidence: 30 },
@@ -220,7 +220,7 @@ test('review-only with a clean round reports verdict "clean"', () => {
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   for (const r of plan.reviewers)
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   run('collect');
   const decide = run('decide');
   assert.equal(decide.action, 'report');
@@ -233,11 +233,11 @@ test('max-rounds caps the loop below the hard cap', () => {
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
-  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', blockingFindings: [{ title: 'Bug', detail: 'boom', file: 'src/a.ts', rootCause: 'boom' }], notes: [] }));
+  writeFileSync(cr.outputFile, findingsFile({ reviewer: 'code-reviewer', persona: 'magnus:code-reviewer', blockingFindings: [{ title: 'Bug', detail: 'boom', file: 'src/a.ts', rootCause: 'boom' }], notes: [] }));
   for (const r of plan.reviewers.filter((r) => r.id !== 'code-reviewer'))
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   const collect = run('collect');
-  writeFileSync(collect.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R1-01', diffCaused: true, confidence: 95 }] }));
+  writeFileSync(collect.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: 'R1-01', diffCaused: true, confidence: 95 }] }));
   const decide = run('decide', '--verdicts', collect.validator.outputFile);
   assert.equal(decide.action, 'stalled', 'round 1 is the cap — no fix pass emitted');
   assert.match(decide.verdict, /stalled — shipped with 1 open finding/);
@@ -272,12 +272,12 @@ test('collect names reviewers that never wrote their outputFile, and is re-runna
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const [dead, ...rest] = plan.reviewers;
   for (const r of rest)
-    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, blockingFindings: [], notes: [] }));
+    writeFileSync(r.outputFile, findingsFile({ reviewer: r.id, persona: `magnus:${r.id}`, blockingFindings: [], notes: [] }));
   const collect = run('collect');
   assert.deepEqual(collect.missing, [dead.id]);
   assert.match(collect.missingReports, /re-run those reviewers once/);
   // the dead reviewer gets its one re-run, then collect runs again
-  writeFileSync(dead.outputFile, findingsFile({ reviewer: dead.id, blockingFindings: [], notes: [] }));
+  writeFileSync(dead.outputFile, findingsFile({ reviewer: dead.id, persona: `magnus:${dead.id}`, blockingFindings: [], notes: [] }));
   const collect2 = run('collect');
   assert.deepEqual(collect2.missing, []);
   assert.equal(run('decide').action, 'converged');
@@ -285,7 +285,7 @@ test('collect names reviewers that never wrote their outputFile, and is re-runna
 
 test('findings validation requires rootCause on blocking findings', async () => {
   const { validate, FINDINGS_SCHEMA } = await import('../lib/schemas.mjs');
-  const report = (finding) => ({ reviewer: 'code-reviewer', blockingFindings: [finding], notes: [] });
+  const report = (finding) => ({ reviewer: 'code-reviewer', persona: 'magnus:code-reviewer', blockingFindings: [finding], notes: [] });
   const missing = validate(report({ title: 'Reworded re-raise', detail: 'boom' }), FINDINGS_SCHEMA);
   assert.ok(missing.some((e) => e.includes('missing required "rootCause"')));
   const withSlug = validate(report({ title: 'Reworded re-raise', detail: 'boom', rootCause: 'null-widget' }), FINDINGS_SCHEMA);

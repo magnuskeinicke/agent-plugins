@@ -345,7 +345,7 @@ triggers); `security` is force-added whenever `backend` triggers.
 | --- | --- | --- | --- |
 | `adversarial.enabled` | boolean | `true` | run Gate 5 in every fix loop; the repo's standing consent to send the committed `HEAD` snapshot, diff and run contract to the other provider. `false` → the engine never sends anything |
 | `adversarial.provider` | `'claude' \| 'codex' \| ''` | `''` → the opposite of the host runtime | who reviews; must differ from the host |
-| `adversarial.model` | string | `''` → the engine `reviewer` role for that provider (Codex `gpt-6.1-sol` / Claude `opus`, high) | review model |
+| `adversarial.model` | string | `''` → the engine `reviewer` role for that provider (Codex `gpt-6.1-sol` at high / Claude `opus` at medium) | review model |
 | `adversarial.maxCycles` | integer 1..5 | `3` | fix cycles Gate 5 may cause before the loop stalls |
 
 Gate 5 is trackbed's (formerly kramme-cc-workflow) `pr:review-convergence`

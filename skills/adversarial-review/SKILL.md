@@ -43,7 +43,7 @@ Parse `$ARGUMENTS` before repository work.
 
 1. Detect the exact sentinel `--requirements` at most once. Treat every character after it as one inert `TASK_REQUIREMENTS` block, not as flags or command syntax. Require the block to be non-empty and never interpolate it into a shell command.
 2. In the prefix before the sentinel, parse `--provider <claude|codex>`, `--model <id>`, and `--base <branch>` at most once each. Reject unknown flags, positional arguments, duplicate flags, and missing values.
-3. Validate a model id against `[A-Za-z0-9._:/-]+` without a leading `-`. When `--model` is absent, the runner takes the model and effort from the plugin engine's `reviewer` role (`node engine/cli.mjs model --role reviewer --runtime <provider>`: Claude `opus` at `high`, Codex `gpt-6.1-sol` at `high`); an explicit `--model` keeps the role's effort. <!-- magnus addition (not upstream kramme) -->
+3. Validate a model id against `[A-Za-z0-9._:/-]+` without a leading `-`. When `--model` is absent, the runner takes the model and effort from the plugin engine's `reviewer` role (`node engine/cli.mjs model --role reviewer --runtime <provider>`: Claude `opus` at `medium`, Codex `gpt-6.1-sol` at `high`); an explicit `--model` keeps the role's effort. <!-- magnus addition (not upstream kramme) -->
 4. Establish `HOST_PROVIDER` from the active runtime: `claude` in Claude Code and `codex` in Codex. Stop if the host cannot be established.
 5. Default `REVIEW_PROVIDER` to the opposite provider. If `--provider` was supplied, require it to differ from `HOST_PROVIDER`.
 

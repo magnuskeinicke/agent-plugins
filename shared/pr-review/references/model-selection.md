@@ -13,9 +13,9 @@ In this plugin, review subagents run the engine's `reviewer` role, not the orche
 node "${CLAUDE_PLUGIN_ROOT}/engine/cli.mjs" model --role reviewer --runtime <runtime>
 ```
 
-The defaults are Claude `opus` (Claude Opus 5.5) at `high` effort and Codex `gpt-6.1-sol` at `high` reasoning effort; a host repository can override them under `routing.models.reviewer` in `docs/agents/repo-config.md`.
+The defaults are Claude `opus` (Claude Opus 5.5) at `medium` effort and Codex `gpt-6.1-sol` at `high` reasoning effort; a host repository can override them under `routing.models.reviewer` in `docs/agents/repo-config.md`.
 
-- **Claude Code:** pass `model: "opus"` (the returned model) on every Agent/Task spawn. Effort comes from the reviewer agent definition (`effort: high` in `agents/<id>.md`).
+- **Claude Code:** pass `model: "opus"` (the returned model) on every Agent/Task spawn, so no reviewer inherits the session's model (a Fable grilling session, say). Effort comes from the reviewer agent definition (`effort: medium` in `agents/<id>.md`).
 - **Codex:** pass the returned model and reasoning effort to every `spawn_agent` or `codex exec` reviewer (`-m <model> -c model_reasoning_effort="<effort>"`).
 - `--subagent-model <model>` still overrides the model for one invocation. `KRAMME_REVIEW_SUBAGENT_LEVEL` and the step-down ladder below do not apply in this plugin: treat the setting as unset and use this role instead of `same`.
 - If the engine command fails, stop and report it; do not fall back to the orchestrator's model.

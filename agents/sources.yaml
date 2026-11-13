@@ -7,12 +7,15 @@ sources:
       trackbed, the renamed kramme-cc-workflow (MIT, Copyright (c) 2026
       Abildtoft). Filenames and frontmatter `name:` fields drop the namespace
       prefix so they surface under this plugin's namespace, and `model:
-      inherit` is pinned to `model: opus` + `effort: high` (the engine
-      `reviewer` role). Bodies are otherwise verbatim, except
+      inherit` is pinned to `model: opus` + `effort: medium` (the engine's
+      Claude `reviewer` role; design-iterator, a writer, keeps `effort: high`). Bodies are otherwise verbatim, except
       codebase-pattern-reviewer.md, which adds a magnus-only "diff reuse audit
       mode" section (and a description clause naming it), and
       comment-analyzer.md, which adds a magnus-only "Prefer a Better Name Over
       a Comment" check plus a blocking-severity rule (both marked inline).
+      The 14 roster agents and pr-relevance-validator.md also end with a
+      marked magnus-only "Persona Proof" section: the engine rejects a loop
+      report whose `persona` is not `magnus:<id>`.
       cold-reader.md is new in this refresh and is not yet used by any skill.
       One file serves both runtimes: Claude spawns it as a subagent
       definition, Codex uses its body as the `codex exec` child's system

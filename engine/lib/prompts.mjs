@@ -13,6 +13,7 @@ function outputContract(outputFile) {
   return `Return your report as JSON for the orchestrator to save at \`${outputFile}\`. Shape:
 {
   "reviewer": "<your roster id>",
+  "persona": "<the persona proof from your agent definition, copied exactly; omit it if you have none>",
   "blockingFindings": [{"title", "file", "line", "detail", "suggestedFix", "rootCause"}],
   "notes": ["judgement-call / debatable points — never blocking"]
 }
@@ -144,7 +145,7 @@ Findings to classify:
 ${findingsText}
 
 Return one verdict per finding as JSON for the orchestrator to save at \`${outputFile}\`:
-{"verdicts": [{"id": "<the [id] tag, echoed verbatim>", "diffCaused": true|false, "confidence": 0-100, "note": "..."}]}
+{"persona": "<the persona proof from your agent definition, copied exactly; omit it if you have none>", "verdicts": [{"id": "<the [id] tag, echoed verbatim>", "diffCaused": true|false, "confidence": 0-100, "note": "..."}]}
 diffCaused: introduced by this diff vs pre-existing/out-of-scope — a real problem the diff merely sits next to is NOT diff-caused. confidence: 0–100 that the finding is real and correctly located (90–100 only when you traced or reproduced it; below 60 means unverified). Classify every finding — a missing verdict means the finding passes through unfiltered.`;
 }
 

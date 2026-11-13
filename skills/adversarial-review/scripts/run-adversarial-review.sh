@@ -230,7 +230,7 @@ SKILL_DIR=$(cd "$SCRIPT_DIR/.." && pwd -P)
 SCHEMA_FILE="$SKILL_DIR/assets/review-result.schema.json"
 
 # magnus addition (not upstream kramme): with no --model, take the review
-# model and effort from the plugin engine's `reviewer` role (Claude opus/high,
+# model and effort from the plugin engine's `reviewer` role (Claude opus/medium,
 # Codex gpt-6.1-sol/high by default) so every reviewer in the plugin runs the
 # same profile. An explicit --model keeps the role's effort.
 ENGINE_CLI="$SKILL_DIR/../../engine/cli.mjs"

@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveRepoConfig, loadRepoConfig, parseRepoConfig, focusOverlay, buildLibMap, buildGoldenPaths } from './lib/config.mjs';
@@ -66,6 +66,13 @@ import {
 const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ADVERSARIAL_RUNNER = join(PLUGIN_ROOT, 'skills', 'adversarial-review', 'scripts', 'run-adversarial-review.sh');
 const COPY_REVIEW_RUBRIC_PATH = join(PLUGIN_ROOT, 'agents', 'references', 'copy-review-rubric.md');
+// Claude registers agents/<id>.md as `<plugin name>:<id>`. Other plugins in the
+// same session can ship reviewers with the same bare id, so every task names
+// the namespaced subagent, and each persona file carries this value as its
+// persona proof: a report without it came from some other agent.
+const PLUGIN_NAME = JSON.parse(readFileSync(join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'), 'utf8')).name;
+const personaFor = (id) => `${PLUGIN_NAME}:${id}`;
+const hasPersona = (id) => existsSync(join(PLUGIN_ROOT, 'agents', `${id}.md`));
 
 // Gate findings — injected instead of a reviewer round when a gate is red.
 const TESTS_GATE_FINDING = {
@@ -158,7 +165,7 @@ function loadState(args) {
       if (!existsSync(promptFile)) return;
       const agentFile = join(PLUGIN_ROOT, 'agents', `${id}.md`);
       state.tasks.push(persistTask(args, state, { id, promptFile, outputFile,
-        ...(existsSync(agentFile) ? { agentFile, model: agentModel(id), effort: agentEffort(id) } : {}) }, role, schema));
+        ...(existsSync(agentFile) ? { agentFile, model: agentModel(id) } : {}) }, role, schema));
     };
     if (state.phase === 'collect') {
       const dir = join(round, 'prompts');
@@ -212,7 +219,9 @@ function loadCfg(args, state) {
 function persistTask(args, state, task, role, schema) {
   const execution = taskModels(loadCfg(args, state), role, { modelAlias: task.model, effort: task.effort });
   const result = {
-    ...task, role, execution, schema, cwd: process.cwd(),
+    ...task,
+    ...(task.agentFile ? { subagentType: personaFor(basename(task.agentFile, '.md')) } : {}),
+    role, execution, schema, cwd: process.cwd(),
     model: execution.claude.model, effort: execution.claude.effort,
     promptFile: resolve(task.promptFile), outputFile: resolve(task.outputFile),
     taskFile: resolve(/\.md$/.test(task.promptFile) ? task.promptFile.replace(/\.md$/, '.task.json') : `${task.promptFile}.task.json`),
@@ -253,12 +262,6 @@ function agentModel(id) {
   const p = join(PLUGIN_ROOT, 'agents', `${id}.md`);
   const m = /^model:\s*(\S+)/m.exec(readFileSync(p, 'utf8'));
   return m && m[1] !== 'inherit' ? m[1] : '';
-}
-
-function agentEffort(id) {
-  const p = join(PLUGIN_ROOT, 'agents', `${id}.md`);
-  const m = /^effort:\s*(\S+)/m.exec(readFileSync(p, 'utf8'));
-  return m ? m[1] : '';
 }
 
 function reuseFingerprint(addedFiles, provenance) {
@@ -494,7 +497,6 @@ function cmdPlan(args) {
       id: r.id,
       agentFile: join(PLUGIN_ROOT, 'agents', `${r.id}.md`),
       model: agentModel(r.id),
-      effort: agentEffort(r.id),
       promptFile,
       outputFile,
     }, 'reviewer', FINDINGS_SCHEMA);
@@ -522,7 +524,7 @@ function cmdPlan(args) {
     prePass,
     reviewers,
     skipped,
-    next: 'run the pre-pass first (round 1), then fresh reviewers; persist every returned JSON using the task manifest, then run `collect`',
+    next: 'run the pre-pass first (round 1), then fresh reviewers — on Claude spawn each reviewer with subagent_type = its `subagentType` and model = its `execution.claude.model` (never the session model), never a same-named agent or review skill from another plugin; persist every returned JSON verbatim using the task manifest, then run `collect`',
   });
 }
 
@@ -576,6 +578,9 @@ function cmdCollect(args) {
     const errors = validate(parsed, FINDINGS_SCHEMA);
     if (parsed?.reviewer !== f.replace(/\.json$/, '')) errors.push('reviewer identity does not match the expected task');
     if (!emitted.includes(f.replace(/\.json$/, ''))) errors.push('report does not belong to an emitted task');
+    const id = f.replace(/\.json$/, '');
+    if (hasPersona(id) && parsed?.persona !== personaFor(id))
+      errors.push(`persona is not "${personaFor(id)}": the report came from another agent; re-run the task with subagent_type "${personaFor(id)}"`);
     if (errors.length) {
       invalid.push({ file: path, errors });
       continue;
@@ -653,7 +658,6 @@ function cmdCollect(args) {
       id: 'pr-relevance-validator',
       agentFile: join(PLUGIN_ROOT, 'agents', 'pr-relevance-validator.md'),
       model: agentModel('pr-relevance-validator'),
-      effort: agentEffort('pr-relevance-validator'),
       promptFile,
       outputFile,
     }, 'reviewer', VALIDATION_SCHEMA);
@@ -670,7 +674,7 @@ function cmdCollect(args) {
     missingReports: '',
     validator,
     next: kept.length
-      ? 'run the validator, then `decide --verdicts <outputFile>`'
+      ? 'run the validator (on Claude: subagent_type = its `subagentType`, model = its `execution.claude.model`), save its JSON verbatim, then `decide --verdicts <outputFile>`'
       : 'no findings to validate — run `decide` directly',
   });
 }
@@ -702,9 +706,11 @@ function cmdDecide(args) {
     (state.gates.committed === false && committed);
   state.gates = { ...state.gates, testsGreen, committed };
 
-  const verdicts = args.verdicts
-    ? readJson(args.verdicts, VALIDATION_SCHEMA, 'verdicts').verdicts
-    : [];
+  const validation = args.verdicts ? readJson(args.verdicts, VALIDATION_SCHEMA, 'verdicts') : null;
+  const validatorPersona = personaFor('pr-relevance-validator');
+  if (validation && validation.persona !== validatorPersona)
+    die(`verdicts: persona is not "${validatorPersona}": the verdicts came from another agent; re-run the validator task with subagent_type "${validatorPersona}"`);
+  const verdicts = validation ? validation.verdicts : [];
   const expected = (state.pendingFindings || []).map((finding) => finding.id);
   if (verdicts.length !== expected.length || new Set(verdicts.map((v) => v.id)).size !== verdicts.length ||
       verdicts.some((v) => !expected.includes(v.id))) {

@@ -44,6 +44,15 @@ test('legacy aliases and role overrides remain effective for both runtimes', () 
   assert.equal(resolveModel(cfg, { role: 'fixer', runtime: 'claude', cloud: true }).model, 'opus-5-5-1m');
 });
 
+test('Claude reviewers run Opus at medium; the Codex reviewer keeps high', () => {
+  const cfg = resolveRepoConfig({});
+  const { claude, codex } = taskModels(cfg, 'reviewer', { modelAlias: 'opus' });
+  assert.equal(claude.model, 'opus');
+  assert.equal(claude.effort, 'medium');
+  assert.equal(codex.model, 'gpt-6.1-sol');
+  assert.equal(codex.effort, 'high');
+});
+
 test('babysitting and dispatch select Sol independently of legacy aliases', () => {
   const cfg = resolveRepoConfig({ routing: { codexModelAliases: { opus: 'gpt-5.6-terra' } } });
   const role = SKILL_ROLES['babysit-stack'];
