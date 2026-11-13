@@ -441,11 +441,36 @@ if [ "$RUN_MODE" = "local" ]; then
     esac
     [ "$tracked_type" = "blob" ] \
       || die "tracked tree entry is unsupported for isolated review: $tracked_path ($tracked_type)"
+    snapshot_path="$SNAPSHOT_DIR/$tracked_path"
     case "$tracked_mode" in
       100644 | 100755) ;;
+      120000)
+        # magnus addition (not upstream kramme): repos expose skills to other
+        # agents as symlinks (e.g. .agents/skills -> .claude/skills). Recreate
+        # a link whose target stays inside HEAD's tree so the snapshot keeps it;
+        # absolute, escaping, or dangling links still fail closed.
+        link_target=$(git cat-file blob "$tracked_object") \
+          || die "could not read tracked symlink: $tracked_path"
+        resolved_target=$(python3 -I -c '
+import os, posixpath, sys
+path, target = sys.argv[1], sys.argv[2]
+if not target or "\n" in target or target.startswith("/"):
+    sys.exit(1)
+resolved = posixpath.normpath(posixpath.join(posixpath.dirname(path), target))
+if resolved in (".", "..") or resolved.startswith("../"):
+    sys.exit(1)
+print(resolved)
+' "$tracked_path" "$link_target") \
+          || die "tracked symlink points outside the repository: $tracked_path"
+        git cat-file -e "HEAD:$resolved_target" 2> /dev/null \
+          || die "tracked symlink target is not in HEAD: $tracked_path -> $link_target"
+        mkdir -p -- "$(dirname -- "$snapshot_path")"
+        ln -s -- "$link_target" "$snapshot_path" \
+          || die "could not recreate tracked symlink: $tracked_path"
+        continue
+        ;;
       *) die "tracked tree entry mode is unsupported for isolated review: $tracked_path ($tracked_mode)" ;;
     esac
-    snapshot_path="$SNAPSHOT_DIR/$tracked_path"
     mkdir -p -- "$(dirname -- "$snapshot_path")"
     git cat-file blob "$tracked_object" > "$snapshot_path" \
       || die "could not materialize tracked blob: $tracked_path"
