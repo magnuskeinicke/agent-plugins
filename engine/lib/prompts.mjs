@@ -180,7 +180,7 @@ export function adjudicatorPrompt(contractText, disputedEntries, diffCmd, output
       (e) =>
         `- [id: ${e.id}] (${e.source}) ${e.title}${e.file ? ` (${e.file}${e.line ? `:${e.line}` : ''})` : ''}
   Reviewer's evidence: ${e.detail}
-  Implementer's dispute evidence: ${e.disputeEvidence || '(none recorded)'}`,
+  ${e.source === 'adversarial-review' ? 'Counter-evidence (the host validator disagreed with the other provider)' : "Implementer's dispute evidence"}: ${e.disputeEvidence || '(none recorded)'}`,
     )
     .join('\n');
   return `You are the INDEPENDENT closeout adjudicator for a review loop that ended with disputed findings. You are fresh — judge on evidence only, not on rhetoric. ${READ_ONLY}

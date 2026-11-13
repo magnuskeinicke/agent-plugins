@@ -8,6 +8,8 @@ import {
   readdirSync,
   copyFileSync,
   statSync,
+  rmSync,
+  rmdirSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -34,11 +36,23 @@ import {
   gutRoutedFindings,
   LEDGER_HARD_CAP,
   LEDGER_STALL_LIMIT,
+  LEDGER_DEFER_ATTEMPTS,
+  findingFingerprint,
 } from './lib/ledger.mjs';
 import { FINDINGS_SCHEMA, VALIDATION_SCHEMA, ADJUDICATION_SCHEMA, FIX_RESULT_SCHEMA, IMPLEMENT_RESULT_SCHEMA, BABYSIT_FIX_SCHEMA, GUT_CHECK_SCHEMA, validate } from './lib/schemas.mjs';
 import * as prompts from './lib/prompts.mjs';
 import { taskModels, resolveModel, SKILL_ROLES } from './lib/models.mjs';
 import { runTask } from './lib/runner.mjs';
+import {
+  ADVERSARIAL_SOURCE,
+  resolveAdversarial,
+  prepareInvocation,
+  checkResult,
+  toFindingsReport,
+  disputeDemoted,
+  readResultFiles,
+  independentReviewLine,
+} from './lib/adversarial.mjs';
 import { mergeFollowups, selectFollowups } from './lib/followups.mjs';
 import {
   resolveCommitRule,
@@ -50,6 +64,7 @@ import {
 } from './lib/commit.mjs';
 
 const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const ADVERSARIAL_RUNNER = join(PLUGIN_ROOT, 'skills', 'adversarial-review', 'scripts', 'run-adversarial-review.sh');
 const COPY_REVIEW_RUBRIC_PATH = join(PLUGIN_ROOT, 'agents', 'references', 'copy-review-rubric.md');
 
 // Gate findings — injected instead of a reviewer round when a gate is red.
@@ -223,7 +238,9 @@ function inspectCmds(state) {
 }
 
 function maxRounds(state) {
-  return state.maxRounds || LEDGER_HARD_CAP;
+  // Each Gate 5 round, and the closing pass after a Gate 5 fix, sits on top of
+  // the reviewer cap: the adversarial cycle cap bounds those separately.
+  return (state.maxRounds || LEDGER_HARD_CAP) + (state.adversarial?.extraRounds || 0);
 }
 
 function agentBody(id) {
@@ -331,6 +348,16 @@ function cmdInit(args) {
     followups: [],
     verdict: null,
   };
+  try {
+    state.adversarial = resolveAdversarial(state.config, {
+      flag: args['no-adversarial'] ? false : args.adversarial === undefined ? undefined : bool(args.adversarial),
+      host: typeof args.host === 'string' ? args.host : '',
+      reviewOnly: state.reviewOnly,
+      inspect: state.inspect,
+    });
+  } catch (e) {
+    die(e.message);
+  }
   // The implement pass's commits must already follow the commit rule; a
   // mismatch turns round 1 into a gate-fix that rewrites them (worker-owned).
   let commitCheck = { status: 'skipped', reason: 'review-only / inspect run — no commits of its own' };
@@ -347,7 +374,10 @@ function cmdInit(args) {
     }
   }
   saveState(args, state);
-  out({ resumed: false, slice: state.slice, round: 1, phase: 'plan', stateFile: p, commitCheck });
+  out({ resumed: false, slice: state.slice, round: 1, phase: 'plan', stateFile: p, commitCheck,
+    adversarial: state.adversarial.enabled
+      ? { enabled: true, host: state.adversarial.host, provider: state.adversarial.provider, maxCycles: state.adversarial.maxCycles }
+      : { enabled: false, reason: state.adversarial.reason } });
 }
 
 function cmdPlan(args) {
@@ -600,7 +630,10 @@ function cmdCollect(args) {
   // consolidations are ignored. `followups` decides what gets filed.
   if (reuse) state.followups = mergeFollowups(state.followups || [], reuse.consolidations, state.round);
 
-  const { kept, suppressed } = ledgerSuppress(state.ledger, raw);
+  // A Gate 5 re-raise of a deferred entry must stay visible: the other
+  // provider still sees the problem, so it may not vanish into deferral.
+  const gate5Collect = (state.adversarial?.rounds || []).includes(state.round);
+  const { kept, suppressed } = ledgerSuppress(state.ledger, raw, gate5Collect ? ['disputed'] : undefined);
   kept.forEach((f, i) => (f.id = `R${state.round}-${String(i + 1).padStart(2, '0')}`));
 
   const validateDir = join(roundDir, 'validate');
@@ -680,16 +713,30 @@ function cmdDecide(args) {
   const validated = classifyFindings(state.pendingFindings || [], verdicts);
   ledgerIngest(state.ledger, state.round, validated);
   state.pendingFindings = [];
+  const gate5Round = (state.adversarial?.rounds || []).includes(state.round);
+  const disagreements = gate5Round ? disputeDemoted(state.ledger, validated, verdicts) : [];
+  // A validated Gate 5 blocker whose entry was deferred (it survived the
+  // per-fingerprint fix attempts) is reopened and stalls the loop: it must
+  // never disappear into a converged verdict.
+  const persisting = gate5Round ? reopenPersisting(state.ledger, validated) : [];
+  if (state.adversarial?.enabled) state.adversarial.lastLoopTree = gitLive().tree;
 
   // Review-only run: the classified findings ARE the result — no fix pass, no
-  // adjudication (disputes only exist after a fix pass), verdict in report
-  // language rather than loop language.
+  // adjudication (a Gate 5 disagreement is reported as `disputed`, not ruled
+  // on), verdict in report language rather than loop language.
   if (state.reviewOnly) {
+    // Validation-only: Gate 5 still runs once over the full committed branch.
+    if (!gate5Round && gate5Owed(state)) {
+      emitGate5(args, state);
+      return;
+    }
     const open = ledgerOpenBlocking(state.ledger);
+    const undecided = state.ledger.entries.filter((e) => e.status === 'disputed' && e.source === ADVERSARIAL_SOURCE && !e.ruling);
     state.phase = 'done';
-    state.verdict = open.length
-      ? `${open.length} blocking finding(s) (${open.map((e) => e.id).join(', ')})`
-      : 'clean';
+    state.verdict = [
+      open.length ? `${open.length} blocking finding(s) (${open.map((e) => e.id).join(', ')})` : '',
+      undecided.length ? `${undecided.length} Gate 5 disagreement(s) for you to decide (${undecided.map((e) => e.id).join(', ')})` : '',
+    ].filter(Boolean).join('; ') || 'clean';
     saveState(args, state);
     out({
       action: 'report',
@@ -703,17 +750,30 @@ function cmdDecide(args) {
   const prev = state.snapshots[state.snapshots.length - 1];
   const { progressed, snapshot } = ledgerProgress(prev, state.ledger, gateCleared);
   state.snapshots.push(snapshot);
-  state.stalledRounds = progressed ? 0 : state.stalledRounds + 1;
+  // A Gate 5 round adds new findings by design; it never counts as a stall.
+  state.stalledRounds = progressed || gate5Round ? 0 : state.stalledRounds + 1;
 
   const open = ledgerOpenBlocking(state.ledger);
   const targets = gateFindings.length ? gateFindings : open.map(ledgerEntryFinding);
   const disputed = state.ledger.entries.filter((e) => e.status === 'disputed');
 
   let action;
-  if (!targets.length) action = 'converged';
-  else if (state.round >= maxRounds(state)) action = 'stalled';
+  let stallReason = '';
+  if (persisting.length) {
+    action = 'stalled';
+    stallReason = `Gate 5 finding(s) ${persisting.map((e) => e.id).join(', ')} persisted through ${LEDGER_DEFER_ATTEMPTS} fix attempts`;
+  } else if (!targets.length) action = 'converged';
+  else if (gate5Round && state.adversarial.cycles >= state.adversarial.maxCycles) {
+    action = 'stalled';
+    stallReason = `adversarial fix-cycle cap (${state.adversarial.maxCycles}) reached`;
+  } else if (state.round >= maxRounds(state)) action = 'stalled';
   else if (state.stalledRounds >= LEDGER_STALL_LIMIT) action = 'stalled';
   else action = 'fix';
+  // A Gate 5 fix consumes one adversarial cycle and buys its closing pass.
+  if (action === 'fix' && gate5Round) {
+    state.adversarial.cycles += 1;
+    state.adversarial.extraRounds = (state.adversarial.extraRounds || 0) + 1;
+  }
 
   if (action === 'fix') {
     const outputFile = join(roundDir, 'fix-result.json');
@@ -735,6 +795,7 @@ function cmdDecide(args) {
     out({
       action,
       round: state.round,
+      ...(gate5Round ? { gate: 5, adversarialCycle: `${state.adversarial.cycles}/${state.adversarial.maxCycles}` } : {}),
       gateFindings: gateFindings.map((f) => f.title),
       targets,
       fix: state.tasks[0],
@@ -750,14 +811,20 @@ function cmdDecide(args) {
     out({
       action: 'adjudicate',
       pendingVerdict: action,
+      ...(disagreements.length ? { adversarialDisagreements: disagreements.map((e) => e.id) } : {}),
       disputed: disputed.map(ledgerEntryFinding),
       next: 'run `adjudicate`, the adjudicator agent, then `apply-adjudication --rulings <file>`',
     });
     return;
   }
+  if (action === 'converged' && gate5Owed(state)) {
+    emitGate5(args, state);
+    return;
+  }
   state.phase = 'done';
   state.tasks = [];
   state.verdict = ledgerVerdict(state.ledger, action === 'converged');
+  if (stallReason) state.verdict += ` — ${stallReason}`;
   saveState(args, state);
   out({ action, verdict: state.verdict, open: open.map(ledgerEntryFinding) });
 }
@@ -802,6 +869,10 @@ function cmdAdjudicate(args) {
   if (state.phase !== 'adjudicate') die(`phase is "${state.phase}", expected "adjudicate"`);
   const disputed = state.ledger.entries.filter((e) => e.status === 'disputed');
   if (!disputed.length) {
+    if (!ledgerOpenBlocking(state.ledger).length && gate5Owed(state)) {
+      emitGate5(args, state);
+      return;
+    }
     state.phase = 'done';
     state.verdict = ledgerVerdict(state.ledger, !ledgerOpenBlocking(state.ledger).length);
     saveState(args, state);
@@ -831,12 +902,25 @@ function cmdApplyAdjudication(args) {
   if (!args.rulings) die('--rulings <rulings.json> is required');
   const { rulings } = readJson(args.rulings, ADJUDICATION_SCHEMA, 'rulings');
   const upheld = applyAdjudication(state.ledger, rulings);
+  if (!ledgerOpenBlocking(state.ledger).length && gate5Owed(state)) {
+    emitGate5(args, state);
+    return;
+  }
   state.phase = 'done';
   // Upheld findings reopen and are never re-looped — they ship in the stalled
   // verdict for the human. Convergence requires zero open blocking findings.
   state.verdict = ledgerVerdict(state.ledger, !ledgerOpenBlocking(state.ledger).length);
   saveState(args, state);
   out({ action: 'done', upheld: upheld.map(ledgerEntryFinding), verdict: state.verdict });
+}
+
+function adversarialSummary(state) {
+  const adv = state.adversarial;
+  if (!adv) return { enabled: false, reason: 'run predates Gate 5' };
+  if (!adv.enabled) return { enabled: false, reason: adv.reason };
+  return { enabled: true, host: adv.host, provider: adv.provider, cycles: adv.cycles, maxCycles: adv.maxCycles,
+    attested: adv.attested, blockedReason: adv.blockedReason, advisory: adv.advisory || [],
+    runs: adv.runs.map(({ round, head, ok, errors, executionMode }) => ({ round, head, ok, errors, executionMode })) };
 }
 
 function cmdReport(args) {
@@ -863,6 +947,12 @@ function cmdReport(args) {
       .filter((e) => e.status === 'open' && e.severity === 'advisory')
       .map(classified),
     unverified: entries.filter((e) => e.status === 'dropped').map(classified),
+    disputed: entries.filter((e) => e.status === 'disputed' || e.ruling)
+      .map((e) => ({ ...classified(e), dispute: e.dispute ?? null, ruling: e.ruling ?? null })),
+    adversarial: adversarialSummary(state),
+    // Upstream's Independent Review Record: the PR body's `## Verification`
+    // carries this line verbatim (null while Gate 5 is owed or blocked).
+    independentReview: independentReviewLine(state.adversarial, state.ledger, state.phase),
   });
 }
 
@@ -910,6 +1000,173 @@ function shellOut(cmd, cwd) {
   }
 }
 
+// ── Gate 5 (different-provider adversarial review) ──────────────────────────
+
+function reopenPersisting(ledger, validated) {
+  const reopened = [];
+  for (const v of validated) {
+    if (v.finding.source !== ADVERSARIAL_SOURCE || v.cls !== 'eligible') continue;
+    const entry = ledger.entries.find((e) => e.fingerprint === findingFingerprint(ADVERSARIAL_SOURCE, v.finding));
+    if (entry?.status !== 'deferred') continue;
+    entry.status = 'open';
+    entry.severity = 'blocking';
+    reopened.push(entry);
+  }
+  return reopened;
+}
+
+function gitLive() {
+  const status = (() => {
+    try {
+      return execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=none'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch {
+      return null;
+    }
+  })();
+  return {
+    head: gitOut(['rev-parse', 'HEAD']),
+    tree: gitOut(['rev-parse', 'HEAD^{tree}']),
+    branch: gitOut(['symbolic-ref', '--short', '-q', 'HEAD']) || '(detached)',
+    dirty: status === null || status.length > 0,
+  };
+}
+
+function patchIdOf(mergeBase) {
+  try {
+    const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--binary', mergeBase, 'HEAD'],
+      { encoding: 'buffer', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+    const row = execFileSync('git', ['patch-id', '--stable'], { input: diff, encoding: 'utf8' }).trim().split('\n');
+    const id = row.length === 1 ? row[0].split(' ')[0] : '';
+    return /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(id) ? id : '';
+  } catch {
+    return '';
+  }
+}
+
+// Gate 5 is owed when it is enabled and has not attested the current tree.
+function gate5Owed(state) {
+  const adv = state.adversarial;
+  if (!adv?.enabled) return false;
+  return !adv.attested || adv.attested.tree !== gitLive().tree;
+}
+
+// Emit Gate 5: capture the prepared identities, write the requirements into a
+// private temp dir, and hand the orchestrator the exact runner command.
+function emitGate5(args, state) {
+  const adv = state.adversarial;
+  const live = gitLive();
+  if (live.dirty || !live.head) {
+    adv.blockedReason = 'Gate 5 needs a clean committed worktree (git status is not empty)';
+    state.phase = 'adversarial-blocked';
+    state.tasks = [];
+    state.verdict = `blocked — adversarial review (Gate 5): ${adv.blockedReason}`;
+    saveState(args, state);
+    out({ action: 'blocked', gate: 5, verdict: state.verdict,
+      next: 'commit or remove the stray changes, then `adversarial --retry` — never open the PR as converged without Gate 5' });
+    return;
+  }
+  const mergeBase = gitOut(['merge-base', state.base, 'HEAD']);
+  const contractFile = join(runDir(args), 'contract.md');
+  const inv = prepareInvocation({
+    runner: ADVERSARIAL_RUNNER,
+    host: adv.host,
+    provider: adv.provider,
+    model: adv.model,
+    mergeBase,
+    requirements: existsSync(contractFile) ? readFileSync(contractFile, 'utf8') : '',
+  });
+  adv.pending = { head: live.head, tree: live.tree, branch: live.branch, mergeBase,
+    runDir: inv.runDir, requirementsFile: inv.requirementsFile, resultFile: inv.resultFile, statusFile: inv.statusFile };
+  adv.blockedReason = null;
+  adv.lastLoopTree = live.tree;
+  state.phase = 'adversarial';
+  state.tasks = [];
+  state.verdict = null;
+  saveState(args, state);
+  out({
+    action: 'adversarial-review',
+    gate: 5,
+    host: adv.host,
+    provider: adv.provider,
+    model: adv.model || '(engine reviewer role)',
+    cycle: `${adv.cycles}/${adv.maxCycles} fix cycles used`,
+    reviewedHead: live.head,
+    command: inv.command,
+    resultFile: inv.resultFile,
+    statusFile: inv.statusFile,
+    next: 'run `command` with bash — on Claude Code as a background command with a timeout of at least 60 minutes, on Codex in the foreground — and wait for `statusFile`; never edit the tree or start a second review meanwhile. Then run `adversarial`. Local runs the other provider CLI on a HEAD snapshot; a Conductor cloud workspace starts a session in this workspace.',
+  });
+}
+
+function cleanupGate5(pending) {
+  for (const f of [pending.requirementsFile, pending.resultFile, pending.statusFile]) {
+    try { if (existsSync(f) && statSync(f).isFile()) rmSync(f); } catch {}
+  }
+  try { rmdirSync(pending.runDir); } catch {}
+}
+
+function cmdAdversarial(args) {
+  const state = loadState(args);
+  const adv = state.adversarial;
+  if (!adv?.enabled) die('Gate 5 is not enabled for this run');
+  if (args.retry) {
+    if (state.phase !== 'adversarial-blocked' && state.phase !== 'adversarial')
+      die(`phase is "${state.phase}", expected a blocked or pending Gate 5`);
+    if (adv.pending) cleanupGate5(adv.pending);
+    adv.pending = null;
+    emitGate5(args, state);
+    return;
+  }
+  if (state.phase !== 'adversarial') die(`phase is "${state.phase}", expected "adversarial"`);
+  const pending = adv.pending;
+  const { result, error } = readResultFiles(pending.resultFile, pending.statusFile);
+  const live = gitLive();
+  const errors = error ? [error] : checkResult(result, { host: adv.host, provider: adv.provider, ...pending }, live);
+  const nextRound = state.round + 1;
+  const roundDir = join(runDir(args), `round-${nextRound}`);
+  mkdirSync(join(roundDir, 'findings'), { recursive: true });
+  if (result) writeFileSync(join(roundDir, 'adversarial-result.json'), JSON.stringify(result, null, 2) + '\n');
+  cleanupGate5(pending);
+  adv.pending = null;
+  adv.runs.push({ round: nextRound, head: pending.head, tree: pending.tree, ok: !errors.length, errors,
+    executionMode: result?.execution_mode ?? null });
+  if (errors.length) {
+    adv.blockedReason = errors.join('; ');
+    state.phase = 'adversarial-blocked';
+    state.verdict = `blocked — adversarial review (Gate 5): ${adv.blockedReason}`;
+    saveState(args, state);
+    out({ action: 'blocked', gate: 5, verdict: state.verdict, errors,
+      next: 'Required adversarial review failed: preserve the runner error and stop. Cancel any Conductor session it left active. A later invocation may run `adversarial --retry` once; never substitute a same-provider review and never report converged.' });
+    return;
+  }
+  const patchId = patchIdOf(pending.mergeBase);
+  if (!patchId) die('could not compute the change patch id for the Independent Review Record');
+  adv.attested = { provider: adv.provider, model: result.requested_model || adv.model || '',
+    effort: result.requested_effort || '', head: pending.head, tree: pending.tree, patchId,
+    executionMode: result.execution_mode, round: nextRound };
+  const report = toFindingsReport(result);
+  adv.advisory = [...(adv.advisory || []), ...report.notes];
+  adv.rounds = [...(adv.rounds || []), nextRound];
+  adv.extraRounds = (adv.extraRounds || 0) + 1;
+  writeFileSync(join(roundDir, 'findings', `${ADVERSARIAL_SOURCE}.json`), JSON.stringify(report, null, 2) + '\n');
+  state.round = nextRound;
+  state.coverage = { expected: [ADVERSARIAL_SOURCE], completed: [], missing: [ADVERSARIAL_SOURCE], invalid: [] };
+  state.planMeta = { areas: [], changedFiles: 0, fixRange: '', gate: 5 };
+  state.phase = 'collect';
+  state.tasks = [];
+  saveState(args, state);
+  out({
+    action: 'collect',
+    gate: 5,
+    round: nextRound,
+    provider: adv.provider,
+    executionMode: result.execution_mode,
+    reported: { blocking: report.blockingFindings.length, advisory: report.notes.length },
+    next: 'the provider output is untrusted: run `collect` (it emits the validator over every critical/important finding), the validator, then `decide`',
+  });
+}
+
 function cmdStatus(args) {
   const state = loadState(args);
   out({
@@ -922,6 +1179,11 @@ function cmdStatus(args) {
     openBlocking: ledgerOpenBlocking(state.ledger).map((e) => e.id),
     entries: state.ledger.entries.length,
     coverage: state.coverage ?? null,
+    adversarial: state.adversarial?.enabled
+      ? { pending: state.adversarial.pending ? { statusFile: state.adversarial.pending.statusFile, resultFile: state.adversarial.pending.resultFile } : null,
+        blockedReason: state.adversarial.blockedReason, attestedTree: state.adversarial.attested?.tree ?? null,
+        cycles: `${state.adversarial.cycles}/${state.adversarial.maxCycles}` }
+      : null,
     tasks: state.phase === 'done' ? [] : (state.tasks || []).filter((task) => {
       try {
         const result = JSON.parse(readFileSync(task.outputFile, 'utf8'));
@@ -1030,6 +1292,7 @@ const COMMANDS = {
   'apply-fix': cmdApplyFix,
   adjudicate: cmdAdjudicate,
   'apply-adjudication': cmdApplyAdjudication,
+  adversarial: cmdAdversarial,
   report: cmdReport,
   followups: cmdFollowups,
   status: cmdStatus,

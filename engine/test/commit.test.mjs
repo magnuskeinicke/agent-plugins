@@ -99,7 +99,7 @@ test('dry run: titleRule-derived rule reaches the implement text and every fix p
   assert.match(implement.text, /feat\(web\): SER-1633 <subject>/);
 
   commit('feat(web): SER-1633 add widget');
-  const init = run('init', '--base', base, '--tests-green', 'false', '--commit-scope', 'web');
+  const init = run('init', '--no-adversarial', '--base', base, '--tests-green', 'false', '--commit-scope', 'web');
   assert.equal(init.commitCheck.status, 'ok');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   assert.equal(plan.action, 'gate-fix');
@@ -116,7 +116,7 @@ test('dry run: titleRule-derived rule reaches the implement text and every fix p
 test('init: an implement commit that breaks the rule becomes a commit-subject gate-fix', (t) => {
   const { run, commit, base } = repo(t, { commit: { format: SER_TITLE_RULE, pattern: VTT_PATTERN } });
   const bad = commit('SER-1633 feat(web): x');
-  const init = run('init', '--base', base);
+  const init = run('init', '--no-adversarial', '--base', base);
   assert.equal(init.commitCheck.status, 'rejected');
   assert.deepEqual(init.commitCheck.offenders, [{ sha: bad, subject: 'SER-1633 feat(web): x' }]);
   const plan = run('plan', '--changed-files', 'src/a.ts');
@@ -129,7 +129,7 @@ test('init: an implement commit that breaks the rule becomes a commit-subject ga
 test('apply-fix refuses a fix range with a non-matching subject, then accepts the rewrite', (t) => {
   const { run, exec, git, commit, dir, base } = repo(t, { commit: { format: SER_TITLE_RULE, pattern: VTT_PATTERN } });
   const head = commit('feat(web): SER-1633 add widget');
-  run('init', '--base', base, '--tests-green', 'false');
+  run('init', '--no-adversarial', '--base', base, '--tests-green', 'false');
   const plan = run('plan', '--changed-files', 'src/a.ts', '--head', head);
   const badHead = commit('SER-1633 fix(web): tests');
   const result = { summary: 'fixed', committed: true, head: badHead, testsGreen: true, testEvidence: 'ok' };

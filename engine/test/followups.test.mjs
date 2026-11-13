@@ -76,7 +76,7 @@ test('cli: only the reuse audit feeds follow-ups, and call sites are checked aga
 
   const run = (...args) =>
     JSON.parse(execFileSync(process.execPath, [CLI, ...args, '--slice', 'PROJ-1', '--dir', join(dir, '.context')], { encoding: 'utf8', cwd: dir }));
-  run('init', '--base', 'main');
+  run('init', '--no-adversarial', '--base', 'main');
   const plan = run('plan', '--changed-files', 'src/new.ts', '--added-files', 'src/new.ts');
   for (const task of plan.reviewers)
     writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, blockingFindings: [], notes: [] }));
@@ -106,7 +106,7 @@ test('cli: no diff file list → every candidate demoted (fails closed)', () => 
   writeFileSync(join(dir, 'src/b.ts'), 'one\n');
   const run = (...args) =>
     JSON.parse(execFileSync(process.execPath, [CLI, ...args, '--slice', 'PROJ-2', '--dir', join(dir, '.context')], { encoding: 'utf8', cwd: dir }));
-  run('init', '--base', 'main');
+  run('init', '--no-adversarial', '--base', 'main');
   const plan = run('plan', '--changed-files', 'src/new.ts', '--added-files', 'src/new.ts');
   for (const task of plan.reviewers)
     writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, blockingFindings: [], notes: [] }));

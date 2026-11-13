@@ -31,7 +31,7 @@ test('full loop: findings → fix → clean re-review → converged', () => {
   const contract = join(mkdtempSync(join(tmpdir(), 'contract-')), 'contract.md');
   writeFileSync(contract, 'Ticket PROJ-1: add the widget. AC: widget renders.');
 
-  const init = run('init', '--base', 'origin/main', '--contract-file', contract);
+  const init = run('init', '--no-adversarial', '--base', 'origin/main', '--contract-file', contract);
   assert.equal(init.resumed, false);
 
   const plan = run('plan', '--changed-files', 'components/Widget.tsx,server/widget.ts', '--added-files', 'components/Widget.tsx', '--user-facing', 'true', '--head', 'aaa111');
@@ -97,7 +97,7 @@ test('full loop: findings → fix → clean re-review → converged', () => {
 
 test('gut-check block hard-stops before any validator spend', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main');
+  run('init', '--no-adversarial', '--base', 'origin/main');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(
     plan.prePass.outputFile,
@@ -110,7 +110,7 @@ test('gut-check block hard-stops before any validator spend', () => {
 
 test('red gate at init: plan emits a gate fix and NO reviewer prompts', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main', '--tests-green', 'false');
+  run('init', '--no-adversarial', '--base', 'origin/main', '--tests-green', 'false');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   assert.equal(plan.action, 'gate-fix');
   assert.deepEqual(plan.gateFindings, ['Tests/lint not green']);
@@ -124,7 +124,7 @@ test('red gate at init: plan emits a gate fix and NO reviewer prompts', () => {
 
 test('red tests gate spends the round on a gate fix, not reviewer findings', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main');
+  run('init', '--no-adversarial', '--base', 'origin/main');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   for (const r of plan.reviewers)
@@ -138,7 +138,7 @@ test('red tests gate spends the round on a gate fix, not reviewer findings', () 
 
 test('invalid findings files are excluded and reported, never silently eaten', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main');
+  run('init', '--no-adversarial', '--base', 'origin/main');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
@@ -152,7 +152,7 @@ test('invalid findings files are excluded and reported, never silently eaten', (
 
 test('disputes route through the adjudicator; upheld ships in a stalled verdict', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main');
+  run('init', '--no-adversarial', '--base', 'origin/main');
   let plan = run('plan', '--changed-files', 'src/a.ts', '--head', 'h1');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
@@ -182,15 +182,15 @@ test('disputes route through the adjudicator; upheld ships in a stalled verdict'
 
 test('init is idempotent and resumable', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main');
-  const again = run('init', '--base', 'origin/other');
+  run('init', '--no-adversarial', '--base', 'origin/main');
+  const again = run('init', '--no-adversarial', '--base', 'origin/other');
   assert.equal(again.resumed, true);
   assert.equal(again.round, 1);
 });
 
 test('review-only: findings end the run as a report, no fix pass (magnus:review-code)', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main', '--review-only');
+  run('init', '--no-adversarial', '--base', 'origin/main', '--review-only');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
@@ -216,7 +216,7 @@ test('review-only: findings end the run as a report, no fix pass (magnus:review-
 
 test('review-only with a clean round reports verdict "clean"', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main', '--review-only');
+  run('init', '--no-adversarial', '--base', 'origin/main', '--review-only');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   for (const r of plan.reviewers)
@@ -229,7 +229,7 @@ test('review-only with a clean round reports verdict "clean"', () => {
 
 test('max-rounds caps the loop below the hard cap', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main', '--max-rounds', '1');
+  run('init', '--no-adversarial', '--base', 'origin/main', '--max-rounds', '1');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
@@ -245,7 +245,7 @@ test('max-rounds caps the loop below the hard cap', () => {
 
 test('inspect override drives every prompt; non-git commands get a --name-only manifest', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main', '--review-only', '--inspect', 'gh pr diff 42');
+  run('init', '--no-adversarial', '--base', 'origin/main', '--review-only', '--inspect', 'gh pr diff 42');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   const cr = plan.reviewers.find((r) => r.id === 'code-reviewer');
   assert.match(readFileSync(cr.promptFile, 'utf8'), /`gh pr diff 42`/);
@@ -257,7 +257,7 @@ test('inspect override drives every prompt; non-git commands get a --name-only m
 
 test('git inspect override derives name-status/numstat manifest forms', () => {
   const { run } = makeRun();
-  run('init', '--base', 'HEAD', '--review-only', '--inspect', 'git diff HEAD');
+  run('init', '--no-adversarial', '--base', 'HEAD', '--review-only', '--inspect', 'git diff HEAD');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   const gut = readFileSync(plan.prePass.promptFile, 'utf8');
   assert.match(gut, /`git diff --name-status --find-renames HEAD`/);
@@ -267,7 +267,7 @@ test('git inspect override derives name-status/numstat manifest forms', () => {
 
 test('collect names reviewers that never wrote their outputFile, and is re-runnable after the re-run', () => {
   const { run } = makeRun();
-  run('init', '--base', 'origin/main');
+  run('init', '--no-adversarial', '--base', 'origin/main');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, findingsFile({ observations: [], scopeNote: 'ok' }));
   const [dead, ...rest] = plan.reviewers;
