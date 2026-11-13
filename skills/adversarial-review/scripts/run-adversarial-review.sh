@@ -660,11 +660,27 @@ read_conductor_transcript() {
   done
 }
 
+# magnus addition (not upstream kramme): the Conductor transcript carries the
+# reviewer's reply in a provider-specific shape. Besides a normalized
+# `assistant` message, accept a Claude session's raw `assistant` payload and a
+# Codex session's completed `agentMessage` item (its final answer) — upstream
+# only matched `assistant`, so every Codex-provider cloud review was rejected
+# as "completed without an assistant review result".
+CONDUCTOR_REPLIES_JQ='
+  [ .data[]
+    | if ((.type // "") | ascii_downcase) == "assistant" then .content
+      elif (.content.rawPayload.event.type? == "item.completed")
+        and (.content.rawPayload.event.item.type? == "agentMessage")
+        and ((.content.rawPayload.event.item.phase // "final_answer") == "final_answer")
+        then .content.rawPayload.event.item.text
+      elif (.content.rawPayload.type? == "assistant") then .content.rawPayload.message.content
+      else empty
+      end ]'
+
 extract_conductor_result() {
   local transcript_file="$1"
   local destination="$2"
-  jq -e '
-    [.data[] | select((.type | ascii_downcase) == "assistant") | .content] | last |
+  jq -e "$CONDUCTOR_REPLIES_JQ"' | last |
     if type == "object" and has("findings") then .
     elif type == "object" and has("text") then (.text | fromjson)
     elif type == "array" then
@@ -725,8 +741,7 @@ run_conductor() {
     case "$status" in
       idle)
         read_conductor_transcript "$session_id" "$transcript_file"
-        assistant_count=$(jq '[.data[] | select((.type | ascii_downcase) == "assistant")] | length' \
-          "$transcript_file")
+        assistant_count=$(jq "$CONDUCTOR_REPLIES_JQ | length" "$transcript_file")
         if [ "$assistant_count" -gt 0 ]; then
           extract_conductor_result "$transcript_file" "$REVIEW_RESULT" \
             || die "Conductor returned unusable review JSON"

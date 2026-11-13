@@ -89,6 +89,9 @@ run one at a time in the shared checkout.
 
 The dry run prints the command without launching a model. CLI children use
 their own CLI configuration/authentication, not the parent's in-app connectors.
+In a Conductor cloud workspace the `claude` CLI child is not logged in (the
+session's own auth does not reach it), so Claude-hosted cloud runs use native
+subagents for every task; the CLI route fails with `Not logged in`.
 Check the tools required for that task before choosing the CLI route. If they
 are absent, use a native worker with those tools or report the missing
 capability; never pretend coverage completed. No permission-bypass flags are

@@ -80,7 +80,9 @@ async function execute(invocation, logPath, executables) {
       log.end();
       if (timedOut) reject(new Error(`Worker timed out after ${invocation.timeoutMs}ms`));
       else if (overflow) reject(new Error('Worker output exceeded 16 MB'));
-      else if (code !== 0) reject(new Error(`Worker failed (${code ?? signal}): ${stderr}`));
+      // Some CLIs report failures (e.g. "Not logged in") on stdout with an empty
+      // stderr; surface whichever stream carries the reason.
+      else if (code !== 0) reject(new Error(`Worker failed (${code ?? signal}): ${stderr.trim() || stdout.slice(-2000).trim() || '(no output)'}`));
       else resolveResult(stdout);
     });
     child.stdin.end(invocation.input);
