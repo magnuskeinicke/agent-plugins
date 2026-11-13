@@ -13,7 +13,7 @@ round converges (no open blocking finding, disputes adjudicated), the engine
 owes **Gate 5**: one read-only review of the full committed branch by the
 **other** model provider, using `skills/adversarial-review` verbatim — one
 adversarial prompt, not the roster. A Claude host is reviewed by Codex
-(`gpt-6.1-sol`, high) and a Codex host by Claude (`opus`, high), both from the
+(`gpt-6.1-sol`, high) and a Codex host by Claude (`opus`, medium), both from the
 engine `reviewer` role.
 
 - **Local:** the runner reviews a temporary snapshot of tracked `HEAD` with the

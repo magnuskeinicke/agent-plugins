@@ -237,8 +237,11 @@ node "$engine" followups --slice <id>   # the only follow-up ticket candidates (
 
 **Running an emitted task.** Use the shared runtime contract: every task has
 resolved profiles for Claude and Codex, a schema and a persisted `taskFile`.
-Claude native subagents remain supported; Codex native subagents may be used
-when they expose the required controls. Otherwise run
+Claude native subagents remain supported: spawn each with `subagent_type` =
+the task's `subagentType` (`magnus:<id>`) and `model` = `execution.claude.model`
+on every spawn (never the session's model), never another plugin's same-named
+reviewer or review skill, and save its JSON verbatim. Codex native subagents
+may be used when they expose the required controls. Otherwise run
 `node "$engine" run --task <taskFile> --runtime <claude|codex>`.
 Each worker returns JSON; the parent validates and saves it. Writers and the
 adjudicator get a fresh worker per pass, never a resumed prior worker. If a

@@ -2,7 +2,7 @@
 name: pr-relevance-validator
 description: Validates that review findings are actually caused by the current review scope (committed PR diff + staged/unstaged/untracked local changes, plus PR description findings when PR metadata is provided). Use this agent after collecting findings from other review agents to filter out pre-existing issues and problems outside the in-scope changes. This prevents scope creep in code reviews by ensuring reviewers only see issues they should address.
 model: opus
-effort: high
+effort: medium
 color: orange
 disallowedTools: Write, Edit, NotebookEdit
 ---
@@ -231,3 +231,8 @@ Issues in files not modified in this review scope:
 - **New files**: All findings in new files are automatically validated
 - **Deleted files**: Findings in deleted files should be filtered (code no longer exists)
 - **Renamed files**: Track file renames and validate accordingly
+
+<!-- magnus addition (not upstream kramme): persona proof for the engine review loop. -->
+## Persona Proof
+
+Your persona proof is `magnus:pr-relevance-validator`. When a task asks for a JSON report, set its `persona` field to exactly that value. The engine rejects a report without it, because only this agent definition carries the value.

@@ -31,7 +31,7 @@ for (const mode of ['review-only', 'loop']) {
     assert.equal(run('report').coverage.missing.length, plan.reviewers.length + 1);
     assert.equal(run('status').tasks.length, plan.reviewers.length + 1);
     for (const task of plan.reviewers) {
-      writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, blockingFindings: [], notes: [] }));
+      writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, persona: `magnus:${task.id}`, blockingFindings: [], notes: [] }));
     }
     writeFileSync(plan.prePass.outputFile, JSON.stringify({ observations: [], scopeNote: 'all files' }));
     run('collect');
@@ -49,6 +49,56 @@ test('a report with another reviewer identity cannot satisfy coverage', (t) => {
   }
   assert.equal(run('collect').invalid.length, plan.reviewers.length);
   assert.equal(run('decide').action, 'incomplete');
+});
+
+test('every agent task names its namespaced subagent; the gut-check has none', (t) => {
+  const { run } = fixture(t);
+  run('init', '--no-adversarial', '--base', 'HEAD');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  assert.equal(plan.prePass.subagentType, undefined);
+  for (const task of plan.reviewers) {
+    assert.equal(task.subagentType, `magnus:${task.id}`);
+    assert.deepEqual([task.execution.claude.model, task.execution.claude.effort], ['opus', 'medium']);
+    assert.equal(task.execution.codex.effort, 'high');
+    assert.equal(JSON.parse(readFileSync(task.taskFile, 'utf8')).subagentType, `magnus:${task.id}`);
+  }
+  assert.match(plan.next, /subagentType/);
+});
+
+test('a report without the persona proof came from another agent and cannot satisfy coverage', (t) => {
+  const { run } = fixture(t);
+  run('init', '--no-adversarial', '--base', 'HEAD', '--review-only');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  writeFileSync(plan.prePass.outputFile, JSON.stringify({ observations: [], scopeNote: 'all files' }));
+  const [foreign, ...rest] = plan.reviewers;
+  writeFileSync(foreign.outputFile, JSON.stringify({ reviewer: foreign.id, blockingFindings: [], notes: [] }));
+  for (const task of rest)
+    writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, persona: `magnus:${task.id}`, blockingFindings: [], notes: [] }));
+  const collected = run('collect');
+  assert.equal(collected.action, 'incomplete');
+  assert.equal(collected.invalid.length, 1);
+  assert.match(collected.invalid[0].errors.join(' '), new RegExp(`subagent_type "magnus:${foreign.id}"`));
+  writeFileSync(foreign.outputFile, JSON.stringify({ reviewer: foreign.id, persona: `magnus:${foreign.id}`, blockingFindings: [], notes: [] }));
+  run('collect');
+  assert.equal(run('decide').verdict, 'clean');
+});
+
+test('verdicts without the validator persona proof are refused and the round stays decidable', (t) => {
+  const { run } = fixture(t);
+  run('init', '--no-adversarial', '--base', 'HEAD', '--review-only');
+  const plan = run('plan', '--changed-files', 'src/a.ts');
+  writeFileSync(plan.prePass.outputFile, JSON.stringify({ observations: [], scopeNote: 'all files' }));
+  for (const task of plan.reviewers)
+    writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, persona: `magnus:${task.id}`, notes: [],
+      blockingFindings: task.id === 'code-reviewer' ? [{ title: 'Bug', detail: 'boom', file: 'src/a.ts', rootCause: 'boom' }] : [] }));
+  const collected = run('collect');
+  assert.equal(collected.validator.subagentType, 'magnus:pr-relevance-validator');
+  const verdicts = [{ id: 'R1-01', diffCaused: true, confidence: 95 }];
+  writeFileSync(collected.validator.outputFile, JSON.stringify({ verdicts }));
+  assert.throws(() => run('decide', '--verdicts', collected.validator.outputFile), /subagent_type "magnus:pr-relevance-validator"/);
+  assert.equal(run('status').phase, 'decide');
+  writeFileSync(collected.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts }));
+  assert.notEqual(run('decide', '--verdicts', collected.validator.outputFile).action, 'incomplete');
 });
 
 test('existing malformed configuration fails instead of changing routing to defaults', (t) => {
@@ -75,7 +125,7 @@ test('legacy Claude ledger resumes unfinished reviewers with Codex task manifest
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, JSON.stringify({ observations: [], scopeNote: 'all files' }));
   for (const task of plan.reviewers.slice(1)) {
-    writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, blockingFindings: [], notes: [] }));
+    writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, persona: `magnus:${task.id}`, blockingFindings: [], notes: [] }));
   }
   const path = join(dir, '.context', 'ISSUE-1', 'ledger.json');
   const old = JSON.parse(readFileSync(path));
@@ -90,7 +140,7 @@ test('legacy Claude ledger resumes unfinished reviewers with Codex task manifest
   assert.equal(resumed.tasks[0].id, plan.reviewers[0].id);
   assert.equal(resumed.tasks[0].execution.claude.model, 'opus');
   assert.equal(run('run', '--task', resumed.tasks[0].taskFile, '--runtime', 'codex', '--dry-run').command, 'codex');
-  writeFileSync(resumed.tasks[0].outputFile, JSON.stringify({ reviewer: resumed.tasks[0].id, blockingFindings: [], notes: [] }));
+  writeFileSync(resumed.tasks[0].outputFile, JSON.stringify({ reviewer: resumed.tasks[0].id, persona: `magnus:${resumed.tasks[0].id}`, blockingFindings: [], notes: [] }));
   run('collect');
   assert.equal(run('decide').verdict, 'clean');
 });

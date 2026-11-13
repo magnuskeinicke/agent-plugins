@@ -4,7 +4,8 @@ import { selectReviewers, overlayFor, ROSTER, OFF_LOOP } from '../lib/roster.mjs
 import { compileAreaPaths, selectAreas } from '../lib/areas.mjs';
 import { REPO_CONFIG_DEFAULTS } from '../lib/defaults.mjs';
 import { resolveRepoConfig, focusOverlay, loadRepoConfig } from '../lib/config.mjs';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { ROLE_MODELS } from '../lib/models.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,6 +15,23 @@ const ids = (sel) => sel.selected.map((r) => r.id);
 test('every roster + off-loop id has a vendored agent file', () => {
   for (const id of [...ROSTER.map((r) => r.id), ...OFF_LOOP])
     assert.ok(existsSync(join(AGENTS_DIR, `${id}.md`)), `agents/${id}.md missing`);
+});
+
+test('every agent the loop spawns carries its namespaced persona proof', () => {
+  const plugin = JSON.parse(readFileSync(join(AGENTS_DIR, '..', '.claude-plugin', 'plugin.json'), 'utf8'));
+  for (const id of [...ROSTER.map((r) => r.id), 'pr-relevance-validator']) {
+    const body = readFileSync(join(AGENTS_DIR, `${id}.md`), 'utf8');
+    assert.ok(body.includes(`Your persona proof is \`${plugin.name}:${id}\``), `agents/${id}.md lacks its persona proof`);
+  }
+});
+
+test('every read-only agent pins Opus at the Claude reviewer effort', () => {
+  const { claude } = ROLE_MODELS.reviewer;
+  for (const file of readdirSync(AGENTS_DIR).filter((f) => f.endsWith('.md') && f !== 'design-iterator.md')) {
+    const head = readFileSync(join(AGENTS_DIR, file), 'utf8').split('\n---')[0];
+    assert.match(head, new RegExp(`^model: ${claude.model}$`, 'm'), `${file} model`);
+    assert.match(head, new RegExp(`^effort: ${claude.effort}$`, 'm'), `${file} effort`);
+  }
 });
 
 test('round 1 minimal diff: always-on + round1 tier, no unmet conditionals', () => {

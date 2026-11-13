@@ -50,7 +50,11 @@ inherit the caller's resolved role.
 
 | Roles | Claude | Codex | Effort |
 | --- | --- | --- | --- |
-| all roles | opus | gpt-6.1-sol | high |
+| `reviewer` | opus | gpt-6.1-sol | Claude medium, Codex high |
+| all other roles | opus | gpt-6.1-sol | high |
+
+Fable is never a worker model: it is reserved for interactive grilling and
+wayfinder sessions the user starts.
 
 `babysit-stack` and the feature pipeline's final babysit session use `babysitter`.
 Its Codex default is independent of legacy model aliases; configure
@@ -71,10 +75,19 @@ pending task manifests after interruption. The gut-check runs before the roster.
 Read-only tasks may run concurrently within the host's worker limit; writers
 run one at a time in the shared checkout.
 
-- **Claude native:** launch the named agent definition as a fresh subagent,
-  applying its resolved model/effort. Give it the task prompt; have it return
-  JSON. The parent validates and writes that JSON to `outputFile`. Native
-  subagents inherit the host's tools and permissions.
+- **Claude native:** launch a fresh subagent with `subagent_type` set to the
+  task's `subagentType` exactly (for example `magnus:code-reviewer`) and
+  `model` set to `execution.claude.model` (`opus`) on **every** spawn,
+  persona or not. A spawn without `model` inherits the session's model, which
+  may be the Fable model reserved for grilling and wayfinder. Persona agents
+  take their effort from the agent definition. Never substitute another plugin's agent or review
+  skill, even one with the same bare name or a matching description; other
+  plugins installed in the same session (a team plugin in a cloud image, say)
+  often ship their own reviewers. Give it the task prompt; have it return JSON.
+  The parent validates and writes that JSON to `outputFile` verbatim, never
+  adding or editing its `persona` field. Native subagents inherit the host's
+  tools and permissions. A task without `subagentType` (the gut-check) runs as
+  a fresh general-purpose subagent.
 - **Codex native:** when native subagents expose the required model/effort and
   tools, launch a fresh worker with `execution.codex` and the agent-file body
   plus the task prompt. The parent validates and saves its JSON result.
@@ -124,7 +137,10 @@ continue doing so; the parent still verifies their commit and evidence.
 
 ## Incomplete coverage and scratch ownership
 
-Every emitted reviewer must return valid JSON with its own identity. Retry a
+Every emitted reviewer must return valid JSON with its own identity. A report
+from a persona agent also carries that agent's persona proof (`persona` =
+its `subagentType`); `collect` and `decide` reject one without it as the work
+of another agent. Re-run that task with the right `subagent_type`. Retry a
 dead task once. Still missing/invalid → `incomplete`: preserve the round and
 report the blocker. Never advance to PR creation or claim clean/converged.
 Re-invocation runs only the unfinished tasks, then `collect` again.

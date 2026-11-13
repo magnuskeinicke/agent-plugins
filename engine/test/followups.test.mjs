@@ -79,16 +79,16 @@ test('cli: only the reuse audit feeds follow-ups, and call sites are checked aga
   run('init', '--no-adversarial', '--base', 'main');
   const plan = run('plan', '--changed-files', 'src/new.ts', '--added-files', 'src/new.ts');
   for (const task of plan.reviewers)
-    writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, blockingFindings: [], notes: [] }));
+    writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, persona: `magnus:${task.id}`, blockingFindings: [], notes: [] }));
   writeFileSync(plan.prePass.outputFile, JSON.stringify({ observations: [], scopeNote: 'ok' }));
   const reuse = plan.reviewers.find((r) => r.id === 'codebase-pattern-reviewer');
-  writeFileSync(reuse.outputFile, JSON.stringify({ reviewer: reuse.id, blockingFindings: [], notes: [], consolidations: [
+  writeFileSync(reuse.outputFile, JSON.stringify({ reviewer: reuse.id, persona: `magnus:${reuse.id}`, blockingFindings: [], notes: [], consolidations: [
     { title: 'Share the copy', detail: 'd', targetLib: 'src', rootCause: 'dup-copy', existingCallSites: ['src/a.ts:2', 'src/b.ts:1'] },
     { title: 'Counts the diff', detail: 'd', targetLib: 'src', rootCause: 'diff-site', existingCallSites: ['src/new.ts:1', 'src/a.ts:1'] },
     { title: 'Past EOF', detail: 'd', targetLib: 'src', rootCause: 'eof', existingCallSites: ['src/a.ts:99', 'src/b.ts:1'] },
   ] }));
   const other = plan.reviewers.find((r) => r.id === 'code-reviewer');
-  writeFileSync(other.outputFile, JSON.stringify({ reviewer: other.id, blockingFindings: [], notes: [], consolidations: [
+  writeFileSync(other.outputFile, JSON.stringify({ reviewer: other.id, persona: `magnus:${other.id}`, blockingFindings: [], notes: [], consolidations: [
     { title: 'Not my lane', detail: 'd', rootCause: 'stray', existingCallSites: ['src/a.ts:1', 'src/b.ts:1'] },
   ] }));
   run('collect');
@@ -109,10 +109,10 @@ test('cli: no diff file list → every candidate demoted (fails closed)', () => 
   run('init', '--no-adversarial', '--base', 'main');
   const plan = run('plan', '--changed-files', 'src/new.ts', '--added-files', 'src/new.ts');
   for (const task of plan.reviewers)
-    writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, blockingFindings: [], notes: [] }));
+    writeFileSync(task.outputFile, JSON.stringify({ reviewer: task.id, persona: `magnus:${task.id}`, blockingFindings: [], notes: [] }));
   writeFileSync(plan.prePass.outputFile, JSON.stringify({ observations: [], scopeNote: 'ok' }));
   const reuse = plan.reviewers.find((r) => r.id === 'codebase-pattern-reviewer');
-  writeFileSync(reuse.outputFile, JSON.stringify({ reviewer: reuse.id, blockingFindings: [], notes: [], consolidations: [
+  writeFileSync(reuse.outputFile, JSON.stringify({ reviewer: reuse.id, persona: `magnus:${reuse.id}`, blockingFindings: [], notes: [], consolidations: [
     { title: 'Share the copy', detail: 'd', rootCause: 'dup-copy', existingCallSites: ['src/a.ts:1', 'src/b.ts:1'] },
   ] }));
   run('collect');

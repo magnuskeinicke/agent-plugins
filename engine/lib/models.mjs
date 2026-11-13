@@ -8,7 +8,13 @@ export const ROLE_MODELS = {
   implementer: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
   fixer: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
   adjudicator: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
-  reviewer: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
+  // Claude reviewers run Opus at medium; the Codex reviewer (also Gate 5's
+  // cross-provider review) keeps high. Native Claude subagents take effort
+  // from the agent frontmatter, which must match this profile.
+  reviewer: {
+    claude: { model: 'opus', effort: 'medium', access: 'read-only' },
+    codex: { model: 'gpt-6.1-sol', effort: 'high', access: 'read-only' },
+  },
   verifier: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
   explorer: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
   triage: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),

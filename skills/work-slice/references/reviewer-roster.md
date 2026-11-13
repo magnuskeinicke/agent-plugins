@@ -6,8 +6,10 @@ reviewers from this file. On any mismatch, the CLI wins.
 
 The roster is vendored from kramme-cc-workflow (MIT, `agents/sources.yaml`).
 One agent file serves both runtimes: on Claude `agents/<id>.md` is a spawnable
-subagent definition; on Codex the same file's body is the `codex exec` child's
-system prompt. The host repo's `repoConfig.reviewers` / `areaPaths` are an
+subagent definition, registered as `magnus:<id>` (the task's `subagentType`);
+on Codex the same file's body is the `codex exec` child's system prompt. Each
+loop agent ends with a marked persona-proof section, so `collect` can tell its
+report from one written by another plugin's reviewer. The host repo's `repoConfig.reviewers` / `areaPaths` are an
 **additive focus overlay** on the roster prompts, never the lane source
 (CONTRACT.md).
 

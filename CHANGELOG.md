@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.18.0 — 2026-11-13
+
+### Changed
+
+- **Claude reviewers run Opus 5.5 at medium effort.** Cloud review rounds were running on Fable,
+  which is meant only for grilling and wayfinder. The engine never asked for Fable: a spawn that
+  passed no `model`, and other plugins' `model: inherit` reviewers, inherited the session's model.
+  - The engine's Claude `reviewer` role is now `opus` at `medium`. Every vendored read-only agent
+    pins `model: opus` + `effort: medium`; `design-iterator`, a writer, keeps `high`. The Codex
+    reviewer, also used by Gate 5, keeps `gpt-6.1-sol` at `high`.
+  - Reviewer and validator tasks take effort from the role, not the agent file. A test keeps the
+    frontmatter in step with the role.
+  - The runtime contract and the engine's next-step text pass `model` = `execution.claude.model`
+    on every Claude native spawn, so no worker inherits the session's model.
+
+### Fixed
+
+- **Review rounds spawn this plugin's reviewers, not another plugin's.** In cloud workspaces the
+  team's `dev@melatech` plugin is installed too, and its reviewers share names and descriptions with
+  ours. The engine named each reviewer task by its bare roster id (`code-reviewer`), so the main
+  agent often spawned melatech's reviewer instead.
+  - Every task with a persona now carries `subagentType` (`magnus:<id>`). The runtime contract and
+    the `work-slice`, `iterate-pr` and `review-code` task instructions spawn exactly that subagent.
+  - The 14 roster agents and the relevance validator end with a marked persona-proof section.
+    Their reports carry `"persona": "magnus:<id>"`. `collect` treats a reviewer report without it
+    as invalid, and `decide` refuses validator verdicts without it. The round then re-runs the task
+    instead of counting another agent's review as coverage.
+  - Neither the melatech plugin nor the cloud image changes.
+
 ## 0.17.0 — 2026-11-13
 
 ### Changed

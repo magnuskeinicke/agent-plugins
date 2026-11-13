@@ -52,7 +52,7 @@ const cleanRound = (run, planArgs = []) => {
   for (const t of [plan.prePass, ...plan.reviewers].filter(Boolean)) {
     const body = t.id === 'gut-check'
       ? { observations: [], scopeNote: 'read app.js' }
-      : { reviewer: t.id, blockingFindings: [], notes: [] };
+      : { reviewer: t.id, persona: `magnus:${t.id}`, blockingFindings: [], notes: [] };
     writeFileSync(t.outputFile, JSON.stringify(body));
   }
   const collect = run('collect');
@@ -115,7 +115,7 @@ test('Gate 5 runs after convergence, its finding is fixed, and it re-attests the
 
   const collect = run('collect');
   assert.equal(collect.findingCount, 1);
-  writeFileSync(collect.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R2-01', diffCaused: true, confidence: 90 }] }));
+  writeFileSync(collect.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: 'R2-01', diffCaused: true, confidence: 90 }] }));
   const fix = run('decide', '--verdicts', collect.validator.outputFile);
   assert.equal(fix.action, 'fix');
   assert.equal(fix.gate, 5);
@@ -179,7 +179,7 @@ test('a demoted critical/important provider finding becomes a disagreement for t
   writeRunner(g, providerResult(g, git, [important]));
   run('adversarial');
   const collect = run('collect');
-  writeFileSync(collect.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R2-01', diffCaused: true, confidence: 65, note: 'the contract allows 2' }] }));
+  writeFileSync(collect.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: 'R2-01', diffCaused: true, confidence: 65, note: 'the contract allows 2' }] }));
   const decide = run('decide', '--verdicts', collect.validator.outputFile);
   assert.equal(decide.action, 'adjudicate');
   assert.deepEqual(decide.adversarialDisagreements, ['CR-001']);
@@ -198,7 +198,7 @@ test('a demoted critical/important provider finding becomes a disagreement for t
   writeRunner(g2, providerResult(g2, other.git, [important]));
   other.run('adversarial');
   const c2 = other.run('collect');
-  writeFileSync(c2.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R2-01', diffCaused: false, confidence: 95 }] }));
+  writeFileSync(c2.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: 'R2-01', diffCaused: false, confidence: 95 }] }));
   assert.equal(other.run('decide', '--verdicts', c2.validator.outputFile).action, 'converged');
 });
 
@@ -209,7 +209,7 @@ test('the adversarial fix-cycle cap stalls the loop', () => {
   writeRunner(g, providerResult(g, git, [important]));
   run('adversarial');
   let c = run('collect');
-  writeFileSync(c.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R2-01', diffCaused: true, confidence: 90 }] }));
+  writeFileSync(c.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: 'R2-01', diffCaused: true, confidence: 90 }] }));
   const fix = run('decide', '--verdicts', c.validator.outputFile);
   assert.equal(fix.adversarialCycle, '1/1');
   const head = commit('export const a = 3;\n', 'fix: try again');
@@ -220,7 +220,7 @@ test('the adversarial fix-cycle cap stalls the loop', () => {
   writeRunner(g, providerResult(g, git, [{ ...important, summary: 'still wrong' }]));
   run('adversarial');
   c = run('collect');
-  writeFileSync(c.validator.outputFile, JSON.stringify({ verdicts: [{ id: 'R4-01', diffCaused: true, confidence: 90 }] }));
+  writeFileSync(c.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: 'R4-01', diffCaused: true, confidence: 90 }] }));
   const stalled = run('decide', '--verdicts', c.validator.outputFile);
   assert.equal(stalled.action, 'stalled');
   assert.match(stalled.verdict, /adversarial fix-cycle cap \(1\) reached$/);
@@ -270,7 +270,7 @@ function gate5WithFinding(run, git, finding = important, verdict = { diffCaused:
   const ingest = run('adversarial');
   const c = run('collect');
   assert.equal(c.findingCount, 1, 'a Gate 5 re-raise is never suppressed into deferral');
-  writeFileSync(c.validator.outputFile, JSON.stringify({ verdicts: [{ id: `R${ingest.round}-01`, ...verdict }] }));
+  writeFileSync(c.validator.outputFile, JSON.stringify({ persona: 'magnus:pr-relevance-validator', verdicts: [{ id: `R${ingest.round}-01`, ...verdict }] }));
   return run('decide', '--verdicts', c.validator.outputFile);
 }
 

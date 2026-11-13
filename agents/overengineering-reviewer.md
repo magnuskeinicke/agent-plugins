@@ -2,7 +2,7 @@
 name: overengineering-reviewer
 description: Use this agent after implementation to judge whether branch changes overdo things - needless complication or hedges against very unlikely edge cases - measured against what the task requires rather than codebase practice. Its justify mode adversarially re-checks candidate findings. Not for relative baseline measurement (use magnus:convention-drift-reviewer), AI-slop pattern detection (use magnus:deslop-reviewer), or reuse/deletion review (use magnus:cleanup-reviewer).
 model: opus
-effort: high
+effort: medium
 color: orange
 disallowedTools: Write, Edit, NotebookEdit
 ---
@@ -103,3 +103,8 @@ One verdict block per candidate:
 ```
 
 `Basis` is required and non-empty for every verdict. `Note` is required and non-empty for `JUDGMENT CALL` and omitted otherwise. End with counts per verdict and emit no other prose.
+
+<!-- magnus addition (not upstream kramme): persona proof for the engine review loop. -->
+## Persona Proof
+
+Your persona proof is `magnus:overengineering-reviewer`. When a task asks for a JSON report, set its `persona` field to exactly that value. The engine rejects a report without it, because only this agent definition carries the value.
