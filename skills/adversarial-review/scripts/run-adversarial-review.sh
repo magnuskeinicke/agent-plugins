@@ -459,7 +459,15 @@ fi
 git diff --no-ext-diff --no-textconv --binary "$MERGE_BASE"...HEAD -- > "$PATCH_FILE"
 
 if [ "$RUN_MODE" = "conductor" ]; then
-  INSPECTION_RULE='Inspect tracked files in the current clean committed workspace when needed. Do not run commands, edit files, access the network, use MCP, or invoke skills.'
+  # magnus addition (not upstream kramme): a Codex session can only read files
+  # by running commands, so upstream's "do not run commands" left it reviewing
+  # the patch text alone. Allow non-mutating inspection commands instead; the
+  # post-review tree-integrity check still rejects any mutation.
+  if [ "$REVIEW_PROVIDER" = "codex" ]; then
+    INSPECTION_RULE='Inspect tracked files in the current clean committed workspace when needed, using only non-mutating inspection commands (for example cat, sed -n, rg, grep, ls, git show, git diff, git log). Do not run tests, builds, formatters, installs, or any command that writes files; do not edit files, access the network, use MCP, or invoke skills.'
+  else
+    INSPECTION_RULE='Inspect tracked files in the current clean committed workspace when needed, using only Read, Grep, and Glob. Do not run commands, edit files, access the network, use MCP, or invoke skills.'
+  fi
 elif [ "$REVIEW_PROVIDER" = "codex" ]; then
   INSPECTION_RULE='Inspect tracked files in the provided snapshot when needed, using only non-mutating local file-inspection commands. Do not edit files, access the network, use MCP, or invoke skills.'
 else

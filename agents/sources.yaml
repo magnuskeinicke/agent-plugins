@@ -87,7 +87,12 @@ sources:
       names the engine convergence loop and the repo's `adversarial.enabled`
       config as the standing opt-in (upstream: the user's
       `--adversarial-review` flag); the runner takes model and effort from
-      the engine `reviewer` role and passes the effort to every provider; the
+      the engine `reviewer` role and passes the effort to every provider; it
+      reads a Codex session's `agentMessage` reply from the Conductor
+      transcript (upstream matched only `assistant`, so cloud Codex reviews
+      always blocked); a cloud Codex reviewer may inspect files with
+      non-mutating commands (upstream forbade all commands, leaving it the
+      patch text alone); the
       result schema keeps this plugin's dropped findings `allOf` (OpenAI
       strict output rejects it). The convergence policy itself
       (trackbed skills/pr:review-convergence, Gate 5 rules: run after a
