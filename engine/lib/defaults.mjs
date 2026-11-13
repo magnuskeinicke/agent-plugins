@@ -85,6 +85,19 @@ export const REPO_CONFIG_DEFAULTS = {
   design: {
     fidelityCheck: '',
   },
+  // Gate 5 of the review loop — trackbed's different-provider adversarial
+  // review (skills/adversarial-review), run after the reviewer rounds converge
+  // and again after every fix it causes, until it attests the final tree.
+  // enabled is the repo's standing consent to send the HEAD snapshot, diff and
+  // run contract to the other provider. provider '' → the opposite of the host
+  // runtime; model '' → the engine `reviewer` role for that provider. Review-only
+  // runs (magnus:review-code) skip it unless --adversarial is passed.
+  adversarial: {
+    enabled: true,
+    provider: '',
+    model: '',
+    maxCycles: 3,
+  },
   // Legacy routing keys remain compatible; explicit worker profiles live in models.mjs.
   routing: {
     models: {},

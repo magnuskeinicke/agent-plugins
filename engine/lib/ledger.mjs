@@ -33,15 +33,13 @@ export function findingFingerprint(source, f) {
 
 // Auto-suppression: a re-raised finding whose fingerprint matches a disputed or
 // deferred entry never re-enters the round and never scores.
-export function ledgerSuppress(ledger, findings) {
+export function ledgerSuppress(ledger, findings, statuses = ['disputed', 'deferred']) {
   const kept = [];
   const suppressed = [];
   for (const f of findings) {
     const fp = findingFingerprint(f.source, f);
     const hit = ledger.entries.find(
-      (e) =>
-        e.fingerprint === fp &&
-        (e.status === 'disputed' || e.status === 'deferred'),
+      (e) => e.fingerprint === fp && statuses.includes(e.status),
     );
     (hit ? suppressed : kept).push(f);
   }

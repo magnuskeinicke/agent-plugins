@@ -127,3 +127,10 @@ test('worker failure removes stale success and a timeout releases the task lock'
   await assert.rejects(runTask(task, 'codex', { executables: { codex: binary } }), /timed out/);
   assert.equal(existsSync(`${task.outputFile}.lock`), false);
 });
+
+test('a worker that reports its failure only on stdout surfaces that reason', async (t) => {
+  const { cwd, task } = fixture(t);
+  const binary = join(cwd, 'logged-out-worker');
+  writeFileSync(binary, '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({is_error:true,result:"Not logged in · Please run /login"}));\nprocess.exit(1);\n', { mode: 0o755 });
+  await assert.rejects(runTask(task, 'claude', { executables: { claude: binary } }), /Worker failed \(1\): .*Not logged in/);
+});

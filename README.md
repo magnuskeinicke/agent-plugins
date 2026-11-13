@@ -106,7 +106,10 @@ machine (run it again to resume) that chains:
    ends, so no agent's context ever holds more than one PR and every layer is cut on a
    bot-reviewed, green predecessor (the workspace bootstraps this plugin + `gh-stack` once,
    first). Walking up the stack in order: test-first
-   implementation inside the bounded engine-CLI review-fix loop, ending in a stacked draft PR
+   implementation inside the bounded engine-CLI review-fix loop — the magnus reviewer roster on the
+   host runtime, then Gate 5: the other provider (Codex for a Claude run) reviews the final tree
+   and its accepted findings are fixed until it attests clean (`skills/work-slice/references/convergence.md`) —
+   ending in a stacked draft PR
    (one linear GitHub stack via `gh stack`) whose body carries `## Verification` (every check actually run) and — only after that PR is
    babysat to GOAL MET — `## Visual verification` (the fewest scenes that prove it, captured once per verified head on the finished branch, published to
    `pr.mediaBranch`, sha-pinned, and re-used verbatim by the ticket's QA handoff — see `skills/work-slice/references/pr-evidence.md`).

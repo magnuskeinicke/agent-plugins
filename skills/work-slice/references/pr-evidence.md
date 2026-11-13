@@ -325,6 +325,8 @@ Not run here, left to CI:
 | Check | Note |
 | --- | --- |
 | `pnpm exec nx affected:test --base=origin/development` | Covered by the `Test Affected` job on this head; passed locally over 13 projects at an earlier head |
+
+Independent review: codex gpt-6.1-sol; tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904; change patch 7d3f1c2e9a0b4c5d6e7f8091a2b3c4d5e6f70819; blocking findings 2 (fixed 2); disagreements decided by the adjudicator 0
 <!-- /magnus:verification -->
 
 <!-- magnus:visual-verification -->
@@ -361,6 +363,12 @@ Rendering rules:
   runs. `Passed — <summary>` / `Failed — <summary>`; a `fail` row ships only when
   the PR knowingly ships red (a capped loop) and the note says so. Omit the
   second table when nothing was left to CI.
+- **Independent review line**: the engine `report`'s `independentReview` string,
+  verbatim and exactly once, as the last line of `## Verification`
+  (`references/convergence.md`). It names the tree Gate 5 attested; a later fix
+  (Playwright, babysit) does not rewrite it. Omit it when `report` returns
+  `null` (Gate 5 blocked — the blocker goes in `## Notes`) and when the loop
+  never ran (a babysit-only push).
 - **Scene order**: flows (video) first, then stills. A reviewer should see the
   story move before reading the diffs.
 - **Not one per criterion.** A scene that covers several acceptance criteria

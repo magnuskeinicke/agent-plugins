@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.16.0 — 2026-11-13
+
+### Added
+
+- **Gate 5: the other provider reviews the final tree.** The engine review loop ran only Claude
+  reviewers over Claude's own code. It now ports trackbed's (formerly kramme-cc-workflow)
+  `pr:review-convergence` Gate 5: once the magnus reviewer rounds converge, the vendored
+  `adversarial-review` runner sends the committed branch to the other provider (Codex
+  `gpt-6.1-sol` for a Claude run, Claude `opus` for a Codex run). Locally it runs the provider CLI
+  on a read-only `HEAD` snapshot; in a Conductor cloud workspace it starts a session with the
+  other provider in the current workspace.
+  - Its findings are untrusted: the validator re-checks them, the host's fresh fixer fixes the
+    accepted ones, the next round checks the fix, and Gate 5 runs again until it attests the
+    final tree. Fix cycles are capped at 3 (`adversarial.maxCycles`).
+  - A finding the validator rejects or demotes for any reason other than "pre-existing" is a
+    disagreement. Upstream asks the user; here the adjudicator rules on it.
+  - Gate 5 fails closed. A missing CLI, a timeout, a bad result or a changed tree blocks the run
+    with a `blocked — adversarial review (Gate 5)` verdict. It never falls back to a
+    same-provider review.
+  - `init` takes `--host claude|codex`. The new `adversarial` config key (default on) is the
+    repo's consent to send the code to the other provider. `review-code` runs Gate 5 only with
+    `--adversarial`.
+  - `report` returns upstream's Independent Review Record line, which the PR body's
+    `## Verification` now ends with.
+
+### Changed
+
+- **Reviewer agents refreshed to trackbed 1.0.1.** Each agent is now read-only
+  (`disallowedTools: Write, Edit, NotebookEdit`). `silent-failure-hunter` checks for checks that
+  can pass while broken, `pr-relevance-validator` keeps findings the change makes reachable, and
+  `codebase-pattern-reviewer` verifies a spec's current-state claims. `cold-reader` is new but
+  not used yet. The magnus additions are kept.
+- **`adversarial-review` refreshed to trackbed 1.0.1.** The runner now restricts `PATH`, marks
+  prompt regions with a per-run token and isolates Codex harder. The other vendored review
+  skills and their shared scripts stay at kramme 0.88.0 for now.
+
+### Fixed
+
+- **Cloud Gate 5 can read Codex's reply.** Found by a test in a Conductor cloud workspace: the
+  runner matched only `assistant` messages, but a Codex session answers with an `agentMessage`
+  item, so every cloud Codex review blocked. Both reply shapes are read now.
+- **A cloud Codex reviewer reads the repository.** Upstream's cloud prompt forbade every command,
+  and Codex reads files by running commands, so it judged only the patch text. It may now run
+  read-only inspection commands; the tree-integrity check still rejects any write.
+- **Failures say why.** A blocked Gate 5 keeps the runner's stderr, and a failed CLI worker
+  reports the reason it printed on stdout (in a cloud sandbox `claude -p` prints
+  `Not logged in`). Claude-hosted cloud runs use native subagents (`runtime.md`).
+
 ## 0.15.1 — 2026-11-11
 
 ### Fixed

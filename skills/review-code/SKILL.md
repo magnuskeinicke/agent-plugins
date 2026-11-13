@@ -69,7 +69,8 @@ the local checkout does not contain the change.
 
 ```bash
 node "$engine" init --slice <run-id> --base <base-or-HEAD> --review-only \
-  [--inspect '<inspect cmd from Step 1>']        # omit for a plain branch-vs-base review
+  [--inspect '<inspect cmd from Step 1>'] \       # omit for a plain branch-vs-base review
+  [--adversarial --host <claude|codex>]           # only when the user asked for a cross-provider review
 node "$engine" plan --slice <run-id> --changed-files <csv> --added-files <csv> --deleted-files <csv> \
   --insertions <n> --user-facing <bool> [--declared-areas <csv>]
 # → the round's task manifest: prePass (gut-check), reviewers[]
@@ -77,11 +78,16 @@ node "$engine" collect --slice <run-id>
 # → validator task when findings survived; run it, then
 node "$engine" decide --slice <run-id> --verdicts <verdicts.json>
 # → action=report (or hard-stop on a gut-check block)
+# → with --adversarial: action=adversarial-review first — Gate 5, ../work-slice/references/convergence.md
+#   (run `command`, then `adversarial` → collect → validator → decide → report)
 node "$engine" report --slice <run-id>
 ```
 
 `--review-only` makes the run single-round: `decide` classifies and stops —
-no fix prompt is ever emitted.
+no fix prompt is ever emitted. Gate 5 (the other provider's adversarial review
+of the committed branch) is off here unless the user asks for it; it needs a
+clean committed checkout, so it never runs on an uncommitted or `--inspect`
+target.
 
 **Running an emitted task.** Use the shared runtime contract: every task has
 resolved profiles for Claude and Codex, a schema and a persisted `taskFile`.

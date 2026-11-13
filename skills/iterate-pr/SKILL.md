@@ -100,10 +100,12 @@ Resolve `engine` from the loaded skill’s real path using the shared runtime co
 **Start the loop:**
 
 ```bash
-node "$engine" init --slice pr-<n> --base origin/<baseRefName> \
+node "$engine" init --slice pr-<n> --base origin/<baseRefName> --host <claude|codex> \
   --tests-green <bool> --committed true [--max-rounds <n>] \
   --commits-since <head> [--issue <ISSUE>] --commit-type <type> [--commit-scope <scope>]
 ```
+
+`--host` is the runtime you are running in; it picks the other provider for Gate 5, the different-provider review that must attest the final tree before the loop converges (`../work-slice/references/convergence.md`).
 
 `--commits-since <head>` scopes the engine's commit-subject checks to the commits this run adds — the PR's existing commits are not rewritten (this skill never force-pushes).
 
@@ -126,6 +128,9 @@ node "$engine" decide --slice pr-<n> --verdicts <verdicts.json>
 # action=adjudicate → adjudicate → run ONE fresh agent with the emitted prompt (never the fix implementer)
 #                     → apply-adjudication --rulings <rulings.json>
 # action=incomplete → preserve the pending round; retry missing tasks once, then report a blocker.
+# action=adversarial-review → Gate 5 (../work-slice/references/convergence.md): run `command` (background,
+#                     ≥60 min timeout on Claude Code), wait for statusFile, then `adversarial` → collect → validator → decide
+# action=blocked    → Gate 5 failed closed: report the blocker; never call the loop converged
 # action=converged|stalled|hard-stop → report the terminal loop result:
 node "$engine" report --slice pr-<n>
 ```

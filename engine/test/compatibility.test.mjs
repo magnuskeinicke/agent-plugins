@@ -21,7 +21,7 @@ function fixture(t) {
 for (const mode of ['review-only', 'loop']) {
   test(`${mode}: absent reviewers cannot produce a successful verdict after resume`, (t) => {
     const { run } = fixture(t);
-    run('init', '--base', 'HEAD', ...(mode === 'review-only' ? ['--review-only'] : []));
+    run('init', '--no-adversarial', '--base', 'HEAD', ...(mode === 'review-only' ? ['--review-only'] : []));
     const plan = run('plan', '--changed-files', 'src/a.ts');
     const collected = run('collect');
     assert.equal(collected.missing.length, plan.reviewers.length + 1);
@@ -41,7 +41,7 @@ for (const mode of ['review-only', 'loop']) {
 
 test('a report with another reviewer identity cannot satisfy coverage', (t) => {
   const { run } = fixture(t);
-  run('init', '--base', 'HEAD', '--review-only');
+  run('init', '--no-adversarial', '--base', 'HEAD', '--review-only');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, JSON.stringify({ observations: [], scopeNote: 'all files' }));
   for (const task of plan.reviewers) {
@@ -71,7 +71,7 @@ test('invalid known configuration shapes fail while an absent file stays optiona
 
 test('legacy Claude ledger resumes unfinished reviewers with Codex task manifests', (t) => {
   const { dir, run } = fixture(t);
-  run('init', '--base', 'HEAD', '--review-only');
+  run('init', '--no-adversarial', '--base', 'HEAD', '--review-only');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   writeFileSync(plan.prePass.outputFile, JSON.stringify({ observations: [], scopeNote: 'all files' }));
   for (const task of plan.reviewers.slice(1)) {
@@ -110,7 +110,7 @@ test('planning configuration survives a checkout that has no repo config', (t) =
   git('checkout', '--detach', base);
   const output = join(dir, '.context/planning.md');
   run('snapshot', '--ref', ref, '--output', output);
-  run('init', '--base', 'HEAD', '--config', output);
+  run('init', '--no-adversarial', '--base', 'HEAD', '--config', output);
   const plan = run('plan', '--changed-files', 'src/new.ts', '--added-files', 'src/new.ts');
   assert.equal(plan.reviewers[0].execution.codex.model, 'custom-reviewer');
   const audit = plan.reviewers.find((task) => task.id === 'codebase-pattern-reviewer');
@@ -120,7 +120,7 @@ test('planning configuration survives a checkout that has no repo config', (t) =
 
 test('deleting a prompt cannot erase a planned reviewer from coverage', (t) => {
   const { run } = fixture(t);
-  run('init', '--base', 'HEAD', '--review-only');
+  run('init', '--no-adversarial', '--base', 'HEAD', '--review-only');
   const plan = run('plan', '--changed-files', 'src/a.ts');
   rmSync(plan.reviewers[0].promptFile);
   assert.ok(run('collect').missing.includes(plan.reviewers[0].id));
