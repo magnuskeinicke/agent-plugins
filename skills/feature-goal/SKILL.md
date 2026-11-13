@@ -442,9 +442,13 @@ read GOAL MET:
    criterion no scene covers says so in one short line.
 3. **Steps + expected result** in the ticket's language, user terms only —
    navigation by what the screen shows, roles by what QA sees in the test
-   environment, no routes-first, no code, no PR jargon. Only what a designer
-   or PM can do and see in the product's own screens; criteria with no visible
-   effect are left out (`qa-handoff.md` → *Who tests it*).
+   environment, no routes, no code, no PR jargon. Only what a designer or PM
+   can do and see in the product's own screens; criteria a non-technical person
+   cannot test are left out without comment — the automated tests prove them
+   and no human is involved. Nothing testable that way → the one-sentence
+   *No QA needed* form (`qa-handoff.md` → *Who tests it*). Before posting, one
+   fresh cold reader playing a designer reads the draft; rewrite or drop
+   everything it flags (`qa-handoff.md` → *Read it back*).
 4. **Not working yet** for anything a slice shipped as a failed criterion
    (its `## QA evidence` on the slice ticket names it), in user terms.
 5. The stack's PR links on one line at the bottom, then post the comment —
@@ -563,7 +567,7 @@ Before reporting done:
 - [ ] The stack-wide babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.
 - [ ] The run did not end by handing the user `/to-prd`, `/to-issues`, `/work-slice`, or `/babysit-stack`: the only next command a report ever names is `/feature-goal <ISSUE>`.
 - [ ] The report ends with the resume line: stage, blocking reason if any, and `/feature-goal <ISSUE>`.
-- [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the feature ticket carries its one `## QA handoff` comment — user-terms criteria, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>` (captured by each PR session after its own GOAL MET, recaptured through Step 8 when the head changed), no dev material — and no other suite comment on it; the PRD and its deltas sit on the PRD ticket.
+- [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the feature ticket carries its one `## QA handoff` comment — steps only for what a designer or PM can test in the product's screens (or the one-sentence *No QA needed* form), cold-read as a designer, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>` (captured by each PR session after its own GOAL MET, recaptured through Step 8 when the head changed), no dev material — and no other suite comment on it; the PRD and its deltas sit on the PRD ticket.
 
 Every cloud worker exit emits the terminal relay marker from
 `references/cloud-relay.md`. QA-HANDOFF with queued publication emits

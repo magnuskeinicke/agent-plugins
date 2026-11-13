@@ -121,8 +121,10 @@ machine (run it again to resume) that chains:
    rounds (summoned by `@coderabbitai review`) as the terminal reviewer until satisfied, every thread resolved. Bot
    reviews happen on GitHub only — no review CLI
 6. QA handoff — **after** the stack is GOAL MET, one concise `## QA handoff` comment on the
-   feature ticket for QA (user-terms steps + one **inline-embedded** visual per group of criteria,
-   under ~150 words, no dev material, no tracker attachments — see
+   feature ticket for QA — written for designers and PMs, not developers (plain-language steps
+   only for what they can test in the product's screens + one **inline-embedded** visual per
+   group of criteria; anything they cannot test is left to the automated tests, and a change
+   with nothing for them gets a one-sentence "No QA needed"), under ~150 words, no dev material, no tracker attachments — see
    `skills/work-slice/references/qa-handoff.md`); it is the only suite comment on a
    human's ticket, and re-runs edit it rather than adding a second. Slice tickets stay internal;
    `/work-issue` writes the same single comment once it has babysat its PR green

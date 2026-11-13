@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.17.0 — 2026-11-13
+
+### Changed
+
+- **QA handoffs are written for designers and PMs.** Handoffs still came out too technical.
+  `qa-handoff.md` now sorts every acceptance criterion first: only what a non-technical person
+  can check in the product's own screens becomes a QA step. Everything else is proven by the
+  automated tests shipped with the PR, and no human is asked to check it.
+  - The implement step must prove every criterion that a non-technical person cannot check
+    with an automated test (unit, integration or end-to-end).
+  - A change with nothing for QA to test gets a one-sentence `No QA needed` handoff with no
+    steps and no media.
+  - Before posting, one fresh `cold-reader` reads the draft as a designer. Every word, step or
+    expected result it does not understand is rewritten or dropped.
+  - Template headings name what the user does or sees, never criterion numbers. Routes, URL
+    paths and more developer words are banned.
+
 ## 0.16.1 — 2026-11-13
 
 ### Fixed
