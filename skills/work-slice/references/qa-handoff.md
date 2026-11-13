@@ -77,18 +77,77 @@ PASS/FAIL columns, no method notes, no counts.
 - **`/feature-goal`** — on the **feature ticket** (never the PRD ticket), in the
   QA-HANDOFF stage after babysit reports GOAL MET, composed across the stack.
 
+### Who tests it — a non-technical person
+
+QA is done by **designers and PMs**, not developers. They know the product well,
+but they have never seen the code, they have no developer tools, and technical
+words mean nothing to them. Write the handoff for that person and nobody else.
+
+**The rule:** a person is asked to test only what a non-technical person can
+check in the product's own screens. Everything else is proven by the automated
+tests (unit, integration, end-to-end) that shipped with the PR, and **no human is
+involved in it** — not as a QA step, not as a "please also check", not as a
+caveat. The implement step pins every acceptance criterion with an automated
+test (`work-slice` Step 3), so the handoff writer assumes those tests cover what
+it leaves out and never asks a person to double-check them.
+
+Sort every criterion before writing a word:
+
+- **Testable by a non-technical person** — it changes something they can do or
+  see in the product, and they can reach it in the test environment through the
+  product's screens. It becomes a handoff step.
+- **Not testable by them** — anything else: no visible effect (performance, a
+  data migration, logging, analytics, a race condition, an internal refactor),
+  a state they cannot reach through the product (a failed server, an expired
+  payment card the test environment does not already contain), or a check that
+  needs a tool (developer tools, logs, the database, an API call, a command, a
+  feature flag or setting outside the product's screens, a hand-edited URL, a
+  faked slow network). It is **left out of the handoff without comment**; its
+  proof is the automated tests in the PR's `## Verification`.
+
+Then, for the steps that remain:
+
+- **Only ask for what that person can do.** Click, type, upload, switch user or
+  role, resize the window, open the app on a phone, wait, reload.
+- **Only ask them to judge what they can see.** Text, layout, what appears or
+  disappears, what is still there after a reload, who can and cannot see
+  something. Never status codes, response times, stored values, emitted events,
+  or "no errors in the console".
+- **Reachable states get their own steps.** A state they can reach through the
+  product ("a form with no versions yet": create a new form) gets those steps. A
+  hard-to-reach state is a step only when the test environment already contains
+  it — name the seeded user or record that shows it, by what QA sees.
+
+**Nothing a non-technical person can test → no QA work.** When every criterion
+is in the second group (a backend change, a refactor, a fix with no visible
+effect), the handoff asks nobody to do anything. It is one sentence, no steps,
+no media:
+
+```markdown
+## QA handoff
+
+No QA needed. <One plain sentence on what changed, in user terms — "Saving a form is faster; nothing looks or works differently.">. Automated tests cover this change.
+
+<PR link>
+```
+
+The same applies to a mixed change: QA gets steps only for the testable part,
+and the rest is not mentioned.
+
+### The template
+
 ```markdown
 ## QA handoff
 
 Test on <the team's test environment, in plain words — never localhost or a port>, signed in as <a role, in plain words: "a clinic admin">.
 
-### 1–2. <Acceptance criteria in user terms, grouped when one walk-through covers them>
+### <What the user does, in their words: "Upload a new version of a form">
 **Steps:** 1. Open Administration → Forms. 2. On the "Mouth-first triage" row, click "Upload JSON" and pick a template file. 3. Confirm. 4. Upload again.
-**Expected:** the row shows the new version and today's date and a "Published" message appears (1); the second upload asks before overwriting (2).
+**Expected:** the row shows the new version and today's date, and a "Published" message appears. The second upload asks before replacing the first.
 
 ![Uploading a template and the overwrite confirmation](https://uploads.linear.app/…)
 
-### 3. <a criterion that is about how something looks>
+### <What the user sees: "The published form in the list">
 **Steps:** …
 **Expected:** …
 
@@ -99,39 +158,14 @@ Test on <the team's test environment, in plain words — never localhost or a po
 <PR link>
 ```
 
-### Who tests it — a non-developer
-
-The reader is a designer, PM or QA tester: someone who knows the product well
-but has never seen the code and has no developer tools. Every step must be
-something they can do in the product's own screens, and every expected result
-something they can see there.
-
-- **Only ask for what that person can do.** Click, type, upload, switch user or
-  role, resize the window, open the app on a phone, wait, reload. Never ask them
-  to open developer tools, the console or network tab, read logs, query a
-  database, call an API, run a command, change a feature flag or setting they
-  cannot reach in the product, edit a URL by hand, or fake a slow network or a
-  server error.
-- **Only ask them to judge what they can see.** Text, layout, what appears or
-  disappears, what is saved after a reload, who can and cannot see something.
-  Never status codes, response times, request payloads, stored values, emitted
-  events, or "no errors in the console".
-- **Leave out what they cannot test.** A criterion with no visible effect
-  (performance, a migration, logging, analytics, a race condition, an internal
-  refactor, error handling that needs a broken server) is not a QA step. It was
-  verified by the developers and lives in the PR's `## Verification`; the
-  handoff drops it without comment. If nothing in the change is testable this
-  way, the handoff is one short paragraph saying there is nothing for QA to
-  test and why, in plain words.
-- **Hard-to-reach states.** A state they can reach through the product ("a form
-  with no versions yet": create a new form) gets those steps. A state they
-  cannot reach (an expired payment card, a failed upload) is only a QA step
-  when the test environment already contains it: name the seeded user or record
-  that shows it. Otherwise leave it out.
+One heading per walk-through, named by what the user does or sees — never by a
+criterion number, a component or a ticket id. Several criteria one walk-through
+covers share one heading.
 
 ### Acceptance criteria — whose, and in what words
 
-1. The ticket's own `- [ ]` criteria, **verbatim**, when they are user-facing.
+1. The ticket's own `- [ ]` criteria, **verbatim**, when a non-technical person
+   would understand them as written.
 2. A criterion written in technical terms (schema, endpoint, component) is
    **rewritten** as what the user experiences; the original wording is not shown.
    If there is nothing the user experiences, it is left out (see above).
@@ -139,7 +173,7 @@ something they can see there.
    (or, for a feature ticket, from the PRD ticket's User Stories — one criterion
    per story the stack delivered). They live **inside** the handoff; never post a
    separate `## Acceptance criteria` comment.
-4. Cover every user-testable criterion, including ones that failed. A failed one
+4. Cover every testable criterion, including ones that failed. A failed one
    gets a line under **Not working yet**, in user terms. Omitting a failure is a
    false claim. A failed criterion that users cannot see belongs in the PR
    body's `## Notes`, not the handoff.
@@ -148,24 +182,49 @@ something they can see there.
 
 Write the way a PM writes a ticket, not the way a developer writes a commit.
 
-- No file paths, commands, component names, branch or PR jargon, model or
-  reviewer names, `CR-NNN` ids, PASS/FAIL columns, test counts, sha's, or
-  "captured against…" method paragraphs.
-- No developer vocabulary: not "endpoint", "API", "payload", "request", "cache",
-  "state", "render", "mount", "hydrate", "null", "undefined", "flag", "env",
-  "migration", "schema", "query", "props". Use the words someone sees on
-  screen: "message", "list", "button", "page", "saved".
+- No file paths, URLs other than the PR link, commands, component names, branch
+  or PR jargon, model or reviewer names, `CR-NNN` ids, PASS/FAIL columns, test
+  counts, sha's, or "captured against…" method paragraphs.
+- No developer vocabulary: not "endpoint", "API", "backend", "frontend",
+  "payload", "request", "response", "cache", "state", "render", "mount",
+  "hydrate", "null", "undefined", "flag", "feature flag", "env", "migration",
+  "schema", "query", "props", "seed", "route", "regression".
+  Use the words someone sees on screen: "message", "list", "button", "page",
+  "window", "saved".
 - Buttons, menus and fields are named exactly as the screen labels them, in
   quotes ("Upload JSON"). When the label is technical, that is still its name.
-- Navigation by what the screen shows ("Administration → Forms"), not by route;
-  a route may follow in parentheses if the app exposes it.
-- Roles and data by what QA sees in the test environment ("the seeded clinic
-  admin"), never credentials.
+- Navigation by what the screen shows ("Administration → Forms"), never by a
+  route or a URL path.
+- Roles and data by what QA sees in the test environment ("the clinic admin
+  test user"), never credentials or ids.
 - Expected results as observable outcomes ("a Published message appears"), not
   implementation ("the cache is invalidated").
-- **Read it back as the tester before posting.** Would a designer who has never
-  opened the codebase understand every word and be able to do every step
-  without asking a developer? If not, rewrite or remove that step.
+
+### Read it back through a non-technical reader
+
+Your own read-back is not enough — you wrote the code, and your vocabulary
+leaks. Before posting (or staging) the handoff, spawn **one** fresh
+`magnus:cold-reader` (any fresh agent with no repo context when that agent
+type is unavailable) and give it **only** the draft comment text, with this
+prompt:
+
+```text
+You are a product designer. You know the product's screens well, but you have
+never seen its code, you have no developer tools, and technical words mean
+nothing to you. Below is a test request someone left for you. Do not read any
+files.
+
+List, one per line:
+WORD: <any word or phrase you would not understand>
+STEP: <any step you could not do with only the product's own screens, and why>
+RESULT: <any expected result you could not see for yourself on screen>
+Write "none" under a heading with nothing to report.
+
+<draft comment>
+```
+
+Rewrite or delete every line it reports, then post. One read, no loop — if a
+step still needs explaining after the rewrite, it is not a QA step: drop it.
 
 ### Evidence — inline, visual, as few artifacts as prove it
 
@@ -201,7 +260,8 @@ are failures of this rule.
 
 Assumptions, HITL decisions, routing disclosures, leanness concerns, the
 reviewer roster, verdicts, provenance, the review ledger, consolidation
-follow-ups, verification tables, capture methodology, sandbox caveats. None of
+follow-ups, verification tables, capture methodology, sandbox caveats, and any
+request to check something the automated tests already prove. None of
 it reaches the tracker in any form. What a human must act on goes in the PR
 body's `## Notes` (`pr-evidence.md`); the rest stays in `.context/<run-id>/`
 and the terminal report.
