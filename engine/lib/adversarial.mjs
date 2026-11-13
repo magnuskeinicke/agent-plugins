@@ -59,12 +59,14 @@ export function prepareInvocation({ runner, host, provider, model, mergeBase, re
   writeFileSync(requirementsFile, requirements, { mode: 0o600, flag: 'wx' });
   const resultFile = join(runDir, 'result.json');
   const statusFile = join(runDir, 'status');
+  const errorFile = join(runDir, 'runner.stderr');
   const argv = ['--host-provider', host, '--provider', provider, '--merge-base', mergeBase,
     ...(model ? ['--model', model] : []),
     '--requirements-file', requirementsFile, '--consume-requirements-file'];
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
-  const command = `RUNNER_STATUS=0; ${q(runner)} ${argv.map(q).join(' ')} < /dev/null > ${q(resultFile)} || RUNNER_STATUS=$?; printf '%s\\n' "$RUNNER_STATUS" > ${q(statusFile)}`;
-  return { runDir, requirementsFile, resultFile, statusFile, runner, argv, command };
+  // The runner reports failures on stderr; keep them so a blocked Gate 5 says why.
+  const command = `RUNNER_STATUS=0; ${q(runner)} ${argv.map(q).join(' ')} < /dev/null > ${q(resultFile)} 2> ${q(errorFile)} || RUNNER_STATUS=$?; printf '%s\\n' "$RUNNER_STATUS" > ${q(statusFile)}`;
+  return { runDir, requirementsFile, resultFile, statusFile, errorFile, runner, argv, command };
 }
 
 // Validate the runner's normalized result against the identities captured when
@@ -152,12 +154,12 @@ export function disputeDemoted(ledger, validated, verdicts = []) {
   return disputed;
 }
 
-export function readResultFiles(resultFile, statusFile) {
+export function readResultFiles(resultFile, statusFile, errorFile) {
   let status;
   try { status = readFileSync(statusFile, 'utf8').trim(); } catch { return { error: 'status file missing — a host stop or timeout; the review is blocked' }; }
   if (status !== '0') {
-    let output = '';
-    try { output = readFileSync(resultFile, 'utf8').slice(0, 4000); } catch {}
+    const tail = (f) => { try { return f ? readFileSync(f, 'utf8').trim().slice(-4000) : ''; } catch { return ''; } };
+    const output = tail(errorFile) || tail(resultFile);
     return { error: `runner exited ${status}${output ? `: ${output}` : ''}` };
   }
   try { return { result: JSON.parse(readFileSync(resultFile, 'utf8')) }; } catch (e) { return { error: `result is not JSON: ${e.message}` }; }

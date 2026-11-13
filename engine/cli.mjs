@@ -920,7 +920,7 @@ function adversarialSummary(state) {
   if (!adv.enabled) return { enabled: false, reason: adv.reason };
   return { enabled: true, host: adv.host, provider: adv.provider, cycles: adv.cycles, maxCycles: adv.maxCycles,
     attested: adv.attested, blockedReason: adv.blockedReason, advisory: adv.advisory || [],
-    runs: adv.runs.map(({ round, head, ok, errors, executionMode }) => ({ round, head, ok, errors, executionMode })) };
+    runs: adv.runs.map(({ afterRound, round, head, ok, errors, executionMode }) => ({ afterRound, round, head, ok, errors, executionMode })) };
 }
 
 function cmdReport(args) {
@@ -1077,7 +1077,8 @@ function emitGate5(args, state) {
     requirements: existsSync(contractFile) ? readFileSync(contractFile, 'utf8') : '',
   });
   adv.pending = { head: live.head, tree: live.tree, branch: live.branch, mergeBase,
-    runDir: inv.runDir, requirementsFile: inv.requirementsFile, resultFile: inv.resultFile, statusFile: inv.statusFile };
+    runDir: inv.runDir, requirementsFile: inv.requirementsFile, resultFile: inv.resultFile, statusFile: inv.statusFile,
+    errorFile: inv.errorFile };
   adv.blockedReason = null;
   adv.lastLoopTree = live.tree;
   state.phase = 'adversarial';
@@ -1100,7 +1101,7 @@ function emitGate5(args, state) {
 }
 
 function cleanupGate5(pending) {
-  for (const f of [pending.requirementsFile, pending.resultFile, pending.statusFile]) {
+  for (const f of [pending.requirementsFile, pending.resultFile, pending.statusFile, pending.errorFile].filter(Boolean)) {
     try { if (existsSync(f) && statSync(f).isFile()) rmSync(f); } catch {}
   }
   try { rmdirSync(pending.runDir); } catch {}
@@ -1120,7 +1121,7 @@ function cmdAdversarial(args) {
   }
   if (state.phase !== 'adversarial') die(`phase is "${state.phase}", expected "adversarial"`);
   const pending = adv.pending;
-  const { result, error } = readResultFiles(pending.resultFile, pending.statusFile);
+  const { result, error } = readResultFiles(pending.resultFile, pending.statusFile, pending.errorFile);
   const live = gitLive();
   const errors = error ? [error] : checkResult(result, { host: adv.host, provider: adv.provider, ...pending }, live);
   const nextRound = state.round + 1;
@@ -1129,8 +1130,8 @@ function cmdAdversarial(args) {
   if (result) writeFileSync(join(roundDir, 'adversarial-result.json'), JSON.stringify(result, null, 2) + '\n');
   cleanupGate5(pending);
   adv.pending = null;
-  adv.runs.push({ round: nextRound, head: pending.head, tree: pending.tree, ok: !errors.length, errors,
-    executionMode: result?.execution_mode ?? null });
+  adv.runs.push({ afterRound: state.round, ...(errors.length ? {} : { round: nextRound }), head: pending.head,
+    tree: pending.tree, ok: !errors.length, errors, executionMode: result?.execution_mode ?? null });
   if (errors.length) {
     adv.blockedReason = errors.join('; ');
     state.phase = 'adversarial-blocked';
@@ -1305,6 +1306,11 @@ const COMMANDS = {
 };
 
 const [, , cmd, ...rest] = process.argv;
+if (!cmd || cmd === '--help' || cmd === 'help') {
+  out({ commands: Object.keys(COMMANDS),
+    reference: `${join(PLUGIN_ROOT, 'CONTRACT.md')} (## The engine CLI) and ${join(PLUGIN_ROOT, 'skills', 'work-slice', 'SKILL.md')} (Step 3.3: plan flags)` });
+  process.exit(0);
+}
 const handler = COMMANDS[cmd];
 if (!handler)
   die(`unknown command "${cmd || ''}" — one of: ${Object.keys(COMMANDS).join(', ')}`);

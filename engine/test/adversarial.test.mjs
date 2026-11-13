@@ -163,9 +163,13 @@ test('a failed runner (non-zero status) blocks Gate 5 with its error', () => {
   run('init', '--base', 'main', '--host', 'codex');
   const g = cleanRound(run);
   assert.equal(g.provider, 'claude', 'a Codex host is reviewed by Claude');
-  writeFileSync(g.resultFile, 'Claude CLI is unavailable');
+  assert.match(g.command, /2> '[^']+runner\.stderr'/, 'the runner\'s stderr is kept');
+  writeFileSync(g.resultFile, '');
+  writeFileSync(/2> '([^']+)'/.exec(g.command)[1], 'run-adversarial-review.sh: Claude CLI is unavailable\n');
   writeFileSync(g.statusFile, '1\n');
-  assert.match(run('adversarial').verdict, /runner exited 1: Claude CLI is unavailable/);
+  assert.match(run('adversarial').verdict, /runner exited 1: run-adversarial-review\.sh: Claude CLI is unavailable/);
+  const runs = run('report').adversarial.runs;
+  assert.deepEqual(runs.map(({ afterRound, round, ok }) => ({ afterRound, round, ok })), [{ afterRound: 1, round: undefined, ok: false }]);
 });
 
 test('a demoted critical/important provider finding becomes a disagreement for the adjudicator', () => {
