@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.16.1 — 2026-11-13
+
+### Fixed
+
+- **Local Gate 5 reviews work in repos that link skills.** The local adversarial-review runner
+  refused any tracked symlink, so every review of a repo exposing `.claude/skills` to Codex
+  through `.agents/skills/<name>` links stopped before the reviewer ran. The snapshot now
+  recreates a symlink whose target resolves inside `HEAD`'s tree as the same relative link, so
+  the reviewer can read every skill. Absolute, escaping and dangling links still block the review.
+
 ## 0.16.0 — 2026-11-13
 
 ### Added
