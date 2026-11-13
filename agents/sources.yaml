@@ -1,24 +1,27 @@
 sources:
   - id: kramme-cc-workflow-agents
-    url: https://github.com/Abildtoft/kramme-cc-workflow/tree/main/kramme-cc-workflow/agents
-    title: "kramme-cc-workflow — reviewer agent definitions"
+    url: https://github.com/Abildtoft/kramme-cc-workflow/tree/main/trackbed/agents
+    title: "trackbed (formerly kramme-cc-workflow) — reviewer agent definitions"
     rationale: >
-      All 20 agent definition files in this directory are vendored from
-      kramme-cc-workflow (MIT, Copyright (c) 2026 Abildtoft). Filenames and
-      frontmatter `name:` fields drop the `kramme:` prefix so they surface
-      under this plugin's namespace; bodies are otherwise verbatim, except
+      All 21 agent definition files in this directory are vendored from
+      trackbed, the renamed kramme-cc-workflow (MIT, Copyright (c) 2026
+      Abildtoft). Filenames and frontmatter `name:` fields drop the namespace
+      prefix so they surface under this plugin's namespace, and `model:
+      inherit` is pinned to `model: opus` + `effort: high` (the engine
+      `reviewer` role). Bodies are otherwise verbatim, except
       codebase-pattern-reviewer.md, which adds a magnus-only "diff reuse audit
-      mode" section, and comment-analyzer.md, which adds a magnus-only
-      "Prefer a Better Name Over a Comment" check plus a blocking-severity
-      rule (both marked inline). One file serves both runtimes: Claude
-      spawns it as a subagent definition, Codex uses its body as the
-      `codex exec` child's system prompt. The engine's roster mapping lives in
-      engine/lib/roster.mjs.
+      mode" section (and a description clause naming it), and
+      comment-analyzer.md, which adds a magnus-only "Prefer a Better Name Over
+      a Comment" check plus a blocking-severity rule (both marked inline).
+      cold-reader.md is new in this refresh and is not yet used by any skill.
+      One file serves both runtimes: Claude spawns it as a subagent
+      definition, Codex uses its body as the `codex exec` child's system
+      prompt. The engine's roster mapping lives in engine/lib/roster.mjs.
     usage: vendored
-    vendored_ref: f493eee798fdcc8aedff6dd4ed894671f16d642b
-    vendored_version: "0.88.0"
+    vendored_ref: 5b9cb7d53bf88336c14cf958ccbf2f6d88ead67a
+    vendored_version: "1.0.1"
     license: MIT
-    last_reviewed_at: 2026-10-20
+    last_reviewed_at: 2026-11-13
   - id: kramme-copy-review-rubric
     url: https://github.com/Abildtoft/kramme-cc-workflow/blob/f493eee798fdcc8aedff6dd4ed894671f16d642b/kramme-cc-workflow/skills/kramme%3Acode%3Acopy-review/references/copy-review-rubric.md
     title: "kramme-cc-workflow — copy review rubric"
@@ -41,7 +44,8 @@ sources:
       skills/pr-code-review (kramme:pr:code-review),
       skills/pr-product-review (kramme:pr:product-review), skills/humanize
       (kramme:text:humanize) and skills/adversarial-review
-      (kramme:pr:adversarial-review), plus the files they load from the plugin root:
+      (kramme:pr:adversarial-review — refreshed separately, see the
+      trackbed-adversarial-review entry), plus the files they load from the plugin root:
       scripts/{collect-review-diff,resolve-base,review-tree-fingerprint,verify-rewrite-state}.sh,
       scripts/lib/, scripts/dev-server/, hooks/confirm-review-artifacts.txt,
       shared/pr-review/references/model-selection.md and
@@ -71,3 +75,29 @@ sources:
     vendored_version: "0.88.0"
     license: MIT
     last_reviewed_at: 2026-10-20
+  - id: trackbed-adversarial-review
+    url: https://github.com/Abildtoft/kramme-cc-workflow/tree/5b9cb7d53bf88336c14cf958ccbf2f6d88ead67a/trackbed/skills/pr%3Aadversarial-review
+    title: "trackbed — pr:adversarial-review (Gate 5 of pr:review-convergence)"
+    rationale: >
+      skills/adversarial-review (SKILL.md, scripts/run-adversarial-review.sh,
+      references/sources.yaml) refreshed from trackbed 1.0.1 so the engine's
+      Gate 5 runs upstream's hardened runner: restricted PATH, per-run prompt
+      region tokens, Codex isolation overrides, and the Conductor cloud
+      session mode. Magnus edits, marked inline: the Model Invocation Contract
+      names the engine convergence loop and the repo's `adversarial.enabled`
+      config as the standing opt-in (upstream: the user's
+      `--adversarial-review` flag); the runner takes model and effort from
+      the engine `reviewer` role and passes the effort to every provider; the
+      result schema keeps this plugin's dropped findings `allOf` (OpenAI
+      strict output rejects it). The convergence policy itself
+      (trackbed skills/pr:review-convergence, Gate 5 rules: run after a
+      converged pass, attest the final tree, revalidate untrusted findings,
+      disagreements decided outside the fixer, fail closed) is ported into
+      engine/lib/adversarial.mjs and engine/cli.mjs rather than vendored;
+      upstream's user decision on a disagreement becomes the engine
+      adjudicator, because this pipeline has no human gate after the grill.
+    usage: vendored
+    vendored_ref: 5b9cb7d53bf88336c14cf958ccbf2f6d88ead67a
+    vendored_version: "1.0.1"
+    license: MIT
+    last_reviewed_at: 2026-11-13

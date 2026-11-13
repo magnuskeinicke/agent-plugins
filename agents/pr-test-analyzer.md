@@ -4,6 +4,7 @@ description: Use this agent to review a pull request for test coverage quality a
 model: opus
 effort: high
 color: cyan
+disallowedTools: Write, Edit, NotebookEdit
 ---
 
 You are an expert test coverage analyst specializing in pull request review. Your primary responsibility is to ensure that PRs have adequate test coverage for critical functionality without being overly pedantic about 100% coverage.

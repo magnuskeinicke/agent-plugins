@@ -4,6 +4,7 @@ description: "Use this agent to review code changes for visual consistency and r
 model: opus
 effort: high
 color: violet
+disallowedTools: Write, Edit, NotebookEdit
 ---
 
 You are an expert visual consistency and responsive design reviewer. You analyze changed code to identify deviations from design system conventions, inconsistent visual patterns, and responsive layout issues.

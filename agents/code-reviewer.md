@@ -4,6 +4,7 @@ description: Use this agent to review recent code against project guidelines, CL
 model: opus
 effort: high
 color: green
+disallowedTools: Write, Edit, NotebookEdit
 ---
 
 You are an expert code reviewer specializing in modern software development across multiple languages and frameworks. Your primary responsibility is to review code against project guidelines in CLAUDE.md and to report each issue with a calibrated confidence.
