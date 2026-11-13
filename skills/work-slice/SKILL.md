@@ -197,9 +197,11 @@ Extract the provenance array to `.context/<slice-id>/provenance.json`, then:
 
 ```bash
 # gate values from implement-result.json; --commit-type/--commit-scope = the PR's type/scope
-node "$engine" init --slice <slice-id> --base <base> \
+node "$engine" init --slice <slice-id> --base <base> --host <claude|codex> \
   --tests-green <bool> --committed <bool> --commit-type <type> --commit-scope <scope>
 ```
+
+`--host` is the runtime you are running in; it picks the other provider for Gate 5 (`references/convergence.md`). `init` reports whether Gate 5 is on (`adversarial`).
 
 `resumed: true` means a prior run's state exists — run `status` and continue at the phase it names instead of restarting.
 
@@ -225,6 +227,9 @@ node "$engine" decide --slice <id> --verdicts <verdicts.json>
 # action=adjudicate → adjudicate → run ONE fresh agent with the emitted prompt (never the fix implementer)
 #                     → apply-adjudication --rulings <rulings.json>
 # action=incomplete → preserve the pending round; retry missing tasks once, then report a blocker.
+# action=adversarial-review → Gate 5 (references/convergence.md): run `command` (background, ≥60 min timeout
+#                     on Claude Code), wait for statusFile, then `adversarial` → collect → validator → decide
+# action=blocked    → Gate 5 failed closed: report it; the PR still opens, verdict in ## Notes
 # action=converged|stalled|hard-stop → report the terminal loop result:
 node "$engine" report --slice <id>
 node "$engine" followups --slice <id>   # the only follow-up ticket candidates (Step 4)
@@ -250,7 +255,7 @@ Ground rules, regardless of mechanism:
 - `--head` = the implement pass's commit on the **first** `plan` only; `apply-fix` records each fix head itself, so later `plan` calls omit it. After each `apply-fix`, update the checkpoint's `Head`, and recompute the next `plan`'s file flags from the **fix range** (`<prevHead>..<newHead>`) with the whole-slice provenance from the fix result.
 - Never hand-edit `.context/<slice-id>/ledger.json` or a findings file — findings enter through reviewer output files, decisions exit through the CLI.
 
-The stop conditions live in the CLI (convergence, two-round stall, per-fingerprint deferral, hard cap 5 rounds — a safety boundary, not a target). A non-converged stop reports `stalled — shipped with N open findings (CR-…)`, never a silently exhausted cap.
+The stop conditions live in the CLI (convergence, two-round stall, per-fingerprint deferral, hard cap 5 rounds — a safety boundary, not a target — plus Gate 5: convergence requires the other provider's review of the final tree, and its fixes are capped at 3 cycles). A non-converged stop reports `stalled — shipped with N open findings (CR-…)`, never a silently exhausted cap.
 
 ### 3.4 Read out the result
 

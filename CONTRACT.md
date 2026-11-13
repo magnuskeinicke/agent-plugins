@@ -339,6 +339,24 @@ Areas: `frontend`, `backend`, `database`, `i18n`, `security`, `performance`.
 `performance` has no path triggers (it is force-added whenever `frontend`
 triggers); `security` is force-added whenever `backend` triggers.
 
+### `adversarial` — Gate 5, the different-provider review
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `adversarial.enabled` | boolean | `true` | run Gate 5 in every fix loop; the repo's standing consent to send the committed `HEAD` snapshot, diff and run contract to the other provider. `false` → the engine never sends anything |
+| `adversarial.provider` | `'claude' \| 'codex' \| ''` | `''` → the opposite of the host runtime | who reviews; must differ from the host |
+| `adversarial.model` | string | `''` → the engine `reviewer` role for that provider (Codex `gpt-6.1-sol` / Claude `opus`, high) | review model |
+| `adversarial.maxCycles` | integer 1..5 | `3` | fix cycles Gate 5 may cause before the loop stalls |
+
+Gate 5 is trackbed's (formerly kramme-cc-workflow) `pr:review-convergence`
+Gate 5, run through the vendored `skills/adversarial-review` runner verbatim:
+locally the other provider's CLI on a read-only `HEAD` snapshot, in a Conductor
+cloud workspace a new session with the other provider in the current workspace.
+It runs after the roster rounds converge and again after every fix it causes;
+the loop converges only when it has attested the final tree. Review-only runs
+skip it unless `--adversarial` is passed. Orchestration:
+[`skills/work-slice/references/convergence.md`](skills/work-slice/references/convergence.md).
+
 ### Exemplars
 
 | Key | Type | Default | Meaning |
@@ -358,10 +376,28 @@ the JSON it prints.
 
 ```
 init → plan → (run pre-pass + reviewers) → collect → (run validator)
-     → decide → [fix → apply-fix → plan …] → adjudicate? → report
+     → decide → [fix → apply-fix → plan …] → adjudicate?
+     → Gate 5: (run the adversarial runner) → adversarial → collect → (run validator)
+     → decide → [fix → apply-fix → plan … → Gate 5 again] → report
 ```
 
-`init` takes three loop-shaping options: `--review-only` (one classified
+`init --host claude|codex` names the runtime the loop runs in; Gate 5 reviews
+with the other one (`adversarial.*` above). `decide`, `adjudicate` and
+`apply-adjudication` print `action: adversarial-review` instead of a converged
+verdict while Gate 5 owes the current `HEAD^{tree}`: the orchestrator runs the
+emitted `command` (background, ≥ 60 minutes on Claude Code), then
+`adversarial`, which checks provider identity, the reviewed `HEAD`/tree,
+coverage and a clean unchanged worktree, and turns critical/important findings
+into an ordinary validated round. A failed check is `action: blocked` with a
+`blocked — adversarial review (Gate 5): …` verdict — fail closed, never a
+same-provider substitute; `adversarial --retry` re-emits it once on a later
+invocation. A finding the validator rejects or demotes for any reason but
+"pre-existing" becomes `disputed` for the adjudicator. `report` returns the
+Gate 5 summary and `independentReview`, the PR body's Independent Review Record
+line.
+
+`init` takes these loop-shaping options — `--host`, `--adversarial` /
+`--no-adversarial` (Gate 5, above), and: `--review-only` (one classified
 round, no fix pass — `decide` ends the run with a `clean` / `N blocking
 finding(s)` verdict; magnus:review-code), `--max-rounds <1..5>` (a
 user-supplied cap under the hard cap; magnus:iterate-pr), and
