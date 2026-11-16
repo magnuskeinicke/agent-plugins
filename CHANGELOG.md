@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.20.0 — 2026-11-16
+
+### Added
+
+- **`/qa-or-release` routes a finished issue to QA or Ready to be released.** It moves the issue to
+  QA when the issue (its description or its `## QA handoff` comment) has clear steps a designer or
+  PM can follow in the product's own screens to check the acceptance criteria. Otherwise, including
+  a `No QA needed` handoff, it moves the issue to Ready to be released. One fresh
+  `magnus:cold-reader` per issue judges the steps as a non-technical tester, using only the issue's
+  text. The skill writes the status only, never a comment. It skips issues that are not started,
+  already closed or generated (PRD and slice tickets). It flags a visible change that had no usable
+  steps. With no id it takes the issue the current branch's PR links. `dry-run` previews.
+  `/work-issue` and `/feature-goal` never call it: their PRs are still drafts awaiting human review
+  when they hand off. They keep moving the human ticket to Dev technical review.
+- **`tracker.statuses.qa` and `tracker.statuses.readyForRelease`** name those two statuses. When
+  empty, the skill looks for the team's one status named `QA` and one named like
+  `Ready to be released`. It stops when it finds none or several.
+
 ## 0.19.0 — 2026-11-16
 
 ### Fixed

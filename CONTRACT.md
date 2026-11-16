@@ -62,7 +62,7 @@ config) and **names which it used** rather than guessing silently.
 | `tracker.team` / `tracker.teamId` | string | `''` | team scope for tracker queries |
 | `tracker.issuePrefix` | string | `''` | issue-id prefix (`SER` → `SER-1234`); also the PR-title prefix |
 | `tracker.docPath` | string | `docs/agents/issue-tracker.md` | prose rules |
-| `tracker.statuses` | `{readyForDev, inProgress, inReview, done}` | all `''` → discover from tracker | workflow status names: `inProgress` = Dev in progress, `inReview` = Dev technical review for the human parent, `done` = Done for generated internal descendants |
+| `tracker.statuses` | `{readyForDev, inProgress, inReview, done, qa, readyForRelease}` | all `''` → discover from tracker | workflow status names: `inProgress` = Dev in progress, `inReview` = Dev technical review for the human parent, `done` = Done for generated internal descendants, `qa` = QA and `readyForRelease` = Ready to be released, the two targets `magnus:qa-or-release` routes a finished issue to |
 
 ### `labels`
 
