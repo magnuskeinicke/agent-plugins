@@ -1134,6 +1134,13 @@ function cmdAdversarial(args) {
   const roundDir = join(runDir(args), `round-${nextRound}`);
   mkdirSync(join(roundDir, 'findings'), { recursive: true });
   if (result) writeFileSync(join(roundDir, 'adversarial-result.json'), JSON.stringify(result, null, 2) + '\n');
+  // A blocked Gate 5 leaves its outcome on disk too: the runner's error output
+  // lives in the temp dir that cleanup removes, so it is kept here.
+  const blockedFile = join(roundDir, 'adversarial-blocked.json');
+  if (errors.length) writeFileSync(blockedFile, JSON.stringify({
+    errors, head: pending.head, tree: pending.tree, provider: adv.provider, at: new Date().toISOString(),
+  }, null, 2) + '\n');
+  else rmSync(blockedFile, { force: true });
   cleanupGate5(pending);
   adv.pending = null;
   adv.runs.push({ afterRound: state.round, ...(errors.length ? {} : { round: nextRound }), head: pending.head,

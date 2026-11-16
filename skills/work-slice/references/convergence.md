@@ -96,6 +96,12 @@ coverage all print `action=blocked` with a `blocked — adversarial review
 
 ## Evidence
 
+Like the roster rounds' `findings/<reviewer>.json`, every Gate 5 run leaves
+its outcome in the run directory: `.context/<slice>/round-<N>/adversarial-result.json`
+(the provider's normalized result) plus `findings/adversarial-review.json` when
+it passed, or `round-<N>/adversarial-blocked.json` (the errors, including the
+runner's stderr) when it was blocked.
+
 `report` returns `independentReview` — upstream's Independent Review Record:
 
 ```text

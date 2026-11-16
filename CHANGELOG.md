@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.19.0 — 2026-11-16
+
+### Fixed
+
+- **Cloud adversarial review reads the result from a file, not only the transcript.** The Codex
+  reviewer session in the current workspace now writes its JSON result to a gitignored handoff
+  file, `.context/adversarial-review/result-<token>.json`, and the runner reads that first. The
+  transcript stays the fallback and now accepts a reply wrapped in a ```json fence. When `.context`
+  is not gitignored, the runner asks for no file and uses the transcript.
+- **A failed reviewer turn names its cause.** An expired Codex login in the cloud used to end as
+  "Conductor completed without an assistant review result". The runner now reports
+  `the codex reviewer session failed: <provider error>`.
+- **The skill says who runs the review.** The host runs the runner itself, and only the runner
+  starts the reviewer: a session with the *other* provider's agent in the current workspace. Hosts
+  had started a Claude session to "hand the review to Codex", hand-written their own
+  `conductor session create` and told the user to run the skill. All of that is now ruled out in
+  the skill, and asking for "a Codex review" counts as an explicit request. (The "cannot be used
+  with Skill tool" refusal came from 0.15.1, where the skill still had
+  `disable-model-invocation: true`; 0.16.0 already lifted it.)
+
+### Added
+
+- **Gate 5 outcomes are kept on disk, like the roster rounds' findings files.** A blocked Gate 5
+  writes `.context/<slice>/round-<N>/adversarial-blocked.json` with its errors and the runner's
+  stderr. A passing one already wrote `adversarial-result.json`. A passing retry removes the stale
+  blocked file. The standalone `/adversarial-review` writes its report to
+  `.context/adversarial-review/<HEAD>.md`.
+
 ## 0.18.0 — 2026-11-13
 
 ### Changed
