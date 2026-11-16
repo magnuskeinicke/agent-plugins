@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.22.0 — 2026-11-16
+
+### Changed
+
+- **`/qa-or-release` sends an issue back to QA when QA sent it back.** It reads the issue's status
+  history and comments. When the issue was in QA before the in-scope PRs were opened, and then
+  went back to development or got a comment (other than a `## QA handoff`), the PRs answer QA's
+  feedback. The issue goes to QA again, with no cold reader, even when it has no usable steps,
+  says `No QA needed`, or already sits in Ready to be released. A QA round that ended cleanly
+  (QA → Ready to be released, no comments) does not count. The PR query now reads `createdAt`.
+
 ## 0.21.0 — 2026-11-16
 
 ### Changed
