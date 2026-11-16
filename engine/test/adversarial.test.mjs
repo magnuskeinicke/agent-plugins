@@ -143,11 +143,13 @@ test('Gate 5 runs after convergence, its finding is fixed, and it re-attests the
 });
 
 test('a result that does not attest the prepared tree blocks Gate 5 and never converges', () => {
-  const { run, git } = makeRepo();
+  const { run, git, dir } = makeRepo();
   run('init', '--base', 'main', '--host', 'claude');
   const g = cleanRound(run);
   writeRunner(g, providerResult(g, git, [], { reviewed_head: 'f'.repeat(40) }));
   const blocked = run('adversarial');
+  const blockedFile = join(dir, '.context', 'PROJ-1', 'round-2', 'adversarial-blocked.json');
+  assert.ok(existsSync(blockedFile));
   assert.equal(blocked.action, 'blocked');
   assert.match(blocked.verdict, /^blocked — adversarial review \(Gate 5\): reviewed_head/);
   assert.equal(run('report').independentReview, null);
@@ -156,10 +158,16 @@ test('a result that does not attest the prepared tree blocks Gate 5 and never co
   assert.equal(retry.action, 'adversarial-review');
   writeRunner(retry, providerResult(retry, git, [], { review_provider: 'claude' }));
   assert.match(run('adversarial').verdict, /review_provider "claude" != "codex"/);
+
+  const passing = run('adversarial', '--retry');
+  writeRunner(passing, providerResult(passing, git, []));
+  assert.equal(run('adversarial').action, 'collect');
+  assert.ok(existsSync(join(dir, '.context', 'PROJ-1', 'round-2', 'adversarial-result.json')));
+  assert.ok(!existsSync(blockedFile), 'a passing retry clears the stale blocked outcome');
 });
 
 test('a failed runner (non-zero status) blocks Gate 5 with its error', () => {
-  const { run } = makeRepo();
+  const { run, dir } = makeRepo();
   run('init', '--base', 'main', '--host', 'codex');
   const g = cleanRound(run);
   assert.equal(g.provider, 'claude', 'a Codex host is reviewed by Claude');
@@ -168,6 +176,8 @@ test('a failed runner (non-zero status) blocks Gate 5 with its error', () => {
   writeFileSync(/2> '([^']+)'/.exec(g.command)[1], 'run-adversarial-review.sh: Claude CLI is unavailable\n');
   writeFileSync(g.statusFile, '1\n');
   assert.match(run('adversarial').verdict, /runner exited 1: run-adversarial-review\.sh: Claude CLI is unavailable/);
+  const blockedFile = join(dir, '.context', 'PROJ-1', 'round-2', 'adversarial-blocked.json');
+  assert.match(JSON.parse(readFileSync(blockedFile, 'utf8')).errors[0], /Claude CLI is unavailable/, 'the blocked outcome is kept on disk');
   const runs = run('report').adversarial.runs;
   assert.deepEqual(runs.map(({ afterRound, round, ok }) => ({ afterRound, round, ok })), [{ afterRound: 1, round: undefined, ok: false }]);
 });
