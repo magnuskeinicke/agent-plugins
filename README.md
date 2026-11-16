@@ -169,7 +169,7 @@ Standalone entry points onto the same machinery:
 | `/magnus:iterate-pr <n>` | bounded review ⇄ fix rounds on an existing PR |
 | `/magnus:github-review [<n>]` | review someone else's PR as the requested reviewer: code + product + Linear-requirement passes, a local report, then (on your OK or `--draft-review`) one **unsubmitted pending** GitHub review; `--adversarial` adds a cross-provider pass (Codex from Claude, Claude from Codex) |
 | `/magnus:babysit-stack` | babysit a PR or stack to GOAL MET: CI, Copilot rounds, CodeRabbit rounds, threads |
-| `/magnus:qa-or-release [dry-run]` | finish the checked-out PR or its stack once every PR is merged or in the merge queue: route the linked issue to **QA** when it has clear steps a designer or PM can follow in the product's screens (a cold reader judges), else **Ready to be released**, and delete merged PRs' remote branches |
+| `/magnus:qa-or-release [dry-run]` | finish the checked-out PR or its stack once every PR is merged or in the merge queue: route the linked issue back to **QA** when QA sent it back before these PRs, else to **QA** when it has clear steps a designer or PM can follow in the product's screens (a cold reader judges), else **Ready to be released**, and delete merged PRs' remote branches |
 | `/magnus:wayfinder <seed \| project:<name> \| map>` | chart, or work one ticket of, a tracker-native decision map for an initiative too big for one grill |
 
 `/work-issue`, `/review-code`, `/iterate-pr`, and `/babysit-stack` run wherever
