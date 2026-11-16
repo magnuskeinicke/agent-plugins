@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.21.0 — 2026-11-16
+
+### Changed
+
+- **`/qa-or-release` works on the checked-out PR, not on issue ids.** It takes the PR of the
+  current branch, or every PR of its stack (`gh stack view --json`, else the PRs' base chain), and
+  routes the human issues those PRs link. It takes no ids; `dry-run` stays.
+- **It routes an issue only after its PRs are merged or in the merge queue.** It checks each PR
+  through GraphQL (`merged`, `isInMergeQueue`). An issue with a PR that is neither is skipped and
+  named in the report; the rest of the run continues.
+
+### Added
+
+- **`/qa-or-release` deletes the remote branch of each merged PR.** It keeps the branch of a
+  queued or unmerged PR, a cross-repository PR, the integration or default branch, and a branch an
+  open PR still uses as its base. A branch already gone is a no-op. A failed delete is reported
+  and never stops the run. Local branches are never deleted.
+
 ## 0.20.0 — 2026-11-16
 
 ### Added
