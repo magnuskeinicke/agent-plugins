@@ -29,7 +29,7 @@ export const REPO_CONFIG_DEFAULTS = {
     teamId: '',
     issuePrefix: '',
     docPath: 'docs/agents/issue-tracker.md',
-    statuses: { readyForDev: '', inProgress: '', inReview: '', done: '' },
+    statuses: { readyForDev: '', inProgress: '', inReview: '', done: '', qa: '', readyForRelease: '' },
   },
   // Managed label names. '' → the skill skips that piece of machinery.
   labels: {

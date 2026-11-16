@@ -25,7 +25,7 @@ export const ROLE_MODELS = {
 export const SKILL_ROLES = {
   'feature-goal': 'planner', 'work-issue': 'implementer', 'work-slice': 'implementer',
   'iterate-pr': 'fixer', 'babysit-stack': 'babysitter', 'solve-ready-tickets': 'dispatcher',
-  'daily-ticket-manager': 'triage', 'grill-with-docs': 'planner', 'to-prd': 'planner',
+  'daily-ticket-manager': 'triage', 'qa-or-release': 'triage', 'grill-with-docs': 'planner', 'to-prd': 'planner',
   'to-issues': 'planner', 'improve-codebase-architecture': 'planner', 'review-code': 'reviewer',
   'gut-check': 'reviewer', 'split-pr': 'planner', 'init-repo': 'planner', 'wayfinder': 'planner',
   'gh-stack': 'inherit', 'conductor-workspace': 'inherit', 'verify-before-done': 'inherit',
