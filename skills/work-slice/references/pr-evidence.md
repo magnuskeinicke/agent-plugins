@@ -69,7 +69,10 @@ The order is fixed, in every flow:
 4. **the capture stage** (below) runs on the finished branch: one Playwright
    capture run → publish to `<MEDIA-BRANCH>` → **one** body edit inserting
    `## Visual verification`;
-5. the ticket's `## QA handoff` is composed from those same files.
+5. the ticket's `## QA handoff` is composed from those same files — its test
+   plan drafted first and walked by us in the running app before QA sees it
+   (`qa-handoff.md` → *Walk it yourself*). For `/work-issue` that walk **is**
+   step 4's capture run.
 
 Later pushes/restacks invalidate manifests whose `sourceHead` differs. The
 caller runs this stage again after fresh GOAL MET and replaces the existing
@@ -185,7 +188,8 @@ captures anything, and it runs once per verified PR head:
    harness.
 3. Record the unused temporary spec path and its minimal Playwright config in `scratch-files.json` before creating them; author (or restore an already owned) throwaway spec under that config (no `webServer`, no e2e env files, `baseURL` = the running app; copy only the `e2eDir` dev-login pattern), dev-login
    as the seeded user the ticket's story needs, pass the real-copy check (`run-app.md` §4), drive the acceptance-criterion
-   stories once more and capture the scenes below into
+   stories once more — for `/work-issue`, the drafted QA test plan walked
+   literally (`qa-handoff.md` → *Walk it yourself*) — and capture the scenes below into
    `.context/<run-id>/evidence/media/`, plus `media.json`. Each manifest entry records `sourceHead` (the full verified PR OID). Verify the head is unchanged before publication; a changed head requires a fresh verdict and capture.
 4. Publish to `<MEDIA-BRANCH>` (below), insert `## Visual verification` into the
    body with **one** `gh pr edit`, then delete only the owned throwaway spec. Existing untracked files stay untouched.
