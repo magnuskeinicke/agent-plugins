@@ -1,6 +1,6 @@
 ---
 name: work-issue
-description: The LEAN development loop — take a single tracker issue straight to a reviewed draft PR, skipping grilling/PRD/slicing, with no human gates. Runs the same implement + bounded review-fix + Playwright workflow as /work-slice, then babysits the PR (CI, Copilot rounds, CodeRabbit rounds, thread resolution on GitHub) until it is in order, and only then captures the visual evidence — once — for the PR body and the ticket's single concise QA handoff comment. Re-entrant — run it again to resume from durable markers. Meant for lean tickets (the ticket manager's agent-ready label or the user's judgement); a non-lean ticket is worked anyway with the concern disclosed. Use when the user says "work this ticket directly", "run the lean loop on it", "just implement this ticket", "take this issue straight to a PR", or "this doesn't need the full pipeline".
+description: The LEAN development loop — take a single tracker issue straight to a reviewed draft PR, skipping grilling/PRD/slicing, with no human gates. Runs the same implement + bounded review-fix + Playwright workflow as /work-slice, then babysits the PR (CI, Copilot rounds, CodeRabbit rounds, thread resolution on GitHub) until it is in order, and only then drafts the QA test plan and walks it in the running app — that walk captures the visual evidence, once, for the PR body and the ticket's single concise QA handoff comment. Re-entrant — run it again to resume from durable markers. Meant for lean tickets (the ticket manager's agent-ready label or the user's judgement); a non-lean ticket is worked anyway with the concern disclosed. Use when the user says "work this ticket directly", "run the lean loop on it", "just implement this ticket", "take this issue straight to a PR", or "this doesn't need the full pipeline".
 argument-hint: "[issue id]"
 ---
 
@@ -14,7 +14,7 @@ config takes precedence over the checked-out branch for every setting and is
 passed to all constituent skills; a missing named snapshot blocks the run.
 
 
-Drive **one standalone tracker issue** to a **draft PR**, with the same quality machinery as the big pipeline but none of its planning stages: no grilling, no PRD, no slice split, no stack. The ticket itself is the contract. Implementation runs inside the **work-slice engine-CLI loop** (implement TDD → up to 5 review rounds → Playwright loop max 3), and a `/babysit-stack` finish stage babysits the PR — CI green, `<BOT>` rounds until satisfied, then `<COMMENT-BOT>` rounds until satisfied, every thread resolved — waiting for each bot round itself. Only once that lands is anything **captured**: one Playwright capture run fills the PR body's `## Visual verification` and the ticket's one comment, a concise, inline-illustrated `## QA handoff`, from the same files. Nothing visual exists before GOAL MET, and no proof is ever shown twice. **No human gates**: the user invoking this skill on a ticket is the decision; the only stops are safety stops (dirty worktree, no diff, gut-check hard-stop) and `needs-human` escalations babysit cannot resolve. **Run the skill again to resume.**
+Drive **one standalone tracker issue** to a **draft PR**, with the same quality machinery as the big pipeline but none of its planning stages: no grilling, no PRD, no slice split, no stack. The ticket itself is the contract. Implementation runs inside the **work-slice engine-CLI loop** (implement TDD → up to 5 review rounds → Playwright loop max 3), and a `/babysit-stack` finish stage babysits the PR — CI green, `<BOT>` rounds until satisfied, then `<COMMENT-BOT>` rounds until satisfied, every thread resolved — waiting for each bot round itself. Only once that lands is the QA test plan drafted and **walked by us, step by step, in the running app** — and that walk is the one Playwright capture run that fills the PR body's `## Visual verification` and the ticket's one comment, a concise, inline-illustrated `## QA handoff`, from the same files. Nothing visual exists before GOAL MET, and no proof is ever shown twice. **No human gates**: the user invoking this skill on a ticket is the decision; the only stops are safety stops (dirty worktree, no diff, gut-check hard-stop) and `needs-human` escalations babysit cannot resolve. **Run the skill again to resume.**
 
 When to use which:
 
@@ -86,7 +86,7 @@ There is no stop-hook: **persistence is re-invocation.** One invocation runs to 
 4. Engine terminal verdict recorded, browser verification not recorded → finish Step 3.5. A gut-check hard stop remains blocked; do not open a PR. Only a recorded converged/stalled verdict may pass to the next stage.
 5. Review and verification recorded, no PR → Steps 4–5. Never rerun a completed review merely because PR creation was interrupted.
 6. Open PR without current-head babysit GOAL MET → Step 6.
-7. Current-head babysit GOAL MET, evidence, QA handoff, PR issue links or final tracker statuses missing/stale → Step 7. Match the evidence `sourceHead` to the PR head; update stale media and the existing handoff by id. Resume only pending tracker writes when the rest is current.
+7. Current-head babysit GOAL MET, QA walk (`evidence/qa-walk.json`), evidence, QA handoff, PR issue links or final tracker statuses missing/stale → Step 7. Match the walk's and the evidence's `sourceHead` to the PR head; update stale media and the existing handoff by id. Resume only pending tracker writes when the rest is current.
 8. Current-head verdict, current evidence, handoff, PR issue mapping, parent `<IN-REVIEW>` and any owned generated descendants `<DONE>` all verified → complete.
 
 Checkpoint every boundary using work-slice’s stage names. Reality wins over the checkpoint, but a missing stage is not inferred from a later commit. A merged PR is read-only history: reuse verified evidence or name the gap; do not restart implementation on it.
@@ -126,30 +126,43 @@ Run **`/babysit-stack <PR number>`**. It is a babysitting mode, not a pass: CI g
   to **`<IN-REVIEW>`** after the handoff, while the PR remains draft.
 - **NOT MET** → nothing actionable is left (only `needs-human` threads, stuck CI, or a capped fix signature; a rate-limited or unavailable review bot is skipped and disclosed, never a blocker). Report the blockers verbatim as the stop reason and end — **capturing nothing and posting no handoff**; evidence and the handoff are owed only to a finished PR. The human resolves the blockers on the PR, then re-invokes — babysit resumes from its state file. Never re-run babysit back-to-back on the same NOT MET state.
 
-## Step 7 — Capture the evidence, then write the QA handoff
+## Step 7 — Write the QA test plan, walk it, capture, then post the handoff
 
-Only reachable on a babysit **GOAL MET** verdict. Capture, handoff, then tracker
-finalization, in that order. The capture feeds both the PR body and the ticket.
-On resume, reuse verified current evidence/handoff and run only missing steps.
+Only reachable on a babysit **GOAL MET** verdict. The order is fixed: draft the
+test plan, walk it yourself (the walk **is** the capture run), cold-read it,
+post it, finalize the tracker. QA never receives a step nobody here has
+performed (`../work-slice/references/qa-handoff.md` → *Walk it yourself*). On
+resume, reuse verified current-head work (`qa-walk.json`, media manifest, the
+posted handoff) and run only the missing steps.
 
-**7a. Capture + publish + the PR body** — the capture stage in `../work-slice/references/pr-evidence.md`, identical to work-slice Step 8: on the PR's branch at the head CI went green on, with the one dev server serving it, started per `../work-slice/references/run-app.md` (the Conductor run script for this environment, never the e2e harness; no translation keys on screen), a throwaway Playwright spec drives the acceptance-criterion stories and captures the fewest scenes that prove the change (aim 1–3, video for behaviour, still for appearance, finished state only — no before shots), passing the secret preflight before any shot. Publish `.context/<issue-id>/evidence/media/` to `<MEDIA-BRANCH>` under `pr/<n>/` (sha-pinned URLs), insert `## Visual verification` into the body with **one** `gh pr edit`, delete the throwaway spec. Internal-only change or no dev stack → the section's one-line form; the handoff follows `qa-handoff.md` (*No QA needed* when nothing is testable by a non-technical person). A user story that fails here is a **real regression** on a green PR: stop and report it, never doctor the capture.
-
-**7b. The QA handoff** — the ticket's **one** suite comment per `../work-slice/references/qa-handoff.md`, embedding the **same** files 7a captured (never a second capture run), for a QA reader with no code access:
+**7a. Draft the test plan** — the `## QA handoff` text per `../work-slice/references/qa-handoff.md`, written to `.context/<issue-id>/qa-handoff.md`, no media yet, for a QA reader with no code access:
 
 - written for a designer or PM, not a developer: only steps they can do in the product's own screens and results they can see there, in plain words. Criteria a non-technical person cannot test are left out without comment — the automated tests prove them and no human is involved (`qa-handoff.md` → *Who tests it*).
-- read back by one fresh cold reader playing a designer before posting; every word, step or result it flags is rewritten or dropped (`qa-handoff.md` → *Read it back*).
-- per user-testable acceptance criterion — grouped where one walk-through covers several — the steps in user terms, the expected result, and **one** embedded artifact per group (video *or* still, never both for the same thing, 1–3 in total); a **Not working yet** line for anything that failed; the PR link at the bottom. Under ~150 words of prose, no tables, no method notes, no test counts.
-- **Media is embedded inline, never attached.** Upload (Linear: `prepare_attachment_upload` → PUT) and put the returned **asset URL** straight into the comment markdown. **Never `create_attachment_from_upload`** — a downloadable resource in the attachments panel is not evidence. Never a GitHub raw URL. Video as inlineable `.mp4`, else fall back to a still — never a download link.
-- Sources: the 7a captures in `.context/<issue-id>/evidence/media/`; if this run resumed and the local copies are gone, fetch them back from `<MEDIA-BRANCH>` (`git show origin/<MEDIA-BRANCH>:pr/<n>/<file>`) rather than capturing again.
-- **Idempotent by edit:** find an existing `## QA handoff` comment and update it **by id**. Never a second comment, never a "v2 supersedes the above".
-- Nothing a non-technical person can test → the one-sentence *No QA needed* form (`qa-handoff.md`): no steps, no media, nobody asked to do anything.
+- per user-testable acceptance criterion — grouped where one walk-through covers several — the steps in user terms and the expected result; a **Not working yet** line for anything that failed; the PR link at the bottom. Under ~150 words of prose, no tables, no method notes, no test counts.
+- Nothing a non-technical person can test → the one-sentence *No QA needed* form (`qa-handoff.md`): no steps, no media, nobody asked to do anything — and nothing to walk; 7b then captures per `pr-evidence.md` alone.
 
-**7c. Finalize the tracker** per `issue-lifecycle.md`: verify the PR's parent
+**7b. Walk the plan + capture + publish + the PR body** — the capture stage in `../work-slice/references/pr-evidence.md`, identical to work-slice Step 8: on the PR's branch at the head CI went green on, with the one dev server serving it, started per `../work-slice/references/run-app.md` (the Conductor run script for this environment, never the e2e harness; no translation keys on screen), a throwaway Playwright spec, secret preflight before any shot. The one difference: **the spec is 7a's plan, walked literally** (`qa-handoff.md` → *Walk it yourself*) — one `test.step` per plan step, titled with its text, locators only from the words the plan quotes, no routes or code-derived selectors after sign-in, every Expected asserted on screen.
+
+- A step that cannot be done as written → fix the plan to what actually works and walk that walk-through again. An Expected the screen does not show → a **real regression** on a green PR: stop and report it, post nothing, never doctor the plan or the capture.
+- Record the walk in `.context/<issue-id>/evidence/qa-walk.json` (`sourceHead`, walk-throughs walked).
+- The scenes the walk records — the fewest that prove the change (aim 1–3, video for behaviour, still for appearance, finished state only — no before shots) — are the media for **both** the PR body and the handoff.
+- Publish `.context/<issue-id>/evidence/media/` to `<MEDIA-BRANCH>` under `pr/<n>/` (sha-pinned URLs), insert `## Visual verification` into the body with **one** `gh pr edit`, delete the throwaway spec.
+- Internal-only change → the section's one-line form. The app cannot run here (no stack, credentials or real copy) → the section's one-line reason, and a plan with steps is **not posted**: end Blocked at Step 7 naming the reason; `/work-issue <ISSUE>` from a workspace where the app starts resumes at the walk.
+
+**7c. Cold-read, then post the handoff** — the ticket's **one** suite comment, embedding the **same** files 7b captured (never a second capture run):
+
+- read back by one fresh cold reader playing a designer before posting; every word, step or result it flags is rewritten or dropped (`qa-handoff.md` → *Read it back*). A rewrite that changes what QA does or should see is walked again (7b) before posting.
+- **one** embedded artifact per walk-through group (video *or* still, never both for the same thing, 1–3 in total).
+- **Media is embedded inline, never attached.** Upload (Linear: `prepare_attachment_upload` → PUT) and put the returned **asset URL** straight into the comment markdown. **Never `create_attachment_from_upload`** — a downloadable resource in the attachments panel is not evidence. Never a GitHub raw URL. Video as inlineable `.mp4`, else fall back to a still — never a download link.
+- Sources: the 7b captures in `.context/<issue-id>/evidence/media/`; if this run resumed and the local copies are gone, fetch them back from `<MEDIA-BRANCH>` (`git show origin/<MEDIA-BRANCH>:pr/<n>/<file>`) rather than capturing again.
+- **Idempotent by edit:** find an existing `## QA handoff` comment and update it **by id**. Never a second comment, never a "v2 supersedes the above".
+
+**7d. Finalize the tracker** per `issue-lifecycle.md`: verify the PR's parent
 reference and any corresponding generated issue links, mark all owned internal
 descendants `<DONE>` if any, then move the human ticket to `<IN-REVIEW>`.
 Read every effect back before recording COMPLETE. Pending/denied writes retain
 Step 7 and emit `tracker-pending` in cloud mode; the next invocation resumes
-those writes without repeating current reviews, captures or the handoff.
+those writes without repeating current reviews, walks, captures or the handoff.
 
 Then report and stop.
 
@@ -158,7 +171,7 @@ Then report and stop.
 - One ticket per run. Never batch; never pull adjacent work into the diff.
 - **Never merge, approve, mark ready, or mark the issue done** — terminal state is a green, review-resolved **draft** PR, the ticket's one QA handoff, parent `<IN-REVIEW>` and any owned generated descendants `<DONE>`.
 - **The ticket gets one comment, at the very end.** No comment before GOAL MET or beyond the handoff, no second comment ever, no tracker attachments. Claim/status fields follow `issue-lifecycle.md`. The PR body is the only place dev-adjacent material appears, and only as ≤5 `## Notes` bullets.
-- **Evidence is captured once, after GOAL MET.** The Playwright loop in Step 3 verifies and keeps nothing; Step 7a is the only capture, and its files serve both the PR body and the handoff. Reuse captures only while their manifest `sourceHead` matches the live PR head. Later fixes require Step 7a again after fresh GOAL MET; replace the existing body and handoff content.
+- **Evidence is captured once, after GOAL MET.** The Playwright loop in Step 3 verifies and keeps nothing; Step 7b — the walk of the QA test plan — is the only capture, and its files serve both the PR body and the handoff. Reuse captures only while their manifest `sourceHead` matches the live PR head. Later fixes require Step 7a again after fresh GOAL MET; replace the existing body and handoff content.
 - **No human gates.** `<HITL>` becomes a recorded assumption; a non-lean ticket is worked with a disclosed concern; `<SKIP>` tickets are handed to `/work-slice` / `/feature-goal` **in this invocation**, never bounced to the user. The only stops are safety stops and babysit's `needs-human` escalations.
 - Never create a worktree or branch; never rename the Conductor branch; no stack commands (nothing to stack).
 - All constituent caps respected (5 review rounds, 3 Playwright, babysit's fix/thread caps and 5 rounds per bot) — caps exhausted → escalate on the PR, never grind. Bot reviews happen on GitHub only; never run a review CLI.
@@ -171,7 +184,7 @@ Then report and stop.
 
 **This skill takes one lean tracker issue straight to a green, bot-satisfied, thread-resolved draft PR — no planning stages, no stack, no human gates.**
 
-- **DOES**: classify leanness (`<AGENT-READY>` or judged, disclosed when not lean), record HITL decisions as PR-body `## Notes` bullets, claim the ticket, run work-slice's implement + engine-CLI review loop + artifact-free Playwright verification verbatim, open the draft PR via `<PR-SKILL>` + `gh pr ready --undo` with `## Verification` (+ `## Notes`) in its body, run `/babysit-stack` to its terminal verdict, and — only on GOAL MET — capture the evidence once (7a: publish + `## Visual verification`) write the ticket's one concise `## QA handoff` from those same files, then finalize the parent/descendant statuses.
+- **DOES**: classify leanness (`<AGENT-READY>` or judged, disclosed when not lean), record HITL decisions as PR-body `## Notes` bullets, claim the ticket, run work-slice's implement + engine-CLI review loop + artifact-free Playwright verification verbatim, open the draft PR via `<PR-SKILL>` + `gh pr ready --undo` with `## Verification` (+ `## Notes`) in its body, run `/babysit-stack` to its terminal verdict, and — only on GOAL MET — draft the QA test plan (7a), walk it literally in the running app as the one capture run (7b: publish + `## Visual verification`), cold-read and post the ticket's one concise `## QA handoff` from those same files (7c), then finalize the parent/descendant statuses.
 - **DOES NOT**: ask the human anything, capture / publish / post any visual evidence before GOAL MET or for a stale head, grill / write PRDs / slice (`/feature-goal`), work pipeline tickets (`<SKIP>` → hands off to `/work-slice` / `/feature-goal` in-invocation), create or rename worktrees/branches, run stack commands, comment on its own PR, post comments on the ticket before GOAL MET or beyond the one handoff (claim/status fields follow the shared lifecycle), attach files to the ticket, mark the issue done or the PR ready.
 
 ## Red Flags — STOP
@@ -181,8 +194,9 @@ Then report and stop.
 - About to end a turn between steps with nothing blocking (after a fix, before the next review round, after opening the PR) — stop: carry on to the next step; only GOAL MET or Blocked ends a run.
 - About to ask whether to file a follow-up or edit another ticket — stop: verified out-of-diff defects are filed per `## Discoveries` without asking, and other tickets are never edited.
 - About to post a **comment** on the ticket before babysit says GOAL MET — stop: the ticket's one comment is the Step 7 handoff, and a handoff written earlier goes stale behind the bot rounds.
-- About to capture a screenshot or video, publish media, or write `## Visual verification` before GOAL MET — stop: the Step 3 Playwright loop verifies and keeps nothing; capture is Step 7a's, once.
-- About to capture a second time for the handoff (or recapture "for the ticket") — stop: 7b embeds the files 7a already produced; refetch from `<MEDIA-BRANCH>` if they are gone.
+- About to capture a screenshot or video, publish media, or write `## Visual verification` before GOAL MET — stop: the Step 3 Playwright loop verifies and keeps nothing; capture is Step 7b's, once, while walking the test plan.
+- About to post (or stage) a QA handoff with steps nobody here has walked — stop: walk the plan literally in the running app first (7b); the app cannot run here → Blocked with the reason, not an unwalked plan.
+- About to capture a second time for the handoff (or recapture "for the ticket") — stop: 7c embeds the files 7b already produced; refetch from `<MEDIA-BRANCH>` if they are gone.
 - About to post assumptions, acceptance criteria, a PASS/FAIL table, a method note, or any dev material on the ticket — stop: the ticket gets exactly one `## QA handoff`; human-actionable residue is a PR-body `## Notes` bullet, the rest stays in `.context/`.
 - About to add a **second** suite comment to the ticket, or a "v2 supersedes the above" — stop: find the existing `## QA handoff` and update it by id.
 - About to call `create_attachment_from_upload`, attach a file, or link a GitHub raw URL on the ticket — stop: evidence is embedded inline in the comment via the upload's asset URL.
@@ -207,9 +221,9 @@ Before reporting done:
 - [ ] No question was put to the human: HITL decisions and any leanness concern live as `## Notes` bullets in the PR **body** (not on the ticket, not as PR comments); a `<SKIP>` ticket was handed to the right skill in-invocation.
 - [ ] Acceptance criteria exist in the run contract — the ticket's verbatim checkboxes, or user-facing ones distilled for the `## QA handoff`.
 - [ ] Draft PR open against `<BASE>` with `isDraft: true`; **zero suite comments on it**; a cap-hit loop's unfixed findings appear as `## Notes` bullets in the body, ≤5 bullets total.
-- [ ] PR body carries `## Verification` (+ `## Notes` when warranted) from the creation write and `## Visual verification` from Step 7a's single post-GOAL-MET write per `pr-evidence.md` — rows and captures from this run only, media on `<MEDIA-BRANCH>` by sha (or the one-line forms), the usual two body writes in that order; idempotent issue-link repairs are allowed.
-- [ ] **Nothing visual existed before GOAL MET** and nothing was captured twice: the Step 3 Playwright loop kept no artifacts, `evidence/media/` was written only by 7a, and the handoff embeds those same files.
-- [ ] The ticket carries **exactly one** suite-authored comment — `## QA handoff` per `qa-handoff.md`, written **after** GOAL MET and the capture, never before: steps only for what a designer or PM can test in the product's screens (or the one-sentence *No QA needed* form), cold-read as a designer, 1–3 **inline-embedded** artifacts, Not-working-yet line, PR link, under ~150 words, no dev material, no tracker attachments. Re-runs updated it by id rather than adding a second. Consolidation follow-ups filed as tickets with `<SKIP>`.
+- [ ] PR body carries `## Verification` (+ `## Notes` when warranted) from the creation write and `## Visual verification` from Step 7b's single post-GOAL-MET write per `pr-evidence.md` — rows and captures from this run only, media on `<MEDIA-BRANCH>` by sha (or the one-line forms), the usual two body writes in that order; idempotent issue-link repairs are allowed.
+- [ ] **Nothing visual existed before GOAL MET** and nothing was captured twice: the Step 3 Playwright loop kept no artifacts, `evidence/media/` was written only by 7b, and the handoff embeds those same files.
+- [ ] The ticket carries **exactly one** suite-authored comment — `## QA handoff` per `qa-handoff.md`, written **after** GOAL MET and the capture, never before: steps only for what a designer or PM can test in the product's screens (or the one-sentence *No QA needed* form), **every step walked by us as written at the current head** (`evidence/qa-walk.json`), cold-read as a designer, 1–3 **inline-embedded** artifacts, Not-working-yet line, PR link, under ~150 words, no dev material, no tracker attachments. Re-runs updated it by id rather than adding a second. Consolidation follow-ups filed as tickets with `<SKIP>`.
 - [ ] The run ended at GOAL MET (handoff and final tracker statuses verified), tracker-pending, or Blocked (concrete reason named, no premature handoff), never on pending CI / bot rounds; the report says `/work-issue <ISSUE>` resumes; done claimed only on a babysit GOAL MET verdict.
 
 When running under `/solve-ready-tickets`, read bootstrap's pinned config and

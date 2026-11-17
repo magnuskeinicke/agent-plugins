@@ -275,6 +275,10 @@ QA, who has no code access — never a dev log
   **`## QA handoff`** comment: per acceptance criterion (grouped where one
   walk-through covers several) the steps in user terms, the expected
   result, and one embedded visual per group — under ~150 words of prose.
+  The test plan is drafted after GOAL MET and **walked by the suite itself**,
+  step by step as written, in the running app (the top of the stack for a
+  feature) before it is cold-read and posted; a plan with steps nobody walked
+  is never posted — the app cannot run → Blocked with the reason.
   No other suite comment, and no comment before the PRs are done (a
   handoff written earlier goes stale on the next bot round). Re-runs **edit
   that comment by id**; a second suite comment is a defect.
@@ -288,7 +292,8 @@ QA, who has no code access — never a dev log
 - **Standalone tickets** (`magnus:work-issue`, and whatever
   `magnus:solve-ready-tickets` dispatches into a cloud workspace) — QA-visible:
   the same single `## QA handoff`, written by the `work-issue` run after it has
-  babysat its own PR to GOAL MET. The one exception to the single-comment rule is
+  babysat its own PR to GOAL MET and walked its test plan in the running app
+  (that walk is the capture run). The one exception to the single-comment rule is
   the dispatcher's three-line decline note on a ticket it refused to dispatch,
   which `magnus:daily-ticket-manager` re-triages on. The dispatcher writes
   nothing else on a ticket and never claims one; `magnus:daily-ticket-manager`

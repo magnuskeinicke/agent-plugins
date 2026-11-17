@@ -65,6 +65,11 @@ Consequences, binding on every skill:
   parent in development; the blocker lives on the PR and in the resume report.
 - If a later run changes what QA would see, it re-renders the same comment.
 
+The order after GOAL MET is fixed: **draft the test plan → walk it yourself →
+cold read → post.** QA never receives a step nobody on our side has performed
+(*Walk it yourself* below). For `/work-issue` the walk *is* the capture run, so
+the media shows exactly what QA will do.
+
 ## The `## QA handoff` comment
 
 Written in the **language the ticket is written in**. Concise is the point:
@@ -200,10 +205,57 @@ Write the way a PM writes a ticket, not the way a developer writes a commit.
 - Expected results as observable outcomes ("a Published message appears"), not
   implementation ("the cache is invalidated").
 
+### Walk it yourself before QA does
+
+A test plan nobody has followed is a guess: a label that reads differently on
+screen, a menu path that does not exist, a record the test data lacks, a click
+the plan forgot. Before the cold read and before anything is posted, perform
+the draft's steps yourself, exactly as written, the way the QA person will.
+
+- **Where.** The app started per [run-app.md](run-app.md) (one dev server,
+  never the e2e harness), on the code QA will test: for `/work-issue`, the PR
+  head babysit reported GOAL MET on; for `/feature-goal`, the **top branch of
+  the stack** (it holds every PR) after the stack-wide GOAL MET. The seeded
+  users and records stand in for the test environment's.
+- **How — literally, through the screens only.** A throwaway Playwright spec
+  under the capture stage's setup (`pr-evidence.md`: own minimal config,
+  `1920 × 1080` desktop, real-copy check, secret preflight). One `test.step`
+  per numbered step, titled with that step's text. Sign in as the role the
+  plan names (dev-login outside the walk is fine — QA starts signed in too).
+  After that: no `page.goto` except to the app's start page, no test ids, CSS
+  selectors, routes or anything else learned from the code. Locate only by the
+  words the plan quotes (`getByRole('button', { name: 'Upload JSON' })`,
+  `getByText('Published')`). Assert every **Expected** on what the screen
+  shows.
+- **A step that cannot be done as written** (different label, wrong menu
+  path, wrong order, missing click, a record the seeded data does not have) →
+  the plan is wrong, not the product: rewrite it to what actually works and
+  walk that walk-through again from its first step. A state only a tool can
+  reach is not a QA step — drop it (*Who tests it*).
+- **An Expected the screen does not show**, with the steps right → a real
+  regression on a green PR: stop, post nothing, report it — same as a failed
+  capture story (`pr-evidence.md`). Never soften the Expected to match.
+- **Record the walk** in `.context/<run-id>/evidence/qa-walk.json`:
+  `sourceHead` (full sha walked), the branch, and per walk-through heading its
+  steps as walked. A handoff is posted only when every walk-through in it is
+  recorded at the current head; a later head change invalidates the walk the
+  same way it invalidates media.
+- **What it keeps.** `/work-issue`: the walk is the capture stage's one
+  Playwright run — the scenes it records are the PR body's
+  `## Visual verification` and the handoff's media (nothing captured twice).
+  `/feature-goal`: the walk records nothing — the media comes from the PR
+  sessions' captures; the walk proves the plan works on the whole feature.
+  Delete the throwaway spec after the walk either way.
+- **The app cannot run here** (no run command, no stack, no credentials, no
+  real copy — `run-app.md`) → a plan with steps is **not posted**. End the run
+  Blocked at the handoff stage, naming the reason; a later run in a workspace
+  where the app starts resumes at the walk. The *No QA needed* form has no
+  steps and needs no walk.
+
 ### Read it back through a non-technical reader
 
 Your own read-back is not enough — you wrote the code, and your vocabulary
-leaks. Before posting (or staging) the handoff, spawn **one** fresh
+leaks. After the walk, before posting (or staging) the handoff, spawn **one** fresh
 `magnus:cold-reader` (any fresh agent with no repo context when that agent
 type is unavailable) and give it **only** the draft comment text, with this
 prompt:
@@ -224,7 +276,9 @@ Write "none" under a heading with nothing to report.
 ```
 
 Rewrite or delete every line it reports, then post. One read, no loop — if a
-step still needs explaining after the rewrite, it is not a QA step: drop it.
+step still needs explaining after the rewrite, it is not a QA step: drop it. A
+rewrite that changes what QA does or what they should see (not just the words)
+is walked again before posting.
 
 ### Evidence — inline, visual, as few artifacts as prove it
 

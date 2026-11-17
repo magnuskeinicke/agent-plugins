@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.23.0 — 2026-11-17
+
+### Changed
+
+- **The QA handoff's test plan is walked by us before QA gets it.** After babysit GOAL MET,
+  `/work-issue` and `/feature-goal` now draft the test plan first, then perform every step
+  themselves in the running app, exactly as written: a throwaway Playwright spec with one
+  `test.step` per plan step, locators only from the words the plan quotes, no routes or
+  code-derived selectors after sign-in, every Expected asserted on screen. A step that cannot be
+  done as written is fixed in the plan and walked again; an Expected the screen does not show is a
+  regression (Blocked, nothing posted). Only then does the cold reader read it, and only then is it
+  posted. The walk is recorded in `evidence/qa-walk.json` against the head it ran on; a head change
+  invalidates it. A plan with steps is never posted unwalked — when the app cannot run in the
+  workspace, the run ends Blocked with the reason.
+- **`/work-issue` Step 7 is reordered:** 7a draft the plan → 7b walk it, which is the one capture
+  run (publish + `## Visual verification`) → 7c cold read + post → 7d finalize the tracker.
+- **`/feature-goal` QA-HANDOFF** walks the plan on the top branch of the stack after the
+  stack-wide babysit. The walk records no media; the handoff still embeds the PR captures.
+
 ## 0.22.0 — 2026-11-16
 
 ### Changed

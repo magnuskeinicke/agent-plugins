@@ -193,7 +193,7 @@ unfiltered; human-created children are outside this pipeline.
    when `Tracker writes: planning`; live PR state is the tie-breaker.
 4. All slices complete but stack-wide verdict does not cover every current head
    → BABYSIT. A later fix/restack invalidates earlier head-bound verdicts.
-5. Current-head stack verdict is GOAL MET but media, the QA handoff, PR issue
+5. Current-head stack verdict is GOAL MET but media, the QA walk, the QA handoff, PR issue
    links or final tracker statuses are missing or stale → QA-HANDOFF.
    Recover missing/stale Step 8 media on each owning branch
    before publication; honor a recorded not-applicable reason for that head.
@@ -440,26 +440,43 @@ read GOAL MET:
    instead of showing it. Video as inlineable `.mp4`, else fall back to a
    still, never a download link. Never a GitHub raw URL on the tracker. A
    criterion no scene covers says so in one short line.
-3. **Steps + expected result** in the ticket's language, user terms only —
+3. **Steps + expected result** — the test plan — in the ticket's language, user terms only —
    navigation by what the screen shows, roles by what QA sees in the test
    environment, no routes, no code, no PR jargon. Only what a designer or PM
    can do and see in the product's own screens; criteria a non-technical person
    cannot test are left out without comment — the automated tests prove them
    and no human is involved. Nothing testable that way → the one-sentence
-   *No QA needed* form (`qa-handoff.md` → *Who tests it*). Before posting, one
-   fresh cold reader playing a designer reads the draft; rewrite or drop
-   everything it flags (`qa-handoff.md` → *Read it back*).
+   *No QA needed* form (`qa-handoff.md` → *Who tests it*), which skips 5.
 4. **Not working yet** for anything a slice shipped as a failed criterion
    (its `## QA evidence` on the slice ticket names it), in user terms.
-5. The stack's PR links on one line at the bottom, then post the comment —
+5. **Walk the plan yourself** before anyone reads it (`qa-handoff.md` → *Walk
+   it yourself*): check out the **top branch of the stack** (clean tree, head =
+   the pushed head the stack-wide babysit verified), start the app per
+   `../work-slice/references/run-app.md`, and perform every step literally in
+   a throwaway Playwright spec — one `test.step` per plan step, locators only
+   from the words the plan quotes, no routes or code-derived selectors after
+   sign-in, every Expected asserted on screen. It records no media (the
+   handoff embeds the PR captures from 2). A step that cannot be done as
+   written → fix the plan and walk that walk-through again; an Expected the
+   screen does not show → a real regression: Blocked, report it, post
+   nothing. Record `.context/<ISSUE>/evidence/qa-walk.json` with the walked
+   `sourceHead` of the top branch, then delete the spec. The app cannot run
+   in this workspace → do not post a plan with steps: end Blocked at
+   QA-HANDOFF naming the reason.
+6. **Cold read**: one fresh cold reader playing a designer reads the walked
+   draft; rewrite or drop everything it flags (`qa-handoff.md` → *Read it
+   back*). A rewrite that changes what QA does or should see is walked again.
+7. The stack's PR links on one line at the bottom, then post the comment —
    **idempotent by edit**: find an existing `## QA handoff` and update it **by
    id**, never a second comment and never a "v2 supersedes the above". Keep the
    whole thing under ~150 words of prose: no tables, no test counts, no capture
    method, no sha's. Under `Tracker writes: planning` the babysit session **stages** it
-   (`.context/<ISSUE>/tracker-writes-pending/`) together with Step 6's final
+   (`.context/<ISSUE>/tracker-writes-pending/`) together with item 8's final
    status payloads, then ends at QA-HANDOFF, not DONE; the next invocation flushes the queue,
-   posts it, then completes the tracker finalization below.
-6. **Finalize the tracker** per `issue-lifecycle.md`: verify every PR references
+   posts it, then completes the tracker finalization below. A staged handoff
+   is published only while its `qa-walk.json` `sourceHead` still matches the
+   top of the stack; otherwise walk again first.
+8. **Finalize the tracker** per `issue-lifecycle.md`: verify every PR references
    the human parent and its own generated slice (plus PRD), move all owned
    generated descendants to `<DONE>` including the PRD, then move the feature
    parent to `<IN-REVIEW>`. Read every effect back. Checkpoint DONE only after
@@ -534,12 +551,13 @@ head and use the reference's one-line form. Otherwise finish capture before QA.
 
 **This skill orchestrates the feature pipeline as a re-entrant stage machine with the grill as its only human gate — planning here, then a relay of one-PR sessions in one cloud workspace (each babysitting its own PR to GOAL MET before the next is cut), then a stack-wide babysit session — sequencing the constituent skills, never re-implementing them.**
 
-- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` (PRD ticket under the feature ticket) and `/to-issues` (slices under the PRD ticket) in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–8 (link the PR, babysit it to GOAL MET, capture + publish its evidence, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict, post the QA handoff and finalize tracker statuses; from outside, start / reconcile the relay in one step and stop; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
+- **DOES**: run the grill inline (the one gate) and make it cover every downstream decision; run `/to-prd` (PRD ticket under the feature ticket) and `/to-issues` (slices under the PRD ticket) in pipeline mode (no user checks, no next-command handoffs) and commit + push the planning docs they write; create or adopt the pipeline workspace (bootstrap plugin + gh-stack) and start PR session 1; as a PR session, claim one slice, cut its `gh stack` branch, run work-slice Steps 3–8 (link the PR, babysit it to GOAL MET, capture + publish its evidence, stamp the verdict on its dispatch comment), start the next session, end; as the babysit session, run the stack-wide `/babysit-stack` to its verdict, draft the QA test plan, walk it literally on the top of the stack, post the QA handoff and finalize tracker statuses; from outside, start / reconcile the relay in one step and stop; keep `.context/<ISSUE>/pipeline-state.md`; end every run with the resume line.
 - **DOES NOT**: answer the grill for the human, ask the human anything after the grill, write anything but claim/status fields, labels and the one `## QA handoff` on the feature ticket, treat `<HITL>` as a stop, work more than one PR in a worker session, implement / fix / review / babysit code outside the pipeline workspace (cloud mode), own review-loop internals (the engine CLI does) or CI/bot/thread mechanics (`/babysit-stack` does), merge/approve/mark ready/mark the human parent done, or relocate the venue-neutral standalone commands (`/work-issue` and `/daily-ticket-manager` run wherever the user starts them; `/solve-ready-tickets` does its own fan-out and is none of this skill's business).
 
 ## Red Flags — STOP
 
 - About to reuse media whose `sourceHead` differs from the PR head — stop: run Step 8 on the owning branch after current-head GOAL MET and replace the stale block before QA-HANDOFF.
+- About to post (or stage) the feature ticket's QA handoff with steps nobody here has walked — stop: walk the plan literally on the top of the stack first (QA-HANDOFF item 5); the app cannot run here → Blocked with the reason, not an unwalked plan.
 - About to start the next session while this PR's babysit is not GOAL MET (bot round pending, thread open, verdict NOT MET) — stop: babysit waits for the bots itself; NOT MET is Blocked, not a baton pass.
 - About to cut a slice's branch on a predecessor whose `## Cloud dispatch` lacks `babysit: GOAL MET` — stop: resume that slice's Step 7 first.
 - About to implement from the planning caller — stop: a PR worker owns implementation; the caller dispatches, reconciles and flushes tracker writes.
@@ -567,7 +585,7 @@ Before reporting done:
 - [ ] The stack-wide babysit ran as its own fresh session in the pipeline workspace; its verdict was read from the transcript plus live PR state, never assumed.
 - [ ] The run did not end by handing the user `/to-prd`, `/to-issues`, `/work-slice`, or `/babysit-stack`: the only next command a report ever names is `/feature-goal <ISSUE>`.
 - [ ] The report ends with the resume line: stage, blocking reason if any, and `/feature-goal <ISSUE>`.
-- [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the feature ticket carries its one `## QA handoff` comment — steps only for what a designer or PM can test in the product's screens (or the one-sentence *No QA needed* form), cold-read as a designer, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>` (captured by each PR session after its own GOAL MET, recaptured through Step 8 when the head changed), no dev material — and no other suite comment on it; the PRD and its deltas sit on the PRD ticket.
+- [ ] Stage DONE claimed only when the `/babysit-stack` verdict reads GOAL MET **and** the feature ticket carries its one `## QA handoff` comment — steps only for what a designer or PM can test in the product's screens (or the one-sentence *No QA needed* form), **every step walked by us as written on the top of the stack at its current head** (`qa-walk.json`), cold-read as a designer, one visual artifact per criteria group fetched from `<MEDIA-BRANCH>` (captured by each PR session after its own GOAL MET, recaptured through Step 8 when the head changed), no dev material — and no other suite comment on it; the PRD and its deltas sit on the PRD ticket.
 
 Every cloud worker exit emits the terminal relay marker from
 `references/cloud-relay.md`. QA-HANDOFF with queued publication emits
