@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.23.1 — 2026-11-19
+
+### Changed
+
+- **Codex workers and reviewers run on GPT-6.2 Sol.** Every Codex role in `engine/lib/models.mjs`,
+  `routing.cloudModels.codex`, and the `routing.codexModelAliases` defaults (`sonnet`, `opus`) now
+  resolve to `gpt-6.2-sol` instead of `gpt-6.1-sol`. Efforts are unchanged. This includes the
+  `reviewer` role, so `/adversarial-review` (Gate 5) on a Claude host reviews with `gpt-6.2-sol` at
+  `high` by default.
+
 ## 0.23.0 — 2026-11-17
 
 ### Changed

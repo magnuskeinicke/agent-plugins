@@ -107,12 +107,12 @@ export const REPO_CONFIG_DEFAULTS = {
     dispatch: 'cloud',
     cloudModels: {
       claude: { model: 'opus-5-5-1m', effort: 'high' },
-      codex: { model: 'gpt-6.1-sol', effort: 'high' },
+      codex: { model: 'gpt-6.2-sol', effort: 'high' },
     },
     // Translate the existing Claude roster pins for Codex workers.
     codexModelAliases: {
-      sonnet: 'gpt-6.1-sol',
-      opus: 'gpt-6.1-sol',
+      sonnet: 'gpt-6.2-sol',
+      opus: 'gpt-6.2-sol',
     },
   },
   // area → path patterns (regex sources; object form `{re, flags}` carries

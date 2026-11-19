@@ -28,10 +28,10 @@ test('every role has explicit Claude and Codex profiles and preserves Claude rev
   }
   assert.equal(taskModels(cfg, 'reviewer').claude.model, 'opus');
   assert.equal(resolveModel(cfg, { role: 'reviewer', runtime: 'claude', modelAlias: 'sonnet' }).model, 'sonnet');
-  assert.equal(resolveModel(cfg, { role: 'reviewer', runtime: 'codex', modelAlias: 'sonnet' }).model, 'gpt-6.1-sol');
-  assert.equal(resolveModel(cfg, { role: 'verifier', runtime: 'codex' }).model, 'gpt-6.1-sol');
-  assert.equal(resolveModel(cfg, { role: 'reviewer', runtime: 'codex', modelAlias: 'opus' }).model, 'gpt-6.1-sol');
-  assert.equal(resolveModel(cfg, { role: 'explorer', runtime: 'codex' }).model, 'gpt-6.1-sol');
+  assert.equal(resolveModel(cfg, { role: 'reviewer', runtime: 'codex', modelAlias: 'sonnet' }).model, 'gpt-6.2-sol');
+  assert.equal(resolveModel(cfg, { role: 'verifier', runtime: 'codex' }).model, 'gpt-6.2-sol');
+  assert.equal(resolveModel(cfg, { role: 'reviewer', runtime: 'codex', modelAlias: 'opus' }).model, 'gpt-6.2-sol');
+  assert.equal(resolveModel(cfg, { role: 'explorer', runtime: 'codex' }).model, 'gpt-6.2-sol');
   assert.throws(() => resolveModel(cfg, { role: 'reviewer', runtime: 'codex', modelAlias: 'unknown' }), /Unmapped/);
 });
 
@@ -49,7 +49,7 @@ test('Claude reviewers run Opus at medium; the Codex reviewer keeps high', () =>
   const { claude, codex } = taskModels(cfg, 'reviewer', { modelAlias: 'opus' });
   assert.equal(claude.model, 'opus');
   assert.equal(claude.effort, 'medium');
-  assert.equal(codex.model, 'gpt-6.1-sol');
+  assert.equal(codex.model, 'gpt-6.2-sol');
   assert.equal(codex.effort, 'high');
 });
 
@@ -58,10 +58,10 @@ test('babysitting and dispatch select Sol independently of legacy aliases', () =
   const role = SKILL_ROLES['babysit-stack'];
   for (const cloud of [false, true]) {
     const babysitter = resolveModel(cfg, { role, runtime: 'codex', cloud });
-    assert.equal(babysitter.model, 'gpt-6.1-sol');
+    assert.equal(babysitter.model, 'gpt-6.2-sol');
     assert.equal(babysitter.effort, 'high');
     assert.equal(babysitter.access, 'workspace-write');
-    assert.equal(resolveModel(cfg, { role: SKILL_ROLES['solve-ready-tickets'], runtime: 'codex', cloud }).model, 'gpt-6.1-sol');
+    assert.equal(resolveModel(cfg, { role: SKILL_ROLES['solve-ready-tickets'], runtime: 'codex', cloud }).model, 'gpt-6.2-sol');
     const claude = resolveModel(cfg, { role, runtime: 'claude', cloud });
     assert.equal(claude.model, cloud ? 'opus-5-5-1m' : 'opus');
     assert.equal(claude.effort, 'high');

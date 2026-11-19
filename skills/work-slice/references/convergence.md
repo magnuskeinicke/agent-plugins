@@ -13,7 +13,7 @@ round converges (no open blocking finding, disputes adjudicated), the engine
 owes **Gate 5**: one read-only review of the full committed branch by the
 **other** model provider, using `skills/adversarial-review` verbatim — one
 adversarial prompt, not the roster. A Claude host is reviewed by Codex
-(`gpt-6.1-sol`, high) and a Codex host by Claude (`opus`, medium), both from the
+(`gpt-6.2-sol`, high) and a Codex host by Claude (`opus`, medium), both from the
 engine `reviewer` role.
 
 - **Local:** the runner reviews a temporary snapshot of tracked `HEAD` with the
@@ -105,7 +105,7 @@ runner's stderr) when it was blocked.
 `report` returns `independentReview` — upstream's Independent Review Record:
 
 ```text
-Independent review: codex gpt-6.1-sol; tree <oid>; change patch <patch-id>; blocking findings N (fixed M); disagreements decided by the adjudicator K
+Independent review: codex gpt-6.2-sol; tree <oid>; change patch <patch-id>; blocking findings N (fixed M); disagreements decided by the adjudicator K
 ```
 
 Put that line verbatim, once, directly under the `## Verification` tables of
