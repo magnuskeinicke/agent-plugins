@@ -50,8 +50,8 @@ inherit the caller's resolved role.
 
 | Roles | Claude | Codex | Effort |
 | --- | --- | --- | --- |
-| `reviewer` | opus | gpt-6.1-sol | Claude medium, Codex high |
-| all other roles | opus | gpt-6.1-sol | high |
+| `reviewer` | opus | gpt-6.2-sol | Claude medium, Codex high |
+| all other roles | opus | gpt-6.2-sol | high |
 
 Fable is never a worker model: it is reserved for interactive grilling and
 wayfinder sessions the user starts.

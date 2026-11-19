@@ -330,7 +330,7 @@ Not run here, left to CI:
 | --- | --- |
 | `pnpm exec nx affected:test --base=origin/development` | Covered by the `Test Affected` job on this head; passed locally over 13 projects at an earlier head |
 
-Independent review: codex gpt-6.1-sol; tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904; change patch 7d3f1c2e9a0b4c5d6e7f8091a2b3c4d5e6f70819; blocking findings 2 (fixed 2); disagreements decided by the adjudicator 0
+Independent review: codex gpt-6.2-sol; tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904; change patch 7d3f1c2e9a0b4c5d6e7f8091a2b3c4d5e6f70819; blocking findings 2 (fixed 2); disagreements decided by the adjudicator 0
 <!-- /magnus:verification -->
 
 <!-- magnus:visual-verification -->

@@ -4,22 +4,22 @@ const profile = (claude, codex, effort, access) => ({
 });
 
 export const ROLE_MODELS = {
-  planner: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
-  implementer: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
-  fixer: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
-  adjudicator: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
+  planner: profile('opus', 'gpt-6.2-sol', 'high', 'workspace-write'),
+  implementer: profile('opus', 'gpt-6.2-sol', 'high', 'workspace-write'),
+  fixer: profile('opus', 'gpt-6.2-sol', 'high', 'workspace-write'),
+  adjudicator: profile('opus', 'gpt-6.2-sol', 'high', 'read-only'),
   // Claude reviewers run Opus at medium; the Codex reviewer (also Gate 5's
   // cross-provider review) keeps high. Native Claude subagents take effort
   // from the agent frontmatter, which must match this profile.
   reviewer: {
     claude: { model: 'opus', effort: 'medium', access: 'read-only' },
-    codex: { model: 'gpt-6.1-sol', effort: 'high', access: 'read-only' },
+    codex: { model: 'gpt-6.2-sol', effort: 'high', access: 'read-only' },
   },
-  verifier: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
-  explorer: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
-  triage: profile('opus', 'gpt-6.1-sol', 'high', 'read-only'),
-  babysitter: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
-  dispatcher: profile('opus', 'gpt-6.1-sol', 'high', 'workspace-write'),
+  verifier: profile('opus', 'gpt-6.2-sol', 'high', 'read-only'),
+  explorer: profile('opus', 'gpt-6.2-sol', 'high', 'read-only'),
+  triage: profile('opus', 'gpt-6.2-sol', 'high', 'read-only'),
+  babysitter: profile('opus', 'gpt-6.2-sol', 'high', 'workspace-write'),
+  dispatcher: profile('opus', 'gpt-6.2-sol', 'high', 'workspace-write'),
 };
 
 export const SKILL_ROLES = {

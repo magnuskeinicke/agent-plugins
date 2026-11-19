@@ -64,7 +64,7 @@ function providerResult(gate5, git, findings = [], overrides = {}) {
   return {
     host_provider: gate5.host,
     review_provider: gate5.provider,
-    requested_model: 'gpt-6.1-sol',
+    requested_model: 'gpt-6.2-sol',
     requested_effort: 'high',
     reviewed_head: git('rev-parse', 'HEAD'),
     reviewed_tree: git('rev-parse', 'HEAD^{tree}'),
@@ -139,7 +139,7 @@ test('Gate 5 runs after convergence, its finding is fixed, and it re-attests the
   assert.equal(report.adversarial.attested.tree, git('rev-parse', 'HEAD^{tree}'));
   assert.deepEqual(report.adversarial.advisory, ['[suggestion] app.js: name it better — rename']);
   assert.match(report.independentReview,
-    /^Independent review: codex gpt-6\.1-sol; tree [0-9a-f]{40}; change patch [0-9a-f]{40}; blocking findings 1 \(fixed 1\); disagreements decided by the adjudicator 0$/);
+    /^Independent review: codex gpt-6\.2-sol; tree [0-9a-f]{40}; change patch [0-9a-f]{40}; blocking findings 1 \(fixed 1\); disagreements decided by the adjudicator 0$/);
 });
 
 test('a result that does not attest the prepared tree blocks Gate 5 and never converges', () => {

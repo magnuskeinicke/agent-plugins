@@ -207,8 +207,8 @@ during the Playwright verify rounds on UI slices. The contract:
 | `routing.delegate` | runtime → command template | `{}` → disclosed current-runtime fallback | local full-slice delegation; prepare the branch first, pass the complete bounded handoff via stdin/message file and explicit resolved model/effort; preflight tools and never interpolate prompt text into shell code |
 | `routing.dispatch` | string | `'cloud'` | where `magnus:feature-goal` runs everything after planning (slice loop + babysit): `cloud` → **one** Conductor cloud pipeline workspace for the stack and a **fresh session per PR** (a relay: each session works one slice to a linked draft PR, babysits that PR to GOAL MET, starts the next session and ends; the last starts the stack-wide babysit session), created via the Conductor MCP or the `conductor` CLI (falls back to `local` when neither is reachable); `local` (opt-in) → the sequential single-worktree loop, one fresh subagent per slice |
 | `routing.models` | role → runtime → profile | `engine/lib/models.mjs` | explicit model/effort/access/timeout for every worker; profile may override `model`, `effort`, `cloudModel`, `access`, `timeoutMs`; see [runtime contract](skills/work-slice/references/runtime.md) |
-| `routing.cloudModels` | runtime → `{model, effort}` | Claude `opus-5-5-1m`/`high`; Codex `gpt-6.1-sol`/`high` | legacy planner/implementer/fixer cloud overrides; explicit role profiles take precedence; `{}` retains registry defaults |
-| `routing.codexModelAliases` | alias → Codex model | `sonnet` → `gpt-6.1-sol`, `opus` → `gpt-6.1-sol` | preserves roster Claude pins while translating Codex workers; unmapped aliases fail instead of silently inheriting. Reviewer, verifier, babysitter and dispatcher keep their own Codex model when the pin matches the role's Claude model — override those via `routing.models` |
+| `routing.cloudModels` | runtime → `{model, effort}` | Claude `opus-5-5-1m`/`high`; Codex `gpt-6.2-sol`/`high` | legacy planner/implementer/fixer cloud overrides; explicit role profiles take precedence; `{}` retains registry defaults |
+| `routing.codexModelAliases` | alias → Codex model | `sonnet` → `gpt-6.2-sol`, `opus` → `gpt-6.2-sol` | preserves roster Claude pins while translating Codex workers; unmapped aliases fail instead of silently inheriting. Reviewer, verifier, babysitter and dispatcher keep their own Codex model when the pin matches the role's Claude model — override those via `routing.models` |
 
 Routing labels select a runtime when the dispatcher creates a session. A direct
 `work-slice` invocation in a different runtime proceeds with the mismatch
@@ -350,7 +350,7 @@ triggers); `security` is force-added whenever `backend` triggers.
 | --- | --- | --- | --- |
 | `adversarial.enabled` | boolean | `true` | run Gate 5 in every fix loop; the repo's standing consent to send the committed `HEAD` snapshot, diff and run contract to the other provider. `false` → the engine never sends anything |
 | `adversarial.provider` | `'claude' \| 'codex' \| ''` | `''` → the opposite of the host runtime | who reviews; must differ from the host |
-| `adversarial.model` | string | `''` → the engine `reviewer` role for that provider (Codex `gpt-6.1-sol` at high / Claude `opus` at medium) | review model |
+| `adversarial.model` | string | `''` → the engine `reviewer` role for that provider (Codex `gpt-6.2-sol` at high / Claude `opus` at medium) | review model |
 | `adversarial.maxCycles` | integer 1..5 | `3` | fix cycles Gate 5 may cause before the loop stalls |
 
 Gate 5 is trackbed's (formerly kramme-cc-workflow) `pr:review-convergence`

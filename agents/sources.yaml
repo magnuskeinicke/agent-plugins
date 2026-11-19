@@ -62,7 +62,7 @@ sources:
       adversarial runner defaults its model and effort to the engine's
       `reviewer` role; and shared/pr-review/references/model-selection.md
       pins every review subagent to that role (Claude opus / Codex
-      gpt-6.1-sol, both high) instead of inheriting the session model. One
+      gpt-6.2-sol, both high) instead of inheriting the session model. One
       fix: adversarial-review's assets/review-result.schema.json drops the
       findings `allOf` (OpenAI strict structured output rejects it); the
       runner's own jq check still enforces the severity/action pairing.

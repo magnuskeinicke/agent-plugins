@@ -136,7 +136,7 @@ Persist `.context/<ISSUE>/supervisor.json` in the caller's workspace as the
 
 ```json
 {"state":"watching","workspaceId":"<id>","sessionId":"<id>",
- "runtime":"codex","model":"gpt-6.1-sol","effort":"high",
+ "runtime":"codex","model":"gpt-6.2-sol","effort":"high",
  "messageFile":"<absolute local file containing the resume command>",
  "restarts":0,"maxSessionMs":21600000}
 ```
